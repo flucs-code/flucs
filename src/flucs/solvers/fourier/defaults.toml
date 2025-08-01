@@ -1,0 +1,53 @@
+[time]
+dt = 0.01  # integration time step
+tfinal =  10  # final time
+maxcfl = 0.5  # Maximum allowed CFL number
+
+[dimensions] 
+# The user needs to specify the padded
+# or the unpadded dimensions. Specifying both
+# is fine, too. If any are left as -1,
+# they will be determined at run time.
+padded_nx = -1
+padded_ny = -1
+padded_nz = -1
+
+nx = -1
+ny = -1
+nz = -1
+
+# Box dimensions must always be specified
+Lx = -1
+Ly = -1
+Lz = -1
+
+[setup]
+solver = "FourierSolver"  # name of the solver
+system = ""  # name of the system of equations
+precision = "single"  # floating-point precision
+
+# If true, solver will measure its performance for setup.timing_steps time steps, then quit
+# No output files will be written.
+timing = false
+timing_steps = 1000  # see above
+
+include_lin = true  # include linear terms
+include_nl = true  # include nonlinear terms
+
+[init]
+rand_seed = 113  # seed for random-number generation
+restart = false
+restart_time = -1.0
+restart_file = ""
+
+[diagnostics]
+write_time_all = 5
+write_time_1d = -1.0
+write_time_2d = -1.0
+write_time_3d = -1.0
+
+[hyper]
+perphypervisc = 0.0
+perphypervisc_halfpower = 2
+parhypervisc = 0.0
+parhypervisc_halfpower = 2
