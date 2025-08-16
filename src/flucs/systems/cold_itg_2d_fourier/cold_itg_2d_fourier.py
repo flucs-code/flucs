@@ -8,7 +8,7 @@ from importlib.resources import files
 import numpy as np
 from netCDF4 import Dataset
 from flucs import FlucsInput
-from flucs.solvers.fourier.system import FourierSystem
+from flucs.solvers.fourier import FourierSystem
 
 try:
     import cupy as cp
@@ -17,6 +17,8 @@ except ModuleNotFoundError:
 
 
 class ColdITG2DFourier(FourierSystem):
+    fields: cp.array = None
+
     def initialise(self):
         self.allocate_memory()
         self.setup_kernels()

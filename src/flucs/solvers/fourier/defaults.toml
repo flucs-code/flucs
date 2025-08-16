@@ -4,14 +4,6 @@ tfinal =  10  # final time
 maxcfl = 0.5  # Maximum allowed CFL number
 
 [dimensions] 
-# The user needs to specify the padded
-# or the unpadded dimensions. Specifying both
-# is fine, too. If any are left as -1,
-# they will be determined at run time.
-padded_nx = -1
-padded_ny = -1
-padded_nz = -1
-
 nx = -1
 ny = -1
 nz = -1

@@ -26,6 +26,10 @@ class FlucsSystem(ABC):
     def initialise(self) -> None:
         pass
 
+    @abstractmethod
+    def _validate_input(self) -> None:
+        pass
 
-    def __init__(self, flucs_input : FlucsInput) -> None:
-        self.input = flucs_input
+    def __init__(self, input : FlucsInput) -> None:
+        self.input = input
+        self._validate_input()

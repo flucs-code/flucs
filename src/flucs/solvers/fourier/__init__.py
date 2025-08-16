@@ -1,2 +1,2 @@
-from .solver import FourierSolver
-from .system import FourierSystem
+from .fourier_solver import FourierSolver
+from .fourier_system import FourierSystem
