@@ -3,6 +3,7 @@ Main flucs script.
 Used to run simulations.
 """
 
+import os
 import argparse
 from importlib.metadata import entry_points
 from flucs.input import FlucsInput
@@ -77,7 +78,9 @@ def load_system_defaults(system_name : str, flucs_input : FlucsInput):
 
     """
     system_type = get_system_type(str)
-    if hasattr(system_type, 'load_defaults') and callable(getattr(system_type, 'load_defaults')):
+    if hasattr(system_type, 'load_defaults')\
+            and callable(getattr(system_type, 'load_defaults')):
+
         system_type.load_defaults(flucs_input)
     else:
         print(f"{str} has not implemented a load_defaults method!")
@@ -91,12 +94,27 @@ def run_flucs():
 
     """
 
-    parser = argparse.ArgumentParser(description="Runs the appropriate temp_name solver using an input file")
-    parser.add_argument("input", type=str, help="Path to the input file.")
-    parser.add_argument("--override", nargs="+", help="Additional arguments to override input-file parameters. "
-                                                      "Must be specified in TOML grouping format, e.g., to override "
-                                                      "the value of dt in group time to be 0.01, specify 'time.dt 0.01'.")
+    parser = argparse.ArgumentParser(description="""Runs the appropriate
+                                                 temp_name solver using an
+                                                 input file""")
+
+    parser.add_argument("--input", type=str,
+                        help="""Path to the input file. If not specified, looks
+                        for a .toml file whose name matches the name of its
+                        parent directory.""")
+
+    parser.add_argument("--override", nargs="+",
+                        help="""Additional arguments to override input-file
+                        parameters. " "Must be specified in TOML grouping
+                        format, e.g., to override " "the value of dt in group
+                        time to be 0.01, specify 'time.dt 0.01'.""")
+
     args = parser.parse_args()
+
+    # If no input specified, look for .toml file that matches the current
+    # working directory.
+    if args.input is None:
+        args.input = f"{os.path.basename(os.getcwd())}.toml"
 
     flucs_input = FlucsInput(args.input, args.override)
 
