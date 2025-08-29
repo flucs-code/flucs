@@ -1,3 +1,8 @@
 [parameters]
 kappaT = 1.0
 chi = 1.0
+
+[dimensions]
+# 2D means no z stuff
+nz = 1
+padded_nz = 1

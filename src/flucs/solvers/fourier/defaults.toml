@@ -4,14 +4,39 @@ tfinal =  10  # final time
 maxcfl = 0.5  # Maximum allowed CFL number
 
 [dimensions] 
+# Padded and unpadded resolutions can either be determined automatically
+# or specified explicitly.
+
+# If nx = -1 and padded_nx = something positive,
+# then an optimal nx for that padded_nx will be determined.
+
+# If padded_nx = -1 but nx is specified, then the system chooses
+# the minimum padded_nx that works.
+
+# If both are specified, then they are used as given.
+
+# N.B. The automatic resolution search supports only quadratic nonlinearities
+# via the 3/2 rule.
 nx = -1
 ny = -1
 nz = -1
 
-# Box dimensions must always be specified
+padded_nx = -1
+padded_ny = -1
+padded_nz = -1
+
+# Box dimensions must be specified
 Lx = -1
 Ly = -1
 Lz = -1
+
+
+# Finding optimal padded resolutions
+
+# Prime numbers
+padded_primes = [2, 3]
+# Order of the nonlinear term
+nonlinear_order = 2
 
 [setup]
 solver = "FourierSolver"  # name of the solver
@@ -31,6 +56,8 @@ rand_seed = 113  # seed for random-number generation
 restart = false
 restart_time = -1.0
 restart_file = ""
+type = "white_noise"
+amplitude = 1.0
 
 [diagnostics]
 write_time_all = 5
