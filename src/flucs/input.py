@@ -85,20 +85,22 @@ class FlucsInput:
         to the set of parameters outlined in _default_input_dict.
         """
         if default:
-            self._default_input_dict.update(_dict)
-            self._input_dict.update(_dict)
+            FlucsInput._update_dict(self._default_input_dict, _dict,
+                                    allow_new=True)
+            FlucsInput._update_dict(self._input_dict, _dict, allow_new=True)
         else:
             FlucsInput._update_dict(self._input_dict, _dict)
 
 
     @staticmethod
-    def _update_dict(_dict : dict, _updates : dict):
+    def _update_dict(_dict: dict, _updates: dict, allow_new=False):
         """
         Goes recursively through a dict of dicts, updating the values of keys
-        (or 'parameters' in the context of the solvers) as specified by _updates.
-        Every (key, value) pair specified in _updates MUST already exist in
-        _dict; otherwise, an exception is raised. Values are cast to their types
-        in _dict in order to keep the type structure of _dict unchanged.
+        (or 'parameters' in the context of the solvers) as specified by
+        _updates. If allow_new is False, every (key, value) pair _updates must
+        already exist in _dict; otherwise, an exception is raised. Values are
+        cast to their types in _dict in order to keep the type structure of
+        _dict unchanged.
 
         Parameters
         ----------
@@ -110,7 +112,12 @@ class FlucsInput:
 
         for k, v in _updates.items():
             if k not in _dict:
-                raise ValueError(f"Parameter '{k}' is invalid!")
+                if not allow_new:
+                    raise ValueError(f"Parameter '{k}' is invalid!")
+
+                _dict[k] = v
+                continue
+
 
             if isinstance(v, dict):  # If the value is a dict, go into it recursively
                 if not isinstance(_dict[k], dict):
