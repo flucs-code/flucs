@@ -2,6 +2,7 @@
 """
 
 import numpy as np
+from abc import abstractmethod
 from flucs.systems import FlucsSystem
 from flucs import FlucsInput
 from flucs.utilities.smooth_numbers import next_smooth_number
@@ -13,10 +14,20 @@ except ModuleNotFoundError:
 
 class FourierSystem(FlucsSystem):
     """A generic system of equations solved using pseudospectral Fourier methods."""
+
+    # Number of fields that the solver is solving for
+    number_of_fields: int
+
     # This will hold all the fields. Should be a list of NumPy-like arrays.
     # It's a list in order to store fields at previous time steps, as required
-    # by the algorithm.
+    # by the algorithm. Usually in GPU memory.
     fields: list = None
+
+    # Initial conditions, always in CPU memory
+    fields_initial: np.ndarray = None
+
+    # All Fourier systems must define these fields
+    _required_fields = ["number_of_fields"]
 
 
     # Array sizes
@@ -44,11 +55,8 @@ class FourierSystem(FlucsSystem):
     current_dt: float
     current_time: float
 
-
-    def _validate_input(self):
-        """Validates the input file
-        and sets up the resolution in Fourier space
-        """
+    def _interpret_input(self):
+        """Validates and sets up the number of grid points."""
 
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
@@ -59,25 +67,31 @@ class FourierSystem(FlucsSystem):
                 case (True, True):
                     # Check if n is odd
                     if n % 2 == 0:
-                        raise ValueError(f"Unpadded resolutions must be odd! Please change n{dim} = {n} to an odd number!")
+                        raise ValueError(
+                            "Unpadded resolutions must be odd! "
+                            f"Please change n{dim} = {n} to an odd number!")
 
-                    # TODO: add some check that warns the user if their choice was dumb
+                    # TODO: add some check that warns the user if their choice
+                    # is dumb
 
                 case (True, False):
                     # Check if n is odd
                     if n % 2 == 0:
-                        raise ValueError(f"Unpadded resolutions must be odd! Please change n{dim} = {n} to an odd number!")
+                        raise ValueError(
+                            "Unpadded resolutions must be odd! "
+                            f"Please change n{dim} = {n} to an odd number!")
 
                     half_n = n // 2
 
                     # Find minimum padded that works
                     padded_n = next_smooth_number(
-                        (self.input["dimensions.nonlinear_order"] + 1) * half_n,
+                        (self.input["dimensions.nonlinear_order"] + 1)*half_n,
                         primes=self.input["dimensions.padded_primes"])
 
                     half_padded_n = padded_n // 2
 
-                    print(f"Found padded_n{dim} = {padded_n} for n{dim} = {n}.")
+                    print(f"Found padded_n{dim} = {padded_n} "
+                          "for n{dim} = {n}.")
 
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
@@ -91,10 +105,12 @@ class FourierSystem(FlucsSystem):
 
                     n = 2*half_n + 1
 
-                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}.")
+                    print(f"Found n{dim} = {n} for "
+                          f"padded_n{dim} = {padded_n}.")
 
                 case (False, False):
-                    raise ValueError(f"At least one of n{dim} and padded_n{dim} must be positive!")
+                    raise ValueError(f"At least one of n{dim} and "
+                                     f"padded_n{dim} must be positive!")
 
             # It's useful to have the resolutions as part of the system
             # rather than to access the input dictionary every time
@@ -104,36 +120,37 @@ class FourierSystem(FlucsSystem):
             setattr(self, f"half_padded_n{dim}", half_padded_n)
 
         # Set padded and unpadded array sizes
-        self.padded_grid_size = self.padded_nz * self.padded_nx * self.half_padded_ny
         self.grid_size = self.nz * self.nx * self.half_ny
+        self.padded_grid_size\
+            = self.padded_nz * self.padded_nx * self.half_padded_ny
 
-        self.real_padded_grid_size = self.padded_nz * self.padded_nx * self.padded_ny
         self.real_grid_size = self.nz * self.nx * self.ny
+        self.real_padded_grid_size\
+            = self.padded_nz * self.padded_nx * self.padded_ny
 
+    def setup(self) -> None:
+        self.set_initial_conditions()
+        # Anything fancier should be system-specific.
 
-    def set_initial_conditions(self):
+    def ready(self) -> None:
         # Basic setup
+        # Anything fancier should be system-specific.
         self.current_step = self.int(0)
         self.current_time = self.float(0.0)
         self.current_dt = self.float(self.input["time.dt"])
 
+    def set_initial_conditions(self) -> None:
+        """Generic setup for the first time step."""
+
         # Handle known initialisation types
-
-        # Depending on whether we are running with NumPy or Cupy, we might need
-        # to convert the data to different array objects.
-        if type(self.fields[0]) is cp.ndarray:
-            to_array = cp.array
-        elif type(self.fields[0]) is np.ndarray:
-            to_array = np.array
-        else:
-            raise TypeError(f"Solver {type(self)} uses an unknown type of data arrays!")
-
         match self.input["init.type"]:
 
             case "white_noise":
                 np.random.seed(self.input["init.rand_seed"])
-                self.fields[0][:] = to_array(self.input["init.amplitude"] *\
-                    np.random.random(self.fields[0].shape))
+                self.fields_initial =\
+                    self.input["init.amplitude"]\
+                    * np.random.random(self.number_of_fields
+                                       * self.grid_size)
 
             case _:
                 # Exotic initialisation types should be handled by each solver

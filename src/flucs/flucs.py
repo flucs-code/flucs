@@ -120,8 +120,7 @@ def run_flucs():
 
     solver, system = flucs_input.create_solver_system()
 
-    system.initialise()
-    solver.initialise()
+    system.setup()
 
     # Start execution
     solver.run()

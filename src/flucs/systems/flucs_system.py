@@ -48,20 +48,28 @@ class FlucsSystem(ABC):
         # We always use 32-bit integers
         self.int = np.int32
 
-
     @abstractmethod
-    def initialise(self) -> None:
+    def setup(self) -> None:
+        """The setup method sets up the system of equations for running the
+        solver (allocates memory, compiles kernels, handles initial conditions,
+        output files, etc).
+
+        """
         pass
 
     @abstractmethod
-    def set_initial_conditions(self) -> None:
+    def ready(self) -> None:
+        """This method is called immediately before the solver starts
+        execution.
+
+        """
         pass
 
     @abstractmethod
-    def _validate_input(self) -> None:
+    def _interpret_input(self) -> None:
         pass
 
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
-        self._validate_input()
+        self._interpret_input()
         self._set_precision()

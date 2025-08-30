@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 
 class ColdITG2DFourier(FourierSystem):
     """Fourier solver for the 2D system."""
+    number_of_fields = 2
     # GPU memory
 
     # Direct pointers to the phi and T arrays
@@ -30,10 +31,21 @@ class ColdITG2DFourier(FourierSystem):
     # CPU memory
 
 
-    def initialise(self):
+    # CUDA kernels
+    linear_kernel: cp.RawKernel
+
+
+    def setup(self):
+        """Prepares the system for the solver."""
+        super().setup()
+
         self.allocate_memory()
         self.setup_kernels()
-        self.set_initial_conditions()
+
+
+    def ready(self):
+        super().ready()
+        self.fields[0][:] = cp.array(self.fields_initial.reshape(self.fields[0].shape))
 
 
     def allocate_memory(self):
@@ -70,12 +82,53 @@ class ColdITG2DFourier(FourierSystem):
 
         # CPU arrays
 
+    def _interpret_input(self):
+        """Checks if the input file makes sense"""
 
-    def set_initial_conditions(self):
-        super().set_initial_conditions()
+        # Make sure to call the parent method to do some standard setup
+        # (resolution checks, etc)
+        super()._interpret_input()
+
+        # Anything custom goes here
+
+        if self.nz != 1 or self.padded_nz != 1:
+            raise ValueError("Both nz and padded_nz should be set to 1 for the 2D system!")
+
+
+
+    def _set_initial_conditions(self):
+        super()._set_initial_conditions()
 
         # Add all custom stuff here
 
 
     def setup_kernels(self):
-        pass
+        resource_path = files(self.__module__) / "cold_itg_2d_fourier.cu"
+        with open(resource_path) as f:
+            cuda_module = f.read()
+
+
+        # Now, to set up all the definitions
+        options=("--ptxas-options=-O3",
+                 # "-O3",
+                 "--use_fast_math",
+                 f"-DTWOPI_OVER_LX=(FLUCS_FLOAT)({2*np.pi/self.input["dimensions.Lx"]})",
+                 f"-DTWOPI_OVER_LY=(FLUCS_FLOAT)({2*np.pi/self.input["dimensions.Ly"]})",
+                 f"-DHALFUNPADDEDSIZE={self.grid_size}",
+                 f"-DNX={self.nx}",
+                 f"-DHALF_NX={self.half_nx}",
+                 f"-DHALF_NY={self.half_ny}",
+                 f"-DCHI=(FLUCS_FLOAT)({self.input["parameters.chi"]})",
+                 f"-DA_TIMES_CHI=(FLUCS_FLOAT)({self.input["parameters.a"] * self.input["parameters.chi"]})",
+                 f"-DB_TIMES_CHI=(FLUCS_FLOAT)({self.input["parameters.b"] * self.input["parameters.chi"]})",
+                 f"-DKAPPA_T=(FLUCS_FLOAT)({self.input["parameters.kappaT"]})",
+                 f"-DKAPPA_N=(FLUCS_FLOAT)({self.input["parameters.kappaN"]})",
+                 f"-DKAPPA_B=(FLUCS_FLOAT)({self.input["parameters.kappaB"]})",
+                 f"-DALPHA=(FLUCS_FLOAT)({self.input["parameters.alpha"]})")
+
+        cupy_module = cp.RawModule(code=cuda_module, options=options)
+        cupy_module.compile()
+
+        self.linear_kernel = cupy_module.get_function("linear_kernel")
+
+        print(self.linear_kernel)

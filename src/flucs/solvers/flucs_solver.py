@@ -34,16 +34,9 @@ class FlucsSolver(ABC):
 
         flucs_input.load_toml_str(contents, default=True)
 
-
-    @abstractmethod
-    def initialise(self) -> None:
-        pass
-
-
     @abstractmethod
     def run(self) -> None:
         pass
-
 
     def __init__(self, flucs_input : FlucsInput, flucs_system : FlucsSystem) -> None:
         self.input = flucs_input

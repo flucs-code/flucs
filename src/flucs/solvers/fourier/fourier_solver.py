@@ -9,8 +9,8 @@ from importlib.resources import files
 from flucs import FlucsInput, FlucsSolver
 
 class FourierSolver(FlucsSolver):
-    def initialise(self):
-        pass
-
     def run(self):
-        pass
+        """Run the main solver loop."""
+
+        self.system.ready()
+        print("Ready to go")

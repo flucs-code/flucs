@@ -1,6 +1,11 @@
 [parameters]
 kappaT = 1.0
 chi = 1.0
+a = 0.225
+b = 0.41875
+kappaB = 1.0
+kappaN = 0.0
+alpha = 0.5
 
 [dimensions]
 # 2D means no z stuff
