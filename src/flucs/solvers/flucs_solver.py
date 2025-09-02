@@ -21,9 +21,9 @@ class FlucsSolverState(enum.Enum):
     DONE = enum.auto()
 
 
-class FlucsSolver(ABC):
-    input : FlucsInput = None
-    system : FlucsSystem = None
+class FlucsSolver[T_System: FlucsSystem](ABC):
+    input : FlucsInput
+    system : T_System
     state : FlucsSolverState
 
     @classmethod
@@ -38,7 +38,7 @@ class FlucsSolver(ABC):
     def run(self) -> None:
         pass
 
-    def __init__(self, flucs_input : FlucsInput, flucs_system : FlucsSystem) -> None:
+    def __init__(self, flucs_input : FlucsInput, flucs_system : T_System) -> None:
         self.input = flucs_input
         self.system = flucs_system
         self.state = FlucsSolverState.NOTINITIALISED

@@ -1,16 +1,13 @@
 """Abstract base class for a system that can be solved by FourierSolver.
 """
 
+from importlib.resources import files
 import numpy as np
 from abc import abstractmethod
 from flucs.systems import FlucsSystem
 from flucs import FlucsInput
 from flucs.utilities.smooth_numbers import next_smooth_number
-
-try:
-    import cupy as cp
-except ModuleNotFoundError:
-    print("CuPy not found!")
+import cupy as cp
 
 class FourierSystem(FlucsSystem):
     """A generic system of equations solved using pseudospectral Fourier methods."""
@@ -18,17 +15,13 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
-    # This will hold all the fields. Should be a list of NumPy-like arrays.
+    # This will hold all the fields. Should be a list of CuPy arrays.
     # It's a list in order to store fields at previous time steps, as required
-    # by the algorithm. Usually in GPU memory.
-    fields: list = None
+    # by the algorithm.
+    fields: list
 
     # Initial conditions, always in CPU memory
-    fields_initial: np.ndarray = None
-
-    # All Fourier systems must define these fields
-    _required_fields = ["number_of_fields"]
-
+    fields_initial: np.ndarray
 
     # Array sizes
     nx: int
@@ -45,10 +38,10 @@ class FourierSystem(FlucsSystem):
     half_padded_ny: int
     half_padded_nz: int
 
-    grid_size: int
-    padded_grid_size: int
-    real_grid_size: int
-    real_padded_grid_size: int
+    lattice_size: int
+    padded_lattice_size: int
+    real_lattice_size: int
+    real_padded_lattice_size: int
 
     # Variables to that keep track of time
     current_step: int
@@ -56,7 +49,7 @@ class FourierSystem(FlucsSystem):
     current_time: float
 
     def _interpret_input(self):
-        """Validates and sets up the number of grid points."""
+        """Validates and sets up the number of lattice points."""
 
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
@@ -71,6 +64,8 @@ class FourierSystem(FlucsSystem):
                             "Unpadded resolutions must be odd! "
                             f"Please change n{dim} = {n} to an odd number!")
 
+                    half_n = n // 2
+                    half_padded_n = padded_n // 2
                     # TODO: add some check that warns the user if their choice
                     # is dumb
 
@@ -98,6 +93,7 @@ class FourierSystem(FlucsSystem):
 
                     factor = self.input["dimensions.nonlinear_order"] + 1
                     half_n = padded_n // factor
+                    half_padded_n = padded_n // 2
 
                     # Handle an annoying edge case
                     if padded_n % factor == 0:
@@ -112,6 +108,10 @@ class FourierSystem(FlucsSystem):
                     raise ValueError(f"At least one of n{dim} and "
                                      f"padded_n{dim} must be positive!")
 
+                # This is added only to make pyright happy.
+                case _:
+                    raise RuntimeError("How the fluc did you get here?")
+
             # It's useful to have the resolutions as part of the system
             # rather than to access the input dictionary every time
             setattr(self, f"n{dim}", n)
@@ -120,24 +120,49 @@ class FourierSystem(FlucsSystem):
             setattr(self, f"half_padded_n{dim}", half_padded_n)
 
         # Set padded and unpadded array sizes
-        self.grid_size = self.nz * self.nx * self.half_ny
-        self.padded_grid_size\
+        self.lattice_size = self.nz * self.nx * self.half_ny
+        self.padded_lattice_size\
             = self.padded_nz * self.padded_nx * self.half_padded_ny
 
-        self.real_grid_size = self.nz * self.nx * self.ny
-        self.real_padded_grid_size\
+        self.real_lattice_size = self.nz * self.nx * self.ny
+        self.real_padded_lattice_size\
             = self.padded_nz * self.padded_nx * self.padded_ny
 
     def setup(self) -> None:
+        """Sets up the system for running the solver. Should be called *after*
+        any child class has done its setup, i.e., do not forget to do
+        super().setup()!
+
+        """
         self.set_initial_conditions()
-        # Anything fancier should be system-specific.
+
+        super().setup()
 
     def ready(self) -> None:
         # Basic setup
-        # Anything fancier should be system-specific.
         self.current_step = self.int(0)
         self.current_time = self.float(0.0)
         self.current_dt = self.float(self.input["time.dt"])
+
+        # Add useful module options
+        self.module_options.define_constant("TWOPI_OVER_LX", 2*np.pi / self.input["dimensions.Lx"])
+        self.module_options.define_constant("TWOPI_OVER_LY", 2*np.pi / self.input["dimensions.Ly"])
+        self.module_options.define_constant("TWOPI_OVER_LZ", 2*np.pi / self.input["dimensions.Lz"])
+
+
+        self.module_options.define_constant("NUMBER_OF_FIELDS", self.number_of_fields)
+
+        self.module_options.define_constant("HALFUNPADDEDSIZE", self.lattice_size)
+
+        self.module_options.define_constant("NX", self.nx)
+        self.module_options.define_constant("HALF_NX", self.half_nx)
+        self.module_options.define_constant("NY", self.ny)
+        self.module_options.define_constant("HALF_NY", self.half_ny)
+        self.module_options.define_constant("NZ", self.nz)
+        self.module_options.define_constant("HALF_NZ", self.half_nz)
+        self.module_options.define_constant("ALPHA", self.input["setup.alpha"])
+
+        super().ready()
 
     def set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
@@ -150,9 +175,25 @@ class FourierSystem(FlucsSystem):
                 self.fields_initial =\
                     self.input["init.amplitude"]\
                     * np.random.random(self.number_of_fields
-                                       * self.grid_size)
+                                       * self.lattice_size)
 
             case _:
                 # Exotic initialisation types should be handled by each solver
                 # separately.
                 pass
+
+    @abstractmethod
+    def calculate_nonlinear_terms(self) -> None:
+        """Computes the nonlinear terms and adjusts the time step if
+        necessary.
+
+        Called in the beginning of a time step.
+
+        """
+        pass
+
+    @abstractmethod
+    def finish_time_step(self) -> None:
+        """Combines the nonlinear and linear terms in order to finish the time
+        step"""
+        pass

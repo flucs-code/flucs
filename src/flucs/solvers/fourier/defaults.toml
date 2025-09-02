@@ -51,6 +51,9 @@ timing_steps = 1000  # see above
 include_lin = true  # include linear terms
 include_nl = true  # include nonlinear terms
 
+# Crank-Nicolson implicitness parameter
+alpha = 0.5
+
 [init]
 rand_seed = 113  # seed for random-number generation
 restart = false
