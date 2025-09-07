@@ -6,8 +6,8 @@ abstract methods.
 """
 
 import enum
+from typing import TypeVar, Generic
 from abc import ABC, abstractmethod
-from importlib.resources import files
 from flucs.input import FlucsInput
 from flucs.systems import FlucsSystem
 
@@ -21,14 +21,19 @@ class FlucsSolverState(enum.Enum):
     DONE = enum.auto()
 
 
-class FlucsSolver[T_System: FlucsSystem](ABC):
-    input : FlucsInput
-    system : T_System
-    state : FlucsSolverState
+T_System = TypeVar("T_System", bound="FlucsSystem")
+class FlucsSolver(Generic[T_System], ABC):
+    input: FlucsInput
+    system: T_System
+    state: FlucsSolverState
 
     @classmethod
-    def load_defaults(cls, flucs_input : FlucsInput):
-        resource_path = files(cls.__module__) / "defaults.toml"
+    def load_defaults(cls, flucs_input: FlucsInput):
+        from pathlib import Path
+        import importlib
+
+        module = importlib.import_module(cls.__module__)
+        resource_path = Path(module.__file__).with_name("defaults.toml")
         with resource_path.open("r") as f:
             contents = f.read()
 

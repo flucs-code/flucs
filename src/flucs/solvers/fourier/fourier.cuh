@@ -37,9 +37,30 @@ __global__ void linear_kernel(const FLUCS_COMPLEX* fields,
     if (!(index < HALFUNPADDEDSIZE))
         return;
 
-    FLUCS_COMPLEX R[2][2], invL[2][2];
-
+    FLUCS_COMPLEX R[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX invL[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     get_linear_matrices(index, dt, R, invL);
+
+    // Let's see if the 2D one below works first before doing this
+    // FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS];
+    //
+    //
+    // for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+    //     rhs_fields[i] = 0;
+    //
+    //     for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+    //         rhs_fields[i] += R[i][j] * fields[index + j*HALFUNPADDEDSIZE];
+    //     }
+    // }
+    //
+    // for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+    //     result[index + i*HALFUNPADDEDSIZE] = 0;
+    //
+    //     for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+    //         result[index + i*HALFUNPADDEDSIZE] += invL[i][j] * rhs_fields[j];
+    //     }
+    // }
+    
 
     const FLUCS_COMPLEX rhs_phi = R[0][0] * fields[index] + R[0][1] * fields[index + HALFUNPADDEDSIZE];
     const FLUCS_COMPLEX rhs_T = R[1][0] * fields[index] + R[1][1] * fields[index + HALFUNPADDEDSIZE];

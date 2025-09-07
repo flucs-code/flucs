@@ -15,6 +15,9 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
+    # Number of fields to be DFT'ed
+    number_of_dfts: int
+
     # This will hold all the fields. Should be a list of CuPy arrays.
     # It's a list in order to store fields at previous time steps, as required
     # by the algorithm.
@@ -42,11 +45,6 @@ class FourierSystem(FlucsSystem):
     padded_lattice_size: int
     real_lattice_size: int
     real_padded_lattice_size: int
-
-    # Variables to that keep track of time
-    current_step: int
-    current_dt: float
-    current_time: float
 
     def _interpret_input(self):
         """Validates and sets up the number of lattice points."""

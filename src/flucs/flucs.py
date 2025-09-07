@@ -100,27 +100,35 @@ def run_flucs():
 
     parser.add_argument("--input", type=str,
                         help="""Path to the input file. If not specified, looks
-                        for a .toml file whose name matches the name of its
+                        for input.toml and, if that is not found, tries
+                        NAME.toml file where NAME matches the name of the
                         parent directory.""")
 
     parser.add_argument("--override", nargs="+",
                         help="""Additional arguments to override input-file
-                        parameters. " "Must be specified in TOML grouping
-                        format, e.g., to override " "the value of dt in group
+                        parameters. Must be specified in TOML grouping
+                        format: e.g., to override the value of dt in group
                         time to be 0.01, specify 'time.dt 0.01'.""")
 
     args = parser.parse_args()
 
-    # If no input specified, look for .toml file that matches the current
-    # working directory.
+    # If no input specified, look for a NAME.toml file, where NAME matches (in
+    # this order of priority):
+    # (1) input
+    # (2) the name of the parent directory
+
     if args.input is None:
-        args.input = f"{os.path.basename(os.getcwd())}.toml"
+        if os.path.exists("input.toml"):
+            args.input = "input.toml"
+        elif os.path.exists(f"{os.path.basename(os.getcwd())}.toml"):
+            args.input = f"{os.path.basename(os.getcwd())}.toml"
+        else:
+            raise FileNotFoundError("Input file neither specified explicitly "
+                "nor found in the expected places (see flucs -- help)!")
 
     flucs_input = FlucsInput(args.input, args.override)
 
     solver, system = flucs_input.create_solver_system()
-
-    system.setup()
 
     # Start execution
     solver.run()

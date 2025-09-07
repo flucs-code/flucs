@@ -62,11 +62,24 @@ restart_file = ""
 type = "white_noise"
 amplitude = 1.0
 
-[diagnostics]
-write_time_all = 5
-write_time_1d = -1.0
-write_time_2d = -1.0
-write_time_3d = -1.0
+[output]
+write_time = 10
+
+[output.0d]
+save_steps = -1
+diags = []
+
+[output.1d]
+save_steps = -1
+diags = []
+
+[output.2d]
+save_steps = -1
+diags = []
+
+[output.3d]
+save_steps = -1
+diags = []
 
 [hyper]
 perphypervisc = 0.0

@@ -14,25 +14,45 @@ class FourierSolver(FlucsSolver[FourierSystem]):
     def run(self):
         """Run the main solver loop."""
 
-        # We first time the solver
-        # self.system.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX", 1)
-
+        # Get the system ready
+        self.system.setup()
         self.system.ready()
 
+        # self.system.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX", 1)
+
+        # We first time the solver
         self.state = FlucsSolverState.TIMING
 
+        time_taken = self._solver_loop()
+        print(f'Timed {self.system.input["setup.timing_steps"]} steps, '
+              f'which took {time_taken} s.')
 
+
+        # Reset system
+        self.system.ready()
+        self.state = FlucsSolverState.RUNNING
+
+        self._solver_loop()
+
+    def _not_done(self) -> bool:
+        if self.state == FlucsSolverState.TIMING:
+            return self.system.current_step\
+                   < self.system.input["setup.timing_steps"]
+
+        return self.system.current_time < self.system.input["time.tfinal"]
+
+
+
+    def _solver_loop(self) -> float:
         start_time = time.time()
 
-        while self.system.current_step < self.system.input["setup.timing_steps"]:
+        while self._not_done():
             self.system.calculate_nonlinear_terms()
 
             self.system.finish_time_step()
-            # print("a")
-        
+
         end_time = time.time()
-        many_steps_timespan = end_time - start_time
-        print(f"Timed {self.system.input["setup.timing_steps"]} steps, which took {many_steps_timespan} s.")
+
+        return end_time - start_time
 
 
-        print("done")

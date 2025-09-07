@@ -5,13 +5,20 @@ abstract methods.
 
 """
 
+
+from pathlib import Path
+import heapq
+import importlib
+from typing import Type
 import numpy as np
 import cupy as cp
 from abc import ABC, abstractmethod
-from importlib.resources import files
 import flucs
 from flucs import FlucsInput
+from flucs.diagnostics.output import FlucsOutput
+from flucs.diagnostics.diagnostic import FlucsDiagnostic
 from flucs.utilities.cupy import ModuleOptions
+
 
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""
@@ -22,11 +29,22 @@ class FlucsSystem(ABC):
     complex: type
     int: type
 
+    # Variables to that keep track of time
+    current_step: int
+    current_dt: float
+    current_time: float
+
     # CuPy module for the system
     cupy_module: cp.RawModule
 
     # Compile options for CUDA
     module_options: ModuleOptions
+
+    # A priority queue of outputs
+    output_heap: list[FlucsOutput]
+
+    # A dict of supported diagnostics
+    diags_dict: dict[str, Type[FlucsDiagnostic]]
 
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):
@@ -38,7 +56,8 @@ class FlucsSystem(ABC):
             Input object that will be initialised with the defaults.
         """
 
-        resource_path = files(cls.__module__) / "defaults.toml"
+        module = importlib.import_module(cls.__module__)
+        resource_path = Path(module.__file__).with_name("defaults.toml")
         with resource_path.open("r") as f:
             contents = f.read()
 
@@ -58,6 +77,20 @@ class FlucsSystem(ABC):
         # We always use 32-bit integers
         self.int = np.int32
 
+    def add_output(self, output: FlucsOutput):
+        heapq.heappush(self.output_heap, output)
+
+    def execute_diagnostics(self):
+        while self.output_heap[0].next_save == self.current_step:
+            output_to_execute = heapq.heappop(self.output_heap)
+            output_to_execute.execute()
+            heapq.heappush(self.output_heap, output_to_execute)
+
+    @abstractmethod
+    def init_output(self) -> None:
+        """Initialises the ouput files."""
+        pass
+
     @abstractmethod
     def setup(self) -> None:
         """The setup method sets up the system of equations for running the
@@ -76,7 +109,7 @@ class FlucsSystem(ABC):
         # directory as its .py file and have a name that matches the .py file,
         # with the .cu extension.
 
-        resource_path = files(self.__module__) / f"{self.__module__.split('.')[-1]}.cu"
+        resource_path = Path(importlib.import_module(self.__module__).__file__).parent / f"{self.__module__.split('.')[-1]}.cu"
         with open(resource_path) as f:
             cuda_module = f.read()
 
@@ -92,6 +125,7 @@ class FlucsSystem(ABC):
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        self.module_options.add_string_option(f"-I{files(flucs).parent}")
+        print(f"-I{Path(flucs.__file__).parent}")
+        self.module_options.add_string_option(f"-I{Path(flucs.__file__).parent.parent}")
         self._interpret_input()
         self._set_precision()

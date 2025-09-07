@@ -8,7 +8,7 @@ from importlib.resources import files
 import numpy as np
 import cupy as cp
 from netCDF4 import Dataset
-from numpy._core.numeric import dtype
+from numpy import dtype
 import flucs
 from flucs.solvers.fourier import FourierSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
@@ -174,13 +174,6 @@ class ColdITG2DFourier(FourierSystem):
                             self.fields[self.current_field_marker],
                             self.current_dt))
 
-        # self.linear_kernel((unpadded_kernels_lattice_size,),
-        #                    (block_size,),
-        #                    (self.fields[self.previous_field_marker],
-        #                     self.fields[self.current_field_marker],
-        #                     self.R,
-        #                     self.invL,
-        #                     self.current_dt))
-
+        self.current_time += self.current_dt
 
         cp.mean(self.fields[0])
