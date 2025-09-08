@@ -78,6 +78,9 @@ class FlucsSystem(ABC):
         self.int = np.int32
 
     def add_output(self, output: FlucsOutput):
+        if not hasattr(self, "output_heap"):
+            self.output_heap = []
+
         heapq.heappush(self.output_heap, output)
 
     def execute_diagnostics(self):
@@ -85,6 +88,10 @@ class FlucsSystem(ABC):
             output_to_execute = heapq.heappop(self.output_heap)
             output_to_execute.execute()
             heapq.heappush(self.output_heap, output_to_execute)
+
+    def write_output(self):
+        for output in self.output_heap:
+            output.write()
 
     @abstractmethod
     def init_output(self) -> None:

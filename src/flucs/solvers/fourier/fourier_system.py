@@ -46,6 +46,11 @@ class FourierSystem(FlucsSystem):
     real_lattice_size: int
     real_padded_lattice_size: int
 
+    # Fourier wavenumbers
+    kx: np.ndarray
+    ky: np.ndarray
+    kz: np.ndarray
+
     def _interpret_input(self):
         """Validates and sets up the number of lattice points."""
 
@@ -62,8 +67,8 @@ class FourierSystem(FlucsSystem):
                             "Unpadded resolutions must be odd! "
                             f"Please change n{dim} = {n} to an odd number!")
 
-                    half_n = n // 2
-                    half_padded_n = padded_n // 2
+                    half_n = n//2 + 1
+                    half_padded_n = padded_n//2 + 1
                     # TODO: add some check that warns the user if their choice
                     # is dumb
 
@@ -74,14 +79,14 @@ class FourierSystem(FlucsSystem):
                             "Unpadded resolutions must be odd! "
                             f"Please change n{dim} = {n} to an odd number!")
 
-                    half_n = n // 2
+                    half_n = n//2 + 1
 
                     # Find minimum padded that works
                     padded_n = next_smooth_number(
                         (self.input["dimensions.nonlinear_order"] + 1)*half_n,
                         primes=self.input["dimensions.padded_primes"])
 
-                    half_padded_n = padded_n // 2
+                    half_padded_n = padded_n//2 + 1
 
                     print(f"Found padded_n{dim} = {padded_n} "
                           "for n{dim} = {n}.")
@@ -90,14 +95,15 @@ class FourierSystem(FlucsSystem):
                     # Given a padded_n, it's easiest to figure out half_n
 
                     factor = self.input["dimensions.nonlinear_order"] + 1
-                    half_n = padded_n // factor
+                    _x = padded_n // factor
                     half_padded_n = padded_n // 2
 
                     # Handle an annoying edge case
                     if padded_n % factor == 0:
-                        half_n -= 1
+                        _x -= 1
 
-                    n = 2*half_n + 1
+                    half_n = _x + 1
+                    n = 2*_x + 1
 
                     print(f"Found n{dim} = {n} for "
                           f"padded_n{dim} = {padded_n}.")
@@ -126,15 +132,37 @@ class FourierSystem(FlucsSystem):
         self.real_padded_lattice_size\
             = self.padded_nz * self.padded_nx * self.padded_ny
 
+        # Finally, precompute wavenumbers (useful for many things)
+        self._precompute_wavenumbers()
+
     def setup(self) -> None:
         """Sets up the system for running the solver. Should be called *after*
         any child class has done its setup, i.e., do not forget to do
-        super().setup()!
+        super().setup() in anything that inherits FourierSystem.
 
         """
         self.set_initial_conditions()
 
         super().setup()
+
+    def _precompute_wavenumbers(self):
+        kx_linear = 2 * np.pi * self.nx * np.fft.fftfreq(self.nx)\
+            / self.input["dimensions.Lx"]
+
+        kz_linear = 2 * np.pi * self.nz * np.fft.fftfreq(self.nz)\
+            / self.input["dimensions.Lz"]
+
+        # ny is special
+        ky_linear = 2 * np.pi * self.ny * np.fft.rfftfreq(self.ny)\
+            / self.input["dimensions.Ly"]
+
+        self.kx = np.broadcast_to(kx_linear, (self.nz, self.half_ny,
+                                              self.nx)).transpose(0, 2, 1)
+        self.kz = np.broadcast_to(kz_linear, (self.half_ny, self.nx,
+                                              self.nz)).transpose(2, 1, 0)
+
+        self.ky = np.broadcast_to(ky_linear, (self.nz, self.nx, self.half_ny))
+
 
     def ready(self) -> None:
         # Basic setup

@@ -37,6 +37,9 @@ class FlucsOutput:
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
+        self.filename = f"{name}.nc"
+        self.diagnostics = []
+        self.time_cache = []
 
         # Setup steps and diagnostics from input file and system
         self.next_save = 0
@@ -46,12 +49,14 @@ class FlucsOutput:
             self._setup_group()
 
             for diag_name in self.system.input[f"output.{self.name}.diags"]:
-                diag_to_add = self.system.diags_dict[diag_name](self.system)
+                diag_to_add =\
+                    self.system.diags_dict[diag_name](system=self.system,
+                                                      output=self)
                 self._add_diagnostic(diag_to_add)
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
-        if hasattr(self, "group_name"):
+        if not hasattr(self, "group_name"):
             # We are yet to initialise the group
             # Go through the file and pick group_name to be an integer that is
             # equal to the largest one found + 1
@@ -60,7 +65,9 @@ class FlucsOutput:
             group_number += 1
 
             self.group_name = str(group_number)
-            dataset.createGroup(self.group_name)
+            grp = dataset.createGroup(self.group_name)
+            grp.createDimension("time", None)
+            grp.createVariable("time", "f4", ("time",))
 
         self.group = dataset.groups[self.group_name]
 
@@ -125,9 +132,15 @@ class FlucsOutput:
 
             # Write individual diagnostics and clear data cache
             for diag in self.diagnostics:
-                for i in range(times_to_write):
-                    self.group[diag.name][first_index + i, :]\
-                        = diag.data_cache[i][:]
+                # If scalar diagnostic, this is much easier
+                if len(diag.shape) == 0:
+                    self.group[diag.name][first_index:last_index]\
+                        = np.array(diag.data_cache)
+                else:
+                    # Could probably rewrite with np.array
+                    for i in range(times_to_write):
+                        self.group[diag.name][first_index + i, :]\
+                            = diag.data_cache[i][:]
 
                 diag.data_cache.clear()
 

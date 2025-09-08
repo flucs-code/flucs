@@ -22,16 +22,17 @@ class FlucsDiagnostic(ABC):
     # used in the netCDF4 file and specified in dimensions_dict.
     shape: tuple
 
-    dimensions_dict: dict[str, np.ndarray]
+    dimensions_dict: dict[str, np.ndarray | float]
 
     data_cache: list[np.ndarray]
 
     def __init__(self, system: FlucsSystem, output: FlucsOutput):
         self.system = system
         self.output = output
+        self.data_cache = []
 
     def execute(self):
-        self.data_cache[self.name].append(
+        self.data_cache.append(
             self.get_data())
 
     @abstractmethod
@@ -39,5 +40,5 @@ class FlucsDiagnostic(ABC):
         pass
 
     @abstractmethod
-    def get_data(self) -> np.ndarray:
+    def get_data(self) -> np.ndarray | float:
         pass

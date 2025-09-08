@@ -40,7 +40,7 @@ __device__ void get_linear_matrices(const int index, const FLUCS_FLOAT dt, FLUCS
     //     // ikx_padded_m = padded_nx + (ikx_m - nx)
     // }
 
-    const FLUCS_FLOAT kperp2 = kx*kx + ky*ky;
+    const FLUCS_FLOAT kperp2 = kx*kx + ky*ky + (FLUCS_FLOAT)(index == 0);
     const FLUCS_FLOAT eta_inv = (FLUCS_FLOAT)(1.0) / ((FLUCS_FLOAT)(iky > 0) + kperp2);
 
 

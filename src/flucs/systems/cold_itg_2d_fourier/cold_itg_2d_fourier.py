@@ -1,6 +1,6 @@
-"""Pseudospectral Fourier implementation of the Ivanov et al. (2020) 2D fluid ITG system.
-
-The nonlinear term is handled explicitly using the Adams-Bashforth 3-step method.
+"""Pseudospectral Fourier implementation of the Ivanov et al. (2020) 2D fluid
+ITG system. The nonlinear term is handled explicitly using the Adams-Bashforth
+3-step method.
 
 """
 
@@ -12,6 +12,8 @@ from numpy import dtype
 import flucs
 from flucs.solvers.fourier import FourierSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
+from .cold_itg_2d_fourier_output import HeatfluxDiag
+from flucs.diagnostics.output import FlucsOutput
 
 
 class ColdITG2DFourier(FourierSystem):
@@ -35,6 +37,9 @@ class ColdITG2DFourier(FourierSystem):
 
     # CUDA kernels
     linear_kernel: cp.RawKernel # pyright: ignore[reportPossiblyUnboundVariable]
+
+    # Supported diagnostics
+    diags_dict = {"heatflux": HeatfluxDiag}
 
 
     def setup(self):
@@ -158,6 +163,15 @@ class ColdITG2DFourier(FourierSystem):
 
         self.linear_kernel = self.cupy_module.get_function("linear_kernel")
 
+        self.fields[self.current_field_marker][:] = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
+
+        self.init_output()
+
+    def init_output(self) -> None:
+        scalar_output = FlucsOutput(name="0d", system=self)
+        scalar_output.ready()
+        self.add_output(scalar_output)
+
 
     def calculate_nonlinear_terms(self) -> None:
         self.current_field_marker = (self.current_field_marker + 1) % 2
@@ -176,4 +190,3 @@ class ColdITG2DFourier(FourierSystem):
 
         self.current_time += self.current_dt
 
-        cp.mean(self.fields[0])
