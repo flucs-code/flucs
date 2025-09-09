@@ -6,6 +6,8 @@ abstract methods.
 """
 
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from pathlib import Path
 import heapq
 import importlib
@@ -15,14 +17,19 @@ import cupy as cp
 from abc import ABC, abstractmethod
 import flucs
 from flucs import FlucsInput
-from flucs.diagnostics.output import FlucsOutput
-from flucs.diagnostics.diagnostic import FlucsDiagnostic
+from flucs.output import FlucsOutput, FlucsDiagnostic
 from flucs.utilities.cupy import ModuleOptions
+
+if TYPE_CHECKING:
+    from flucs.solvers import FlucsSolver
 
 
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""
     input: FlucsInput = None
+
+    # Solver running the system
+    solver: FlucsSolver
 
     # Float and complex types
     float: type
@@ -49,19 +56,27 @@ class FlucsSystem(ABC):
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):
         """Loads default parameters into a flucs input object.
+        Goes recursively through all the parent systems.
 
         Parameters
         ----------
         flucs_input : FlucsInput
             Input object that will be initialised with the defaults.
         """
+        import importlib
+        from pathlib import Path
 
-        module = importlib.import_module(cls.__module__)
-        resource_path = Path(module.__file__).with_name("defaults.toml")
-        with resource_path.open("r") as f:
-            contents = f.read()
+        for parent_cls in reversed(cls.__mro__):
+            if not issubclass(parent_cls, FlucsSystem):
+                continue
 
-        flucs_input.load_toml_str(contents, default=True)
+            p = Path(importlib.import_module(parent_cls.__module__).__file__)
+            defaults_path = p.with_name(f'{p.stem}.toml')
+            print(f"Loading SOLVER defaults for {defaults_path}")
+            with defaults_path.open("r") as f:
+                contents = f.read()
+
+            flucs_input.load_toml_str(contents, default=True)
 
     def _set_precision(self):
         """Interprets the precision parameter and sets types accordingly."""
@@ -93,12 +108,6 @@ class FlucsSystem(ABC):
         for output in self.output_heap:
             output.write()
 
-    @abstractmethod
-    def init_output(self) -> None:
-        """Initialises the ouput files."""
-        pass
-
-    @abstractmethod
     def setup(self) -> None:
         """The setup method sets up the system of equations for running the
         solver (allocates memory, handles initial conditions, output files,
@@ -106,11 +115,26 @@ class FlucsSystem(ABC):
 
         """
 
+        # Initialise outputs
+        for output_name, output_opt in self.input["output"].items():
+            if not isinstance(output_opt, dict):
+                continue
+
+            # If save_steps is negative, don't add the diagnostic
+            if output_opt["save_steps"] < 0:
+                continue
+
+            self.add_output(FlucsOutput(name=output_name, system=self))
+
     def ready(self) -> None:
         """This method is called immediately before the solver starts
         execution.
 
         """
+
+        # Ready up the outputs
+        for output in self.output_heap:
+            output.ready()
 
         # The CUDA module for the system should be located in the same
         # directory as its .py file and have a name that matches the .py file,

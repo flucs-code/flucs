@@ -1,0 +1,21 @@
+[time]
+dt = 0.01  # integration time step
+tfinal =  10  # final time
+
+[setup]
+solver = ""  # name of the solver
+system = ""  # name of the system of equations
+precision = "single"  # floating-point precision
+
+[output]
+write_time = 10  # time, in seconds, between writes to the drive
+
+[output.example]  # An example output. Each system should define its own.
+# The diagnostics in this output group are run every save_steps time steps.
+# -1 means that the output group is not active.
+save_steps = -1 
+
+# This is a list of strings for the names of the active diagnostics.
+# Each system defines a dict called diags_dict where the names of the
+# diagnostics are mapped to the diagnostic classes.
+diags = []

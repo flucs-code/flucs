@@ -1,6 +1,4 @@
 [time]
-dt = 0.01  # integration time step
-tfinal =  10  # final time
 maxcfl = 0.5  # Maximum allowed CFL number
 
 [dimensions] 
@@ -39,10 +37,6 @@ padded_primes = [2, 3]
 nonlinear_order = 2
 
 [setup]
-solver = "FourierSolver"  # name of the solver
-system = ""  # name of the system of equations
-precision = "single"  # floating-point precision
-
 # If true, solver will measure its performance for setup.timing_steps time steps, then quit
 # No output files will be written.
 timing = false
@@ -63,7 +57,6 @@ type = "white_noise"
 amplitude = 1.0
 
 [output]
-write_time = 10
 
 [output.0d]
 save_steps = -1

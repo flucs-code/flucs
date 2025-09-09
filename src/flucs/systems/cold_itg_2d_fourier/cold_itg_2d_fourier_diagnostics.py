@@ -1,6 +1,6 @@
 import numpy as np
 import cupy as cp
-from flucs.diagnostics.diagnostic import FlucsDiagnostic
+from flucs.output import FlucsDiagnostic
 
 
 class HeatfluxDiag(FlucsDiagnostic):

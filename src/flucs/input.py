@@ -15,18 +15,26 @@ class FlucsInput:
     """
 
     _input_dict = {}            # Dict that holds all the input parameters.
-    _input_str : str = None     # Represents the input file
+    _input_str: str = None     # Represents the input file
     _default_input_dict = {}    # Holds all the defaults
-    _solver_type : type         # Solver type for this input
-    _system_type : type         # System type for this input
+    _solver_type: type         # Solver type for this input
+    _system_type: type         # System type for this input
     _initialised = False        # if True, __setitem__ throws an exception
 
 
     def create_solver_system(self):
+        """Creates the solver and system for this input.
+
+        Returns
+        -------
+        (solver: FlucsSolver, system: FlucsSystem)
+            Tuple of solver and system.
+
+        """
         system = self._system_type(self)
         solver = self._solver_type(self, system)
+        system.solver = solver
         return solver, system
-
 
     def __getitem__(self, arg : str):
         """
@@ -123,7 +131,7 @@ class FlucsInput:
                 if not isinstance(_dict[k], dict):
                     raise ValueError(f"'{k}' is a parameter, not a group of parameters! It cannot be set to {str(v)}!")
 
-                FlucsInput._update_dict(_dict[k], v)
+                FlucsInput._update_dict(_dict[k], v, allow_new=allow_new)
             else:
                 if isinstance(_dict[k], dict):
                     raise ValueError(f"'{k}' is a group of parameters, not a parameter itself! It cannot be set to {str(v)}!")
@@ -134,7 +142,7 @@ class FlucsInput:
                     raise ValueError(f"Error casting '{v}' to type '{type(_dict[k])}' for parameter '{k}'!") from e
 
 
-    def __init__(self, filename : str, override : list = None):
+    def __init__(self, filename: str, override: list = None):
         """
         Initialises defaults and loads from file.
         """
@@ -142,12 +150,13 @@ class FlucsInput:
         # Loads the dict for the user-defined inputs
         input_file_dict = toml.load(filename)
 
-        # Loads defaults for the solver
-        self._solver_type = flucs.get_solver_type(input_file_dict["setup"]["solver"])
-        self._solver_type.load_defaults(self)
+        # Loads the solver
+        self._solver_type =\
+            flucs.get_solver_type(input_file_dict["setup"]["solver"])
 
-        # Loads defaults for the system
-        self._system_type = flucs.get_system_type(input_file_dict["setup"]["system"])
+        # Loads the system
+        self._system_type =\
+            flucs.get_system_type(input_file_dict["setup"]["system"])
         self._system_type.load_defaults(self)
 
         # Load from the input file

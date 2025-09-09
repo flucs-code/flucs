@@ -3,10 +3,11 @@ from typing import TYPE_CHECKING
 import heapq
 import numpy as np
 from netCDF4 import Dataset, Group
+from flucs.solvers import FlucsSolverState
 
 if TYPE_CHECKING:
-    from flucs.diagnostics.diagnostic import FlucsDiagnostic
-    from flucs.systems.flucs_system import FlucsSystem
+    from flucs.output import FlucsDiagnostic
+    from flucs.systems import FlucsSystem
 
 class FlucsOutput:
     """Deals with a single output file. A FlucsSystem typically has several
@@ -104,8 +105,11 @@ class FlucsOutput:
 
     def ready(self):
         """Sets up the diagnostic for running."""
+        self.time_cache.clear()
+        self.next_save = 0
         for diag in self.diagnostics:
             diag.ready()
+            diag.data_cache.clear()
 
     def execute(self):
         """Executes each diagnostic. Does not save to disk."""
@@ -116,9 +120,21 @@ class FlucsOutput:
         self.time_cache.append(self.system.current_time)
 
     def write(self):
-        """Saves any cached diagnostic data to disk and clears the cache."""
+        """Saves any cached diagnostic data to disk and clears the cache.
+        Saves data only if we are not timing.
 
-        with Dataset(self.filename, "r+", format="NETCDF4") as self.dataset:
+        """
+        diskless = False
+        persist = True
+        # If we are not running (e.g., timing), do not save anything to
+        # drive
+        if self.system.solver.state != FlucsSolverState.RUNNING:
+            diskless = True
+            persist = False
+
+        with Dataset(self.filename, "r+", format="NETCDF4",
+                     diskless=diskless,
+                     persist=persist) as self.dataset:
             self._setup_group()
 
             times_to_write = len(self.time_cache)

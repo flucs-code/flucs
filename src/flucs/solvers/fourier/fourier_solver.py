@@ -17,18 +17,17 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Get the system ready
         self.system.setup()
 
+        # Timing
+        self.system.ready()
 
-        # # Timing
-        # self.system.ready()
-        #
-        # # self.system.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX", 1)
-        #
-        # # We first time the solver
-        # self.state = FlucsSolverState.TIMING
-        #
-        # time_taken = self._solver_loop()
-        # print(f'Timed {self.system.input["setup.timing_steps"]} steps, '
-        #       f'which took {time_taken} s.')
+        # self.system.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX", 1)
+
+        # We first time the solver
+        self.state = FlucsSolverState.TIMING
+
+        time_taken = self._solver_loop()
+        print(f'Timed {self.system.input["setup.timing_steps"]} steps, '
+              f'which took {time_taken} s.')
 
 
         # Reset system
@@ -36,6 +35,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.state = FlucsSolverState.RUNNING
 
         self._solver_loop()
+
+        print("flucs given!")
 
     def _not_done(self) -> bool:
         if self.state == FlucsSolverState.TIMING:
@@ -50,7 +51,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         start_time = time.time()
 
         while self._not_done():
-            print(f"Time step {self.system.current_step}, t = {self.system.current_time}")
+            # print(f"Time step {self.system.current_step}, t = {self.system.current_time}")
             self.system.execute_diagnostics()
             self.system.calculate_nonlinear_terms()
 

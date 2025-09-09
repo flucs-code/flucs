@@ -4,7 +4,6 @@ ITG system. The nonlinear term is handled explicitly using the Adams-Bashforth
 
 """
 
-from importlib.resources import files
 import numpy as np
 import cupy as cp
 from netCDF4 import Dataset
@@ -12,8 +11,8 @@ from numpy import dtype
 import flucs
 from flucs.solvers.fourier import FourierSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
-from .cold_itg_2d_fourier_output import HeatfluxDiag
-from flucs.diagnostics.output import FlucsOutput
+from flucs.output import FlucsOutput
+from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
 
 
 class ColdITG2DFourier(FourierSystem):
@@ -165,12 +164,12 @@ class ColdITG2DFourier(FourierSystem):
 
         self.fields[self.current_field_marker][:] = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
-        self.init_output()
+        # self.init_output()
 
-    def init_output(self) -> None:
-        scalar_output = FlucsOutput(name="0d", system=self)
-        scalar_output.ready()
-        self.add_output(scalar_output)
+    # def init_output(self) -> None:
+    #     scalar_output = FlucsOutput(name="0d", system=self)
+    #     scalar_output.ready()
+    #     self.add_output(scalar_output)
 
 
     def calculate_nonlinear_terms(self) -> None:
