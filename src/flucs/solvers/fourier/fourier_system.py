@@ -209,6 +209,14 @@ class FourierSystem(FlucsSystem):
                 pass
 
     @abstractmethod
+    def begin_time_step(self) -> None:
+        """Executed in the beginning of the time step. Should be used to
+        advance any system-specific counters.
+
+        """
+        self.current_step += 1
+
+    @abstractmethod
     def calculate_nonlinear_terms(self) -> None:
         """Computes the nonlinear terms and adjusts the time step if
         necessary.
@@ -222,4 +230,4 @@ class FourierSystem(FlucsSystem):
     def finish_time_step(self) -> None:
         """Combines the nonlinear and linear terms in order to finish the time
         step"""
-        pass
+        self.current_time += self.current_dt

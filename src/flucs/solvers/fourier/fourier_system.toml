@@ -37,11 +37,6 @@ padded_primes = [2, 3]
 nonlinear_order = 2
 
 [setup]
-# If true, solver will measure its performance for setup.timing_steps time steps, then quit
-# No output files will be written.
-timing = false
-timing_steps = 1000  # see above
-
 include_lin = true  # include linear terms
 include_nl = true  # include nonlinear terms
 

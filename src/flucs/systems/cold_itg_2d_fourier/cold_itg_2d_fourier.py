@@ -9,16 +9,15 @@ import cupy as cp
 from netCDF4 import Dataset
 from numpy import dtype
 import flucs
-from flucs.solvers.fourier import FourierSystem
-from flucs.utilities.cupy import cupy_set_device_pointer
+from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.output import FlucsOutput
 from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
+from flucs.utilities.cupy import cupy_set_device_pointer
 
 
 class ColdITG2DFourier(FourierSystem):
     """Fourier solver for the 2D system."""
     number_of_fields = 2
-    # GPU memory
 
     # Direct pointers to the phi and T arrays
     phi: list
@@ -31,11 +30,8 @@ class ColdITG2DFourier(FourierSystem):
     current_field_marker = 0
     previous_field_marker = -1
 
-    # CPU memory
-
-
     # CUDA kernels
-    linear_kernel: cp.RawKernel # pyright: ignore[reportPossiblyUnboundVariable]
+    linear_kernel: cp.RawKernel
 
     # Supported diagnostics
     diags_dict = {"heatflux": HeatfluxDiag}
@@ -105,41 +101,6 @@ class ColdITG2DFourier(FourierSystem):
             raise ValueError("Both nz and padded_nz should be set to 1 for the 2D system!")
 
 
-
-    def set_initial_conditions(self):
-        super().set_initial_conditions()
-
-        # Add all custom stuff here
-
-
-    # def setup_kernels(self):
-        # resource_path = files(self.__module__) / "cold_itg_2d_fourier.cu"
-        # with open(resource_path) as f:
-        #     cuda_module = f.read()
-
-
-        # Now, to set up all the definitions
-        # options=("--ptxas-options=-v",
-        #          "--use_fast_math",
-        #          f"-DTWOPI_OVER_LX=(FLUCS_FLOAT)({2*np.pi/self.input["dimensions.Lx"]})",
-        #          f"-DTWOPI_OVER_LY=(FLUCS_FLOAT)({2*np.pi/self.input["dimensions.Ly"]})",
-        #          f"-DHALFUNPADDEDSIZE={self.lattice_size}",
-        #          f"-DNX={self.nx}",
-        #          f"-DHALF_NX={self.half_nx}",
-        #          f"-DHALF_NY={self.half_ny}",
-        #          f"-DCHI=(FLUCS_FLOAT)({self.input["parameters.chi"]})",
-        #          f"-DA_TIMES_CHI=(FLUCS_FLOAT)({self.input["parameters.a"] * self.input["parameters.chi"]})",
-        #          f"-DB_TIMES_CHI=(FLUCS_FLOAT)({self.input["parameters.b"] * self.input["parameters.chi"]})",
-        #          f"-DKAPPA_T=(FLUCS_FLOAT)({self.input["parameters.kappaT"]})",
-        #          f"-DKAPPA_N=(FLUCS_FLOAT)({self.input["parameters.kappaN"]})",
-        #          f"-DKAPPA_B=(FLUCS_FLOAT)({self.input["parameters.kappaB"]})",
-        #          f"-DALPHA=(FLUCS_FLOAT)({self.input["parameters.alpha"]})",
-        #          "-DPRECOMPUTE_LINEAR_MATRIX",
-        #          f"-I{files(flucs).parent}")
-
-
-
-
     def ready(self) -> None:
         self.module_options.define_constant("CHI", self.input["parameters.chi"])
         self.module_options.define_constant("A_TIMES_CHI",
@@ -155,7 +116,7 @@ class ColdITG2DFourier(FourierSystem):
         self.module_options.define_constant("KAPPA_B", self.input["parameters.kappaB"])
 
 
-        super().ready()
+        super().ready() # Call this to compile the module
 
         cupy_set_device_pointer(self.cupy_module, "invL_precomp", self.invL)
         cupy_set_device_pointer(self.cupy_module, "R_precomp", self.R)
@@ -164,18 +125,16 @@ class ColdITG2DFourier(FourierSystem):
 
         self.fields[self.current_field_marker][:] = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
-        # self.init_output()
 
-    # def init_output(self) -> None:
-    #     scalar_output = FlucsOutput(name="0d", system=self)
-    #     scalar_output.ready()
-    #     self.add_output(scalar_output)
+    def begin_time_step(self) -> None:
+        self.current_field_marker = (self.current_field_marker + 1) % 2
+        self.previous_field_marker = self.current_field_marker - 1
+
+        super().begin_time_step()
 
 
     def calculate_nonlinear_terms(self) -> None:
-        self.current_field_marker = (self.current_field_marker + 1) % 2
-        self.previous_field_marker = self.current_field_marker - 1
-        self.current_step += 1
+        pass
 
     def finish_time_step(self) -> None:
         block_size = 512
@@ -187,5 +146,4 @@ class ColdITG2DFourier(FourierSystem):
                             self.fields[self.current_field_marker],
                             self.current_dt))
 
-        self.current_time += self.current_dt
-
+        super().finish_time_step()

@@ -19,6 +19,9 @@ class FlucsOutput:
     save_steps: int
     next_save: int
 
+    # If true, no netCDF4 file is created
+    stdout_only: bool = False
+
     # Associated system
     system: FlucsSystem
 
@@ -28,7 +31,7 @@ class FlucsOutput:
     # Cache of times at which data was saved
     time_cache: list[float]
 
-    # Handle to the output netCDF4 file
+    # Dataset for the netCDF4 file
     dataset: Dataset
 
     # netCDF4 group to write to
@@ -39,6 +42,7 @@ class FlucsOutput:
         self.name = name
         self.system = system
         self.filename = f"{name}.nc"
+
         self.diagnostics = []
         self.time_cache = []
 
@@ -46,14 +50,12 @@ class FlucsOutput:
         self.next_save = 0
         self.save_steps = self.system.input[f"output.{self.name}.save_steps"]
 
-        with Dataset(self.filename, "r+", format="NETCDF4") as self.dataset:
-            self._setup_group()
+        # if stdout_only, add diagnostics but do not create a netcdf4 file
+        if ("stdout_only" in system.input[f"output.{name}"] and
+                system.input[f"output.{name}.stdout_only"]):
+            self.stdout_only = True
 
-            for diag_name in self.system.input[f"output.{self.name}.diags"]:
-                diag_to_add =\
-                    self.system.diags_dict[diag_name](system=self.system,
-                                                      output=self)
-                self._add_diagnostic(diag_to_add)
+        self._add_diagnostics_from_input()
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
@@ -72,36 +74,59 @@ class FlucsOutput:
 
         self.group = dataset.groups[self.group_name]
 
-    def _add_diagnostic(self, diagnostic: FlucsDiagnostic):
-        # Check if we already have all necessary dimensions
-        for dim_name, dim_data in diagnostic.dimensions_dict:
-            dim_size = len(dim_data)
+    def _add_diagnostics_from_input(self):
+        """Adds all diagnostics from the input of the associated FlucsSystem"""
+        for diag_name in self.system.input[f"output.{self.name}.diags"]:
+            diag_to_add =\
+                self.system.diags_dict[diag_name](system=self.system,
+                                                  output=self)
+            diag_to_add.output = self
+            self.diagnostics.append(diag_to_add)
 
-            # If it exists, ensure it's the same
-            if (dim_name in self.group.dimensions
-                    and dim_size != self.group.dimensions[dim_name].size):
+    def _setup_output_file(self):
+        """Creates all the necessary groups, dimensions, and variables in the
+        netCDF4 file where the output data will be written. Should be called
+        before the main solver loop begins (but after any timing/optimisation
+        routines).
 
-                print(
-                    f"Dimension {dim_name} in output file"
-                    f" {self.filename} has size"
-                    f" {self.group.dimensions[dim_name].size}"
-                    f" which differs from expected size {len(dim_data)}"
-                    f" required by diagnostic {diagnostic.name}!"
-                    "\n"
-                    "Therefore, diagnostic {diagnostic.name}"
-                    "will not operate!")
-                return
+        """
+        if self.stdout_only:
+            return
 
-            self.group.createDimension(dim_name, dim_size)
-            dim_var = self.group.createVariable(dim_name, "f4", (dim_size, ))
-            dim_var[:] = dim_data[:]
+        with Dataset(self.filename, "r+", format="NETCDF4") as self.dataset:
+            self._setup_group()
 
-        # Create variable
-        self.group.createVariable(diagnostic.name, "f4",
-                                  ("time", ) + diagnostic.shape)
+            # Check if we already have all necessary dimensions
+            # for every diagnostic
+            for diagnostic in self.diagnostics:
+                for dim_name, dim_data in diagnostic.dimensions_dict:
+                    dim_size = len(dim_data)
 
-        diagnostic.output = self
-        self.diagnostics.append(diagnostic)
+                    # If it exists, ensure it's the same
+                    if (dim_name in self.group.dimensions and
+                            dim_size != self.group.dimensions[dim_name].size):
+
+                        print(
+                            f"Dimension {dim_name} in output file"
+                            f" {self.filename} has size"
+                            f" {self.group.dimensions[dim_name].size}"
+                            f" which differs from expected size"
+                            f" {len(dim_data)} required by diagnostic"
+                            f"  {diagnostic.name}!"
+                            "\n"
+                            "Therefore, diagnostic {diagnostic.name}"
+                            "will not operate!")
+                        return
+
+                    self.group.createDimension(dim_name, dim_size)
+                    dim_var = self.group.createVariable(dim_name,
+                                                        "f4",
+                                                        (dim_size,))
+                    dim_var[:] = dim_data[:]
+
+                # Create variable
+                self.group.createVariable(diagnostic.name, "f4",
+                                          ("time", ) + diagnostic.shape)
 
     def ready(self):
         """Sets up the diagnostic for running."""
@@ -110,6 +135,9 @@ class FlucsOutput:
         for diag in self.diagnostics:
             diag.ready()
             diag.data_cache.clear()
+
+        if self.system.solver.state == FlucsSolverState.RUNNING:
+            self._setup_output_file()
 
     def execute(self):
         """Executes each diagnostic. Does not save to disk."""
@@ -124,17 +152,11 @@ class FlucsOutput:
         Saves data only if we are not timing.
 
         """
-        diskless = False
-        persist = True
-        # If we are not running (e.g., timing), do not save anything to
-        # drive
-        if self.system.solver.state != FlucsSolverState.RUNNING:
-            diskless = True
-            persist = False
+        if (self.stdout_only or
+                self.system.solver.state != FlucsSolverState.RUNNING):
+            return
 
-        with Dataset(self.filename, "r+", format="NETCDF4",
-                     diskless=diskless,
-                     persist=persist) as self.dataset:
+        with Dataset(self.filename, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()
 
             times_to_write = len(self.time_cache)

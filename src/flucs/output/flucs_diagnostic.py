@@ -31,9 +31,21 @@ class FlucsDiagnostic(ABC):
         self.output = output
         self.data_cache = []
 
+    @abstractmethod
+    def print_diagnostic(self):
+        """Called if the diagnostic's output group is stdout_only."""
+        pass
+
+
     def execute(self):
         self.data_cache.append(
             self.get_data())
+
+        if self.output.stdout_only:
+            self.print_diagnostic()
+
+            # No need to keep stuff in memory if stdout_only
+            self.data_cache.clear()
 
     @abstractmethod
     def ready(self) -> None:

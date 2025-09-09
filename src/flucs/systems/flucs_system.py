@@ -98,7 +98,23 @@ class FlucsSystem(ABC):
 
         heapq.heappush(self.output_heap, output)
 
-    def execute_diagnostics(self):
+    def execute_diagnostics(self, ignore_next_save: bool = False):
+        """Executes diagnostics based on the current time step.
+
+        Parameters
+        ----------
+        ignore_next_save : bool
+            If ignore_next_save is True, then all diagnostics are executed
+            regardless of their next save time.
+
+        """
+
+        if ignore_next_save:
+            for output_to_execute in self.output_heap:
+                output_to_execute.execute()
+            return
+
+        # Execute only those that need to be executed at the current time step
         while self.output_heap[0].next_save == self.current_step:
             output_to_execute = heapq.heappop(self.output_heap)
             output_to_execute.execute()

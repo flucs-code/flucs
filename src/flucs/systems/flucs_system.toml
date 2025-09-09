@@ -7,10 +7,16 @@ solver = ""  # name of the solver
 system = ""  # name of the system of equations
 precision = "single"  # floating-point precision
 
+# If true, solver will measure its performance for setup.timing_steps time steps, then quit
+# No output files will be written.
+timing = false
+timing_steps = 1000
+
 [output]
 write_time = 10  # time, in seconds, between writes to the drive
 
-[output.example]  # An example output. Each system should define its own.
+[output.stdout]  # The stdout output group.
+# Each system can define additional output groups.
 # The diagnostics in this output group are run every save_steps time steps.
 # -1 means that the output group is not active.
 save_steps = -1 
@@ -19,3 +25,6 @@ save_steps = -1
 # Each system defines a dict called diags_dict where the names of the
 # diagnostics are mapped to the diagnostic classes.
 diags = []
+
+# stdout_only = true means that this output group does not have a netCDF4 file
+stdout_only = true

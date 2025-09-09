@@ -33,7 +33,7 @@ class ModuleOptions:
         ("--ptxas-options=-O3", "--use_fast_math").
     """
     _defs: dict
-    string_options =("--ptxas-options=-O3", "--use_fast_math")
+    string_options = ("--ptxas-options=-O3", "--use_fast_math")
 
     def __init__(self) -> None:
         self._defs = {}
@@ -42,10 +42,11 @@ class ModuleOptions:
         """Adds a compiler option."""
         self.string_options += (str(option), )
 
-    def define_constant(self, name: str, value: Any = "", float_convert: bool = False):
+    def define_constant(self, name: str, value: Any = "",
+                        float_convert: bool = False):
         """Adds a definition to the compiler flags.
         Effectively, this is equivalent to adding
-        
+
         #define name value
 
         to the source files.
@@ -58,7 +59,7 @@ class ModuleOptions:
         value
             Converted to a string if needed. If value is any of (float,
             np.float16, np.float32, np.float64), "(FLUCS_FLOAT)" is added in
-            front of it in order to cast it to the correct type. 
+            front of it in order to cast it to the correct type.
 
         """
 

@@ -20,3 +20,6 @@ class HeatfluxDiag(FlucsDiagnostic):
         T = self.system.T[self.system.current_field_marker]
 
         return -2 * cp.sum(self.dy * phi * cp.conjugate(T)).item().real
+
+    def print_diagnostic(self):
+        print(f"Heat flux at time step {self.system.current_step} (time {self.system.current_time}) is {self.data_cache[-1]}")
