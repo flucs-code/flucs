@@ -7,6 +7,7 @@ from abc import abstractmethod
 from flucs.systems import FlucsSystem
 from flucs import FlucsInput
 from flucs.utilities.smooth_numbers import next_smooth_number
+from flucs.utilities.cupy import cupy_set_device_pointer
 import cupy as cp
 
 class FourierSystem(FlucsSystem):
@@ -22,6 +23,11 @@ class FourierSystem(FlucsSystem):
     # It's a list in order to store fields at previous time steps, as required
     # by the algorithm.
     fields: list
+
+    # CUDA kernels
+    linear_kernel: cp.RawKernel
+    precompute_kernel: cp.RawKernel
+
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -188,7 +194,26 @@ class FourierSystem(FlucsSystem):
         self.module_options.define_constant("HALF_NZ", self.half_nz)
         self.module_options.define_constant("ALPHA", self.input["setup.alpha"])
 
+        if self.input["setup.precompute_linear_matrix"]:
+            print("Will precompute the linear matrix!")
+            self.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX")
+
         super().ready()
+
+        self.linear_kernel = self.cupy_module.get_function("linear_kernel")
+
+        if self.input["setup.precompute_linear_matrix"]:
+            cupy_set_device_pointer(self.cupy_module, "invL_precomp", self.invL)
+            cupy_set_device_pointer(self.cupy_module, "R_precomp", self.R)
+
+            self.precompute_kernel = self.cupy_module.get_function("precompute_iteration_matrices")
+            block_size = 512
+            unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
+            self.precompute_kernel((unpadded_kernels_lattice_size,), (block_size,),
+                                    (self.current_dt,))
+
+
+
 
     def set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""

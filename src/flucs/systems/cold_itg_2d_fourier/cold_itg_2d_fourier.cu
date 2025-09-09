@@ -8,22 +8,22 @@
 
 extern "C" {
 
-__device__ void get_linear_matrices(const int index, const FLUCS_FLOAT dt, FLUCS_COMPLEX R[2][2], FLUCS_COMPLEX invL[2][2]){
+__device__ void get_linear_matrix(const int index, const FLUCS_FLOAT dt, FLUCS_COMPLEX matrix[2][2]){
 
-#ifdef PRECOMPUTE_LINEAR_MATRIX
-
-    
-    R[0][0] = R_precomp[index];
-    R[0][1] = R_precomp[index + HALFUNPADDEDSIZE];
-    R[1][0] = R_precomp[index + 2*HALFUNPADDEDSIZE];
-    R[1][1] = R_precomp[index + 3*HALFUNPADDEDSIZE];
-
-    invL[0][0] = invL_precomp[index];
-    invL[0][1] = invL_precomp[index + HALFUNPADDEDSIZE];
-    invL[1][0] = invL_precomp[index + 2*HALFUNPADDEDSIZE];
-    invL[1][1] = invL_precomp[index + 3*HALFUNPADDEDSIZE];
-
-#else
+// #ifdef PRECOMPUTE_LINEAR_MATRIX
+//
+//     
+//     R[0][0] = R_precomp[index];
+//     R[0][1] = R_precomp[index + HALFUNPADDEDSIZE];
+//     R[1][0] = R_precomp[index + 2*HALFUNPADDEDSIZE];
+//     R[1][1] = R_precomp[index + 3*HALFUNPADDEDSIZE];
+//
+//     invL[0][0] = invL_precomp[index];
+//     invL[0][1] = invL_precomp[index + HALFUNPADDEDSIZE];
+//     invL[1][0] = invL_precomp[index + 2*HALFUNPADDEDSIZE];
+//     invL[1][1] = invL_precomp[index + 3*HALFUNPADDEDSIZE];
+//
+// #else
 
     // First, we need to figure out the kx and ky of the mode.
     const int ikx = index / HALF_NY;
@@ -45,40 +45,44 @@ __device__ void get_linear_matrices(const int index, const FLUCS_FLOAT dt, FLUCS
 
 
     // Generate the linear matrix
-    const FLUCS_COMPLEX matrix_phiphi = FLUCS_COMPLEX(
+    // const FLUCS_COMPLEX matrix_phiphi = FLUCS_COMPLEX(
+    matrix[0][0] = FLUCS_COMPLEX(
         A_TIMES_CHI*kperp2*kperp2,
         -ky*(KAPPA_B - KAPPA_N) + KAPPA_T*kperp2*ky) * eta_inv;
 
-    const FLUCS_COMPLEX matrix_phiT = FLUCS_COMPLEX(
+    // const FLUCS_COMPLEX matrix_phiT = FLUCS_COMPLEX(
+    matrix[0][1] = FLUCS_COMPLEX(
         -B_TIMES_CHI*kperp2*kperp2,
         -ky*KAPPA_B) * eta_inv;
 
-    const FLUCS_COMPLEX matrix_Tphi = FLUCS_COMPLEX(
+    // const FLUCS_COMPLEX matrix_Tphi = FLUCS_COMPLEX(
+    matrix[1][0] = FLUCS_COMPLEX(
         0,
         KAPPA_T*ky);
 
-    const FLUCS_COMPLEX matrix_TT = FLUCS_COMPLEX(
+    // const FLUCS_COMPLEX matrix_TT = FLUCS_COMPLEX(
+    matrix[1][1] = FLUCS_COMPLEX(
         CHI*kperp2,
         0);
 
-    R[0][0] = (FLUCS_FLOAT)(1.0) + (ALPHA - 1)*dt*matrix_phiphi;
-    R[0][1] = (ALPHA - 1)*dt*matrix_phiT;
-    R[1][0] = (ALPHA - 1)*dt*matrix_Tphi;
-    R[1][1] = (FLUCS_FLOAT)(1.0) + (ALPHA - 1)*dt*matrix_TT;
+    // R[0][0] = (FLUCS_FLOAT)(1.0) + (ALPHA - 1)*dt*matrix_phiphi;
+    // R[0][1] = (ALPHA - 1)*dt*matrix_phiT;
+    // R[1][0] = (ALPHA - 1)*dt*matrix_Tphi;
+    // R[1][1] = (FLUCS_FLOAT)(1.0) + (ALPHA - 1)*dt*matrix_TT;
+    //
+    // const FLUCS_COMPLEX L_phiphi = (FLUCS_FLOAT)(1.0) + ALPHA*dt*matrix_phiphi;
+    // const FLUCS_COMPLEX L_phiT = ALPHA*dt*matrix_phiT;
+    // const FLUCS_COMPLEX L_Tphi = ALPHA*dt*matrix_Tphi;
+    // const FLUCS_COMPLEX L_TT = (FLUCS_FLOAT)(1.0) + ALPHA*dt*matrix_TT;
+    //
+    // const FLUCS_COMPLEX inv_det_L = (FLUCS_FLOAT)(1.0) / (L_phiphi*L_TT - L_phiT*L_Tphi);
+    //
+    // invL[0][0] = L_TT * inv_det_L;
+    // invL[0][1] = L_phiT * inv_det_L;
+    // invL[1][0] = -L_Tphi * inv_det_L;
+    // invL[1][1] = L_phiphi * inv_det_L;
 
-    const FLUCS_COMPLEX L_phiphi = (FLUCS_FLOAT)(1.0) + ALPHA*dt*matrix_phiphi;
-    const FLUCS_COMPLEX L_phiT = ALPHA*dt*matrix_phiT;
-    const FLUCS_COMPLEX L_Tphi = ALPHA*dt*matrix_Tphi;
-    const FLUCS_COMPLEX L_TT = (FLUCS_FLOAT)(1.0) + ALPHA*dt*matrix_TT;
-
-    const FLUCS_COMPLEX inv_det_L = (FLUCS_FLOAT)(1.0) / (L_phiphi*L_TT - L_phiT*L_Tphi);
-
-    invL[0][0] = L_TT * inv_det_L;
-    invL[0][1] = L_phiT * inv_det_L;
-    invL[1][0] = -L_Tphi * inv_det_L;
-    invL[1][1] = L_phiphi * inv_det_L;
-
-#endif
+// #endif
 
 }
 

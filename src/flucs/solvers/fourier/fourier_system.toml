@@ -43,6 +43,9 @@ include_nl = true  # include nonlinear terms
 # Crank-Nicolson implicitness parameter
 alpha = 0.5
 
+# Whether the linear matrix should be computed each time step or precomputed
+precompute_linear_matrix = false
+
 [init]
 rand_seed = 113  # seed for random-number generation
 restart = false

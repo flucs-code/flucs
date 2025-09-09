@@ -12,7 +12,6 @@ import flucs
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.output import FlucsOutput
 from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
-from flucs.utilities.cupy import cupy_set_device_pointer
 
 
 class ColdITG2DFourier(FourierSystem):
@@ -29,9 +28,6 @@ class ColdITG2DFourier(FourierSystem):
     # Markers for the lists of arrays
     current_field_marker = 0
     previous_field_marker = -1
-
-    # CUDA kernels
-    linear_kernel: cp.RawKernel
 
     # Supported diagnostics
     diags_dict = {"heatflux": HeatfluxDiag}
@@ -115,15 +111,11 @@ class ColdITG2DFourier(FourierSystem):
         self.module_options.define_constant("KAPPA_N", self.input["parameters.kappaN"])
         self.module_options.define_constant("KAPPA_B", self.input["parameters.kappaB"])
 
+        self.fields[self.current_field_marker][:]\
+            = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
         super().ready() # Call this to compile the module
 
-        cupy_set_device_pointer(self.cupy_module, "invL_precomp", self.invL)
-        cupy_set_device_pointer(self.cupy_module, "R_precomp", self.R)
-
-        self.linear_kernel = self.cupy_module.get_function("linear_kernel")
-
-        self.fields[self.current_field_marker][:] = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
 
     def begin_time_step(self) -> None:
