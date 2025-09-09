@@ -147,6 +147,7 @@ class FlucsSystem(ABC):
         execution.
 
         """
+        import datetime
 
         # Ready up the outputs
         for output in self.output_heap:
@@ -159,6 +160,11 @@ class FlucsSystem(ABC):
         resource_path = Path(importlib.import_module(self.__module__).__file__).parent / f"{self.__module__.split('.')[-1]}.cu"
         with open(resource_path) as f:
             cuda_module = f.read()
+
+        # CuPy's caching of compiled kernels is annoying and breaks things.
+        # Add the current date at the end of the source to force recompilation
+        cuda_module += f"\n// {datetime.datetime.now()}"
+
 
         self.cupy_module = cp.RawModule(code=cuda_module,
                                    options=self.module_options.get_options())

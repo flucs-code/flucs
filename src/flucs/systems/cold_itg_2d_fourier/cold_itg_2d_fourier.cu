@@ -3,7 +3,7 @@
  */
 
 // A lot of basic functionality is already implemented here.
-#include "flucs/solvers/fourier/fourier.cuh"
+#include "flucs/solvers/fourier/fourier_system.cuh"
 
 
 extern "C" {
