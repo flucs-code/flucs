@@ -43,7 +43,8 @@ class ColdITG2DFourier(FourierSystem):
 
     def ready(self):
         super().ready()
-        self.fields[0][:] = cp.array(self.fields_initial.reshape(self.fields[0].shape))
+        self.fields[0][:]\
+            = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
 
     def allocate_memory(self):
@@ -77,7 +78,6 @@ class ColdITG2DFourier(FourierSystem):
                                          dtype=self.complex)
                                 for i in range(4)]
 
-        # CPU arrays
 
     def _interpret_input(self):
         """Checks if the input file makes sense"""
@@ -105,9 +105,6 @@ class ColdITG2DFourier(FourierSystem):
         self.module_options.define_constant("KAPPA_T", self.input["parameters.kappaT"])
         self.module_options.define_constant("KAPPA_N", self.input["parameters.kappaN"])
         self.module_options.define_constant("KAPPA_B", self.input["parameters.kappaB"])
-
-        self.fields[self.current_field_marker][:]\
-            = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
         super().compile_cupy_module() # Call this to compile the module
 
