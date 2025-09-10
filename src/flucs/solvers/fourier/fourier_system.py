@@ -1,17 +1,18 @@
 """Abstract base class for a system that can be solved by FourierSolver.
 """
 
-from importlib.resources import files
-import numpy as np
 from abc import abstractmethod
+import numpy as np
+import cupy as cp
 from flucs.systems import FlucsSystem
 from flucs import FlucsInput
 from flucs.utilities.smooth_numbers import next_smooth_number
 from flucs.utilities.cupy import cupy_set_device_pointer
-import cupy as cp
+
 
 class FourierSystem(FlucsSystem):
-    """A generic system of equations solved using pseudospectral Fourier methods."""
+    """A generic system of equations solved using pseudospectral Fourier
+    methods."""
 
     # Number of fields that the solver is solving for
     number_of_fields: int
@@ -24,10 +25,16 @@ class FourierSystem(FlucsSystem):
     # by the algorithm.
     fields: list
 
-    # CUDA kernels
-    linear_kernel: cp.RawKernel
-    precompute_kernel: cp.RawKernel
+    # Linear matrix (used for linear postprocessing)
+    linear_matrix: cp.ndarray
 
+    # Iteration matrices (used for precomputing)
+    R: cp.ndarray
+    invL: cp.ndarray
+
+    # CUDA kernels
+    finish_step_kernel: cp.RawKernel
+    compute_linear_matrix_kernel: cp.RawKernel
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -176,15 +183,44 @@ class FourierSystem(FlucsSystem):
         self.current_time = self.float(0.0)
         self.current_dt = self.float(self.input["time.dt"])
 
-        # Add useful module options
-        self.module_options.define_constant("TWOPI_OVER_LX", 2*np.pi / self.input["dimensions.Lx"])
-        self.module_options.define_constant("TWOPI_OVER_LY", 2*np.pi / self.input["dimensions.Ly"])
-        self.module_options.define_constant("TWOPI_OVER_LZ", 2*np.pi / self.input["dimensions.Lz"])
+        super().ready()
 
+        if self.input["setup.precompute_linear_matrix"]:
+            if not hasattr(self, "R"):  # allocate matrices if not done yet
+                self.R = cp.zeros((2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex)
+                self.invL = cp.zeros((2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex)
 
-        self.module_options.define_constant("NUMBER_OF_FIELDS", self.number_of_fields)
+            cupy_set_device_pointer(self.cupy_module, "invL_precomp", self.invL)
+            cupy_set_device_pointer(self.cupy_module, "R_precomp", self.R)
 
-        self.module_options.define_constant("HALFUNPADDEDSIZE", self.lattice_size)
+            self.precompute_iteration_matrices_kernel = self.cupy_module.get_function("precompute_iteration_matrices")
+            self.precompute_iteration_matrices()
+
+    def precompute_iteration_matrices(self):
+        """Precomputes the linear matrix."""
+        if not self.input["setup.precompute_linear_matrix"]:
+            return
+
+        block_size = 512
+        unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
+        self.precompute_iteration_matrices_kernel(
+            (unpadded_kernels_lattice_size,), (block_size,),
+            (self.current_dt,))
+
+    def compile_cupy_module(self) -> None:
+        # Add module options
+        self.module_options.define_constant("TWOPI_OVER_LX",
+                                            2*np.pi / self.input["dimensions.Lx"])
+        self.module_options.define_constant("TWOPI_OVER_LY",
+                                            2*np.pi / self.input["dimensions.Ly"])
+        self.module_options.define_constant("TWOPI_OVER_LZ",
+                                            2*np.pi / self.input["dimensions.Lz"])
+
+        self.module_options.define_constant("NUMBER_OF_FIELDS",
+                                            self.number_of_fields)
+
+        self.module_options.define_constant("HALFUNPADDEDSIZE",
+                                            self.lattice_size)
 
         self.module_options.define_constant("NX", self.nx)
         self.module_options.define_constant("HALF_NX", self.half_nx)
@@ -198,22 +234,24 @@ class FourierSystem(FlucsSystem):
             print("Will precompute the linear matrix!")
             self.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX")
 
-        super().ready()
+        super().compile_cupy_module()
 
-        self.linear_kernel = self.cupy_module.get_function("linear_kernel")
+        self.finish_step_kernel = self.cupy_module.get_function("finish_step")
 
-        if self.input["setup.precompute_linear_matrix"]:
-            cupy_set_device_pointer(self.cupy_module, "invL_precomp", self.invL)
-            cupy_set_device_pointer(self.cupy_module, "R_precomp", self.R)
+    def compute_linear_matrix(self) -> None:
+        """Computes the linear matrix using the CuPy module and stores the
+        result in self.linear_matrix"""
+        self.linear_matrix = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
+                                      dtype=self.complex)
 
-            self.precompute_kernel = self.cupy_module.get_function("precompute_iteration_matrices")
-            block_size = 512
-            unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
-            self.precompute_kernel((unpadded_kernels_lattice_size,), (block_size,),
-                                    (self.current_dt,))
+        compute_linear_matrix_kernel\
+            = self.cupy_module.get_function("compute_linear_matrix")
 
-
-
+        block_size = 512
+        unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
+        compute_linear_matrix_kernel(
+            (unpadded_kernels_lattice_size,), (block_size,),
+            (self.current_dt, self.linear_matrix))
 
     def set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""

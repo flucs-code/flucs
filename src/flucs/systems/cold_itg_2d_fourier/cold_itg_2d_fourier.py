@@ -71,16 +71,11 @@ class ColdITG2DFourier(FourierSystem):
                                dtype=self.complex,
                                memptr=self.fields[1][1, 0, 0, 0].data),]
 
-        self.R = cp.zeros((4, self.nz, self.nx, self.half_ny), dtype=self.complex)
-        self.invL = cp.zeros((4, self.nz, self.nx, self.half_ny), dtype=self.complex)
-
-
         # For the nonlinear terms, we need to keep terms at the current time
         # step + terms from the past 3 time steps (since we will be using AB3)
         self.nonlinear_terms = [cp.zeros((2, self.nz, self.nx, self.half_ny),
                                          dtype=self.complex)
                                 for i in range(4)]
-
 
         # CPU arrays
 
@@ -97,7 +92,7 @@ class ColdITG2DFourier(FourierSystem):
             raise ValueError("Both nz and padded_nz should be set to 1 for the 2D system!")
 
 
-    def ready(self) -> None:
+    def compile_cupy_module(self) -> None:
         self.module_options.define_constant("CHI", self.input["parameters.chi"])
         self.module_options.define_constant("A_TIMES_CHI",
                                             self.input["parameters.a"]
@@ -114,7 +109,7 @@ class ColdITG2DFourier(FourierSystem):
         self.fields[self.current_field_marker][:]\
             = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
-        super().ready() # Call this to compile the module
+        super().compile_cupy_module() # Call this to compile the module
 
 
 
@@ -132,7 +127,7 @@ class ColdITG2DFourier(FourierSystem):
         block_size = 512
         unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
 
-        self.linear_kernel((unpadded_kernels_lattice_size,),
+        self.finish_step_kernel((unpadded_kernels_lattice_size,),
                            (block_size,),
                            (self.fields[self.previous_field_marker],
                             self.fields[self.current_field_marker],

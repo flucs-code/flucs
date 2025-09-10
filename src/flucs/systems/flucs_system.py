@@ -120,18 +120,17 @@ class FlucsSystem(ABC):
             output_to_execute.execute()
             heapq.heappush(self.output_heap, output_to_execute)
 
+    @abstractmethod
+    def setup(self) -> None:
+        pass
+
     def write_output(self):
         for output in self.output_heap:
             output.write()
 
-    def setup(self) -> None:
-        """The setup method sets up the system of equations for running the
-        solver (allocates memory, handles initial conditions, output files,
-        etc).
+    def setup_output(self) -> None:
+        """Initialise outputs."""
 
-        """
-
-        # Initialise outputs
         for output_name, output_opt in self.input["output"].items():
             if not isinstance(output_opt, dict):
                 continue
@@ -142,22 +141,23 @@ class FlucsSystem(ABC):
 
             self.add_output(FlucsOutput(name=output_name, system=self))
 
-    def ready(self) -> None:
-        """This method is called immediately before the solver starts
-        execution.
+    def compile_cupy_module(self) -> None:
+        """ Compiles the CuPy CUDA module associated with the system
+
+        Custom CUDA setup should be done by overriding this method. Do not
+        forget to call super().compile_cupy_module()!
+
+        The CUDA module for the system should be located in the same
+        directory as its .py file and have a name that matches the .py file,
+        with the .cu extension.
 
         """
+
         import datetime
 
-        # Ready up the outputs
-        for output in self.output_heap:
-            output.ready()
-
-        # The CUDA module for the system should be located in the same
-        # directory as its .py file and have a name that matches the .py file,
-        # with the .cu extension.
-
-        resource_path = Path(importlib.import_module(self.__module__).__file__).parent / f"{self.__module__.split('.')[-1]}.cu"
+        # resource_path = Path(importlib.import_module(self.__module__).__file__).parent / f"{self.__module__.split('.')[-1]}.cu"
+        p = Path(importlib.import_module(self.__module__).__file__)
+        resource_path = p.with_name(f"{p.stem}.cu")
         with open(resource_path) as f:
             cuda_module = f.read()
 
@@ -165,11 +165,20 @@ class FlucsSystem(ABC):
         # Add the current date at the end of the source to force recompilation
         cuda_module += f"\n// {datetime.datetime.now()}"
 
-
         self.cupy_module = cp.RawModule(code=cuda_module,
-                                   options=self.module_options.get_options())
+                                        options=self.module_options.get_options())
 
         self.cupy_module.compile()
+
+    def ready(self) -> None:
+        """This method is called immediately before the solver starts
+        execution.
+
+        """
+
+        # Ready up the outputs
+        for output in self.output_heap:
+            output.ready()
 
     @abstractmethod
     def _interpret_input(self) -> None:

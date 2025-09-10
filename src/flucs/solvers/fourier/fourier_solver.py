@@ -18,6 +18,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.state = FlucsSolverState.TIMING
         # Get the system ready
         self.system.setup()
+        self.system.setup_output()
+        self.system.compile_cupy_module()
 
         # Timing
         self.system.ready()

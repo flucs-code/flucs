@@ -20,11 +20,14 @@ extern "C" {
 __constant__ FLUCS_COMPLEX* R_precomp = NULL;
 __constant__ FLUCS_COMPLEX* invL_precomp = NULL;
 
-// This must be implemented by the user
+
+// Gets the linear matrix for a single mode.
+// This must be implemented by the user.
 __device__ void get_linear_matrix(const int index,
                                   const FLUCS_FLOAT dt,
                                   FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 
+// Finds iterations matrices for a single mode.
 __device__ void get_iteration_matrices(const int index,
                                        const FLUCS_FLOAT dt,
                                        FLUCS_COMPLEX R[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS],
@@ -56,6 +59,27 @@ __device__ void get_iteration_matrices(const int index,
 }
 
 
+// Returns the full (for all modes) linear matrix
+// matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
+__global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linear_matrix){
+    const int index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(index < HALFUNPADDEDSIZE))
+        return;
+
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    get_linear_matrix(index, dt, matrix);
+
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            linear_matrix[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = matrix[i][j];
+        }
+    }
+}
+
+
+// Precomputes the R and invL matrices.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     const int index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -77,7 +101,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 }
 
 
-__global__ void linear_kernel(const FLUCS_COMPLEX* fields,
+__global__ void finish_step(const FLUCS_COMPLEX* fields,
                    FLUCS_COMPLEX* result,
                    const FLUCS_FLOAT dt) {
 
