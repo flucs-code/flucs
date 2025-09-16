@@ -99,7 +99,7 @@ class FlucsOutput:
             # Check if we already have all necessary dimensions
             # for every diagnostic
             for diagnostic in self.diagnostics:
-                for dim_name, dim_data in diagnostic.dimensions_dict:
+                for dim_name, dim_data in diagnostic.dimensions_dict.items():
                     dim_size = len(dim_data)
 
                     # If it exists, ensure it's the same
@@ -121,12 +121,21 @@ class FlucsOutput:
                     self.group.createDimension(dim_name, dim_size)
                     dim_var = self.group.createVariable(dim_name,
                                                         "f4",
-                                                        (dim_size,))
+                                                        (dim_name,))
                     dim_var[:] = dim_data[:]
 
                 # Create variable
-                self.group.createVariable(diagnostic.name, "f4",
-                                          ("time", ) + diagnostic.shape)
+                if diagnostic.is_complex:
+                    # Complex variables are stored as two separate netCDF4 vars
+                    # for the real and imaginary parts with suffixes _real and
+                    # _imag, respectively.
+                    self.group.createVariable(f"{diagnostic.name}_real", "f4",
+                                              ("time", ) + diagnostic.shape)
+                    self.group.createVariable(f"{diagnostic.name}_imag", "f4",
+                                              ("time", ) + diagnostic.shape)
+                else:
+                    self.group.createVariable(diagnostic.name, "f4",
+                                              ("time", ) + diagnostic.shape)
 
     def ready(self):
         """Sets up the diagnostic for running."""
@@ -172,13 +181,26 @@ class FlucsOutput:
             for diag in self.diagnostics:
                 # If scalar diagnostic, this is much easier
                 if len(diag.shape) == 0:
-                    self.group[diag.name][first_index:last_index]\
-                        = np.array(diag.data_cache)
+                    if diag.is_complex:
+                        self.group[f"{diag.name}_real"][first_index:last_index]\
+                            = np.array(diag.data_cache).real
+                        self.group[f"{diag.name}_imag"][first_index:last_index]\
+                            = np.array(diag.data_cache).imag
+                    else:
+                        self.group[diag.name][first_index:last_index]\
+                            = np.array(diag.data_cache)
                 else:
                     # Could probably rewrite with np.array
-                    for i in range(times_to_write):
-                        self.group[diag.name][first_index + i, :]\
-                            = diag.data_cache[i][:]
+                    if diag.is_complex:
+                        for i in range(times_to_write):
+                            self.group[f"{diag.name}_real"][first_index + i, :]\
+                                = diag.data_cache[i][:].real
+                            self.group[f"{diag.name}_imag"][first_index + i, :]\
+                                = diag.data_cache[i][:].imag
+                    else:
+                        for i in range(times_to_write):
+                            self.group[diag.name][first_index + i, :]\
+                                = diag.data_cache[i][:]
 
                 diag.data_cache.clear()
 

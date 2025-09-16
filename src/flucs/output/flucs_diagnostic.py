@@ -26,6 +26,9 @@ class FlucsDiagnostic(ABC):
 
     data_cache: list[np.ndarray]
 
+    # Complex-number diagnostics need to be handled separately
+    is_complex: bool = False
+
     def __init__(self, system: FlucsSystem, output: FlucsOutput):
         self.system = system
         self.output = output

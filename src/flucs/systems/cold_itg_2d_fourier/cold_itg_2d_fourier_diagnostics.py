@@ -13,7 +13,9 @@ class HeatfluxDiag(FlucsDiagnostic):
 
     def ready(self):
         # Copy ky wavenumbers to GPU memory for faster multiplication
-        self.dy = cp.array(1j * self.system.ky)
+        self.dy\
+            = cp.array(1j * np.broadcast_to(self.system.ky,
+                                            self.system.lattice_tuple))
 
     def get_data(self):
         phi = self.system.phi[self.system.current_field_marker]

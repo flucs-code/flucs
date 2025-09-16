@@ -25,6 +25,11 @@ class FourierSystem(FlucsSystem):
     # by the algorithm.
     fields: list
 
+    # Markers for the fields list that specify the current fields (i.e., those
+    # that we are solving for at the current time step) and the previous time
+    # step
+    current_field_marker: int = 0
+
     # Linear matrix (used for linear postprocessing)
     linear_matrix: cp.ndarray
 
@@ -55,9 +60,13 @@ class FourierSystem(FlucsSystem):
     half_padded_nz: int
 
     lattice_size: int
+    lattice_tuple: tuple
     padded_lattice_size: int
+    padded_lattice_tuple: tuple
     real_lattice_size: int
+    real_lattice_tuple: tuple
     real_padded_lattice_size: int
+    real_padded_lattice_tuple: tuple
 
     # Fourier wavenumbers
     kx: np.ndarray
@@ -138,12 +147,19 @@ class FourierSystem(FlucsSystem):
 
         # Set padded and unpadded array sizes
         self.lattice_size = self.nz * self.nx * self.half_ny
+        self.lattice_tuple = (self.nz, self.nx, self.half_ny)
+
         self.padded_lattice_size\
             = self.padded_nz * self.padded_nx * self.half_padded_ny
+        self.padded_lattice_tuple\
+            = (self.padded_nz, self.padded_nx, self.half_padded_ny)
 
         self.real_lattice_size = self.nz * self.nx * self.ny
+        self.real_lattice_tuple = (self.nz, self.nx, self.ny)
         self.real_padded_lattice_size\
             = self.padded_nz * self.padded_nx * self.padded_ny
+        self.real_padded_lattice_tuple\
+            = (self.padded_nz, self.padded_nx, self.padded_ny)
 
         # Finally, precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
@@ -159,22 +175,22 @@ class FourierSystem(FlucsSystem):
         super().setup()
 
     def _precompute_wavenumbers(self):
-        kx_linear = 2 * np.pi * self.nx * np.fft.fftfreq(self.nx)\
+        self.kx = 2 * np.pi * self.nx * np.fft.fftfreq(self.nx)\
             / self.input["dimensions.Lx"]
 
-        kz_linear = 2 * np.pi * self.nz * np.fft.fftfreq(self.nz)\
+        self.kz = 2 * np.pi * self.nz * np.fft.fftfreq(self.nz)\
             / self.input["dimensions.Lz"]
 
         # ny is special
-        ky_linear = 2 * np.pi * self.ny * np.fft.rfftfreq(self.ny)\
+        self.ky = 2 * np.pi * self.ny * np.fft.rfftfreq(self.ny)\
             / self.input["dimensions.Ly"]
 
-        self.kx = np.broadcast_to(kx_linear, (self.nz, self.half_ny,
-                                              self.nx)).transpose(0, 2, 1)
-        self.kz = np.broadcast_to(kz_linear, (self.half_ny, self.nx,
-                                              self.nz)).transpose(2, 1, 0)
-
-        self.ky = np.broadcast_to(ky_linear, (self.nz, self.nx, self.half_ny))
+        # self.kx = np.broadcast_to(kx_linear, (self.nz, self.half_ny,
+        #                                       self.nx)).transpose(0, 2, 1)
+        # self.kz = np.broadcast_to(kz_linear, (self.half_ny, self.nx,
+        #                                       self.nz)).transpose(2, 1, 0)
+        #
+        # self.ky = np.broadcast_to(ky_linear, (self.nz, self.nx, self.half_ny))
 
 
     def ready(self) -> None:
@@ -182,6 +198,10 @@ class FourierSystem(FlucsSystem):
         self.current_step = self.int(0)
         self.current_time = self.float(0.0)
         self.current_dt = self.float(self.input["time.dt"])
+
+        # Copy initial condition
+        self.fields[0][:]\
+            = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
 
         super().ready()
 
@@ -277,6 +297,8 @@ class FourierSystem(FlucsSystem):
         advance any system-specific counters.
 
         """
+        self.current_field_marker = (self.current_field_marker + 1) % 2
+        self.previous_field_marker = self.current_field_marker - 1
         self.current_step += 1
 
     @abstractmethod

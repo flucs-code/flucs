@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 from numpy import dtype
 import flucs
 from flucs.solvers.fourier.fourier_system import FourierSystem
+from flucs.solvers.fourier.fourier_system_diagnostics import LinearSpectrumDiag
 from flucs.output import FlucsOutput
 from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
 
@@ -22,33 +23,27 @@ class ColdITG2DFourier(FourierSystem):
     phi: list
     T: list
 
-    # Nonlinear terms at this and at the previous time step
+    # Nonlinear terms
     nonlinear_terms: list
-
-    # Markers for the lists of arrays
-    current_field_marker = 0
-    previous_field_marker = -1
+    current_nonlinear_marker: int = 0
 
     # Supported diagnostics
-    diags_dict = {"heatflux": HeatfluxDiag}
-
+    diags_dict = {"heatflux": HeatfluxDiag,
+                  "linear_spectrum": LinearSpectrumDiag}
 
     def setup(self):
         """Prepares the system for the solver."""
 
         self.allocate_memory()
         # self.setup_kernels()
-
         super().setup()
 
     def ready(self):
+        # Anything system-specific goes here
         super().ready()
-        self.fields[0][:]\
-            = cp.array(np.reshape(self.fields_initial, self.fields[0].shape))
-
 
     def allocate_memory(self):
-        #GPU arrays
+        # GPU arrays
 
         # For the field arrays, we need to keep the fields
         # at the current time step and the previous one.
@@ -108,12 +103,10 @@ class ColdITG2DFourier(FourierSystem):
 
         super().compile_cupy_module() # Call this to compile the module
 
-
-
     def begin_time_step(self) -> None:
-        self.current_field_marker = (self.current_field_marker + 1) % 2
-        self.previous_field_marker = self.current_field_marker - 1
-
+        # Do anything model-specific here (e.g., advance markers for the
+        # nonlinear terms), then call the parent's method
+        pass
         super().begin_time_step()
 
 
@@ -126,7 +119,7 @@ class ColdITG2DFourier(FourierSystem):
 
         self.finish_step_kernel((unpadded_kernels_lattice_size,),
                            (block_size,),
-                           (self.fields[self.previous_field_marker],
+                           (self.fields[self.current_field_marker - 1],
                             self.fields[self.current_field_marker],
                             self.current_dt))
 

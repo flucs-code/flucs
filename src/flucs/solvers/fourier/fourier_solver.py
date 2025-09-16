@@ -54,8 +54,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
     def _solver_loop(self) -> float:
         start_time = time.time()
 
+        # Diagnostics for the first time step
+        self.system.execute_diagnostics()
+
         while self._not_done():
-            self.system.execute_diagnostics()
 
             self.system.begin_time_step()
 
@@ -63,9 +65,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
             self.system.finish_time_step()
 
+            self.system.execute_diagnostics()
         end_time = time.time()
 
-        self.system.execute_diagnostics(ignore_next_save=True)
         self.system.write_output()
 
         return end_time - start_time
