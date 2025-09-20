@@ -48,7 +48,7 @@ class FlucsSystem(ABC):
     module_options: ModuleOptions
 
     # A priority queue of outputs
-    output_heap: list[FlucsOutput]
+    output_heap: list[FlucsOutput] | None = None
 
     # A dict of supported diagnostics
     diags_dict: dict[str, Type[FlucsDiagnostic]]
@@ -93,7 +93,7 @@ class FlucsSystem(ABC):
         self.int = np.int32
 
     def add_output(self, output: FlucsOutput):
-        if not hasattr(self, "output_heap"):
+        if self.output_heap is None:
             self.output_heap = []
 
         heapq.heappush(self.output_heap, output)
@@ -108,6 +108,8 @@ class FlucsSystem(ABC):
             regardless of their next save time.
 
         """
+        if self.output_heap is None:
+            return
 
         if ignore_next_save:
             for output_to_execute in self.output_heap:
@@ -125,8 +127,9 @@ class FlucsSystem(ABC):
         pass
 
     def write_output(self):
-        for output in self.output_heap:
-            output.write()
+        if self.output_heap is not None:
+            for output in self.output_heap:
+                output.write()
 
     def setup_output(self) -> None:
         """Initialise outputs."""
@@ -177,8 +180,9 @@ class FlucsSystem(ABC):
         """
 
         # Ready up the outputs
-        for output in self.output_heap:
-            output.ready()
+        if self.output_heap is not None:
+            for output in self.output_heap:
+                output.ready()
 
     @abstractmethod
     def _interpret_input(self) -> None:

@@ -24,9 +24,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Timing
         self.system.ready()
 
-        # self.system.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX", 1)
-
-
         time_taken = self._solver_loop()
         print(f'Timed {self.system.input["setup.timing_steps"]} steps, '
               f'which took {time_taken} s.')
@@ -52,11 +49,11 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
 
     def _solver_loop(self) -> float:
-        start_time = time.time()
 
         # Diagnostics for the first time step
         self.system.execute_diagnostics()
 
+        start_time = time.time()
         while self._not_done():
 
             self.system.begin_time_step()

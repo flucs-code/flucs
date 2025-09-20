@@ -41,7 +41,7 @@ class FlucsOutput:
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
-        self.filename = f"{name}.nc"
+        self.filename = f"output.{name}.nc"
 
         self.diagnostics = []
         self.time_cache = []
