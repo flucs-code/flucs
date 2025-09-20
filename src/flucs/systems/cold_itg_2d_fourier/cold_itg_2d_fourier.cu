@@ -48,7 +48,7 @@ __device__ void get_linear_matrix(const int index, const FLUCS_FLOAT dt, FLUCS_C
     // const FLUCS_COMPLEX matrix_phiphi = FLUCS_COMPLEX(
     matrix[0][0] = FLUCS_COMPLEX(
         A_TIMES_CHI*kperp2*kperp2,
-        -ky*(KAPPA_B - KAPPA_N) + KAPPA_T*kperp2*ky) * eta_inv;
+        -ky*(KAPPA_B - KAPPA_N) - KAPPA_T*kperp2*ky) * eta_inv;
 
     // const FLUCS_COMPLEX matrix_phiT = FLUCS_COMPLEX(
     matrix[0][1] = FLUCS_COMPLEX(

@@ -98,7 +98,7 @@ class ColdITG2DFourier(FourierSystem):
                                             * self.input["parameters.chi"])
 
         self.module_options.define_constant("KAPPA_T", self.input["parameters.kappaT"])
-        self.module_options.define_constant("KAPPA_N", self.input["parameters.kappaN"])
+        self.module_options.define_constant("KAPPA_N", self.input["parameters.kappan"])
         self.module_options.define_constant("KAPPA_B", self.input["parameters.kappaB"])
 
         super().compile_cupy_module() # Call this to compile the module
@@ -124,3 +124,42 @@ class ColdITG2DFourier(FourierSystem):
                             self.current_dt))
 
         super().finish_time_step()
+
+    def compute_complex_omega(self):
+        linear_matrix = np.zeros(self.lattice_tuple + (2,2), dtype=self.complex)
+
+        kxs, kys, kzs = self.get_broadcast_wavenumbers()
+        kperp2 = kxs**2 + kys**2
+
+        kappaT = self.input["parameters.kappaT"]
+        kappaB = self.input["parameters.kappaB"]
+        kappan = self.input["parameters.kappan"]
+        chi = self.input["parameters.chi"]
+        a = self.input["parameters.a"]
+        b = self.input["parameters.b"]
+
+        eta = 1 + kperp2
+        # zonal response
+        eta[0, :, 0] = kperp2[0, :, 0]
+
+        # phi-phi
+        linear_matrix[:, :, :, 0, 0] = (
+                    a*chi*(kperp2**2)
+                    - 1j*(kappaB - kappan)*kys
+                    - 1j*kappaT*kperp2*kys) / eta
+
+        # phi-T
+        linear_matrix[:, :, :, 0, 1] = (
+                    - b*chi*(kperp2**2)
+                    - 1j*kappaB*kys) / eta
+
+        # T-phi
+        linear_matrix[:, :, :, 1, 0] = 1j*kappaT*kys
+
+        # T-T
+        linear_matrix[:, :, :, 1, 1] = chi*kperp2
+
+        # Fix (0,0,0) mode
+        linear_matrix[0, 0, 0, :, :] = np.identity(2)
+
+        return -1j*np.linalg.eigvals(linear_matrix)

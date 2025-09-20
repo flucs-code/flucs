@@ -192,6 +192,28 @@ class FourierSystem(FlucsSystem):
         #
         # self.ky = np.broadcast_to(ky_linear, (self.nz, self.nx, self.half_ny))
 
+    def get_broadcast_wavenumbers(self):
+
+        kx_broadcast = np.broadcast_to(self.kx, (self.nz, self.half_ny,
+                                                   self.nx)).transpose(0, 2, 1)
+
+        ky_broadcast = np.broadcast_to(self.ky, (self.nz, self.nx, self.half_ny))
+
+        kz_broadcast = np.broadcast_to(self.kz, (self.half_ny, self.nx,
+                                                 self.nz)).transpose(2, 1, 0)
+
+        return kx_broadcast, ky_broadcast, kz_broadcast
+
+
+
+    @abstractmethod
+    def compute_complex_omega(self):
+        """Returns an array of shape (nz, nx, half_ny, number_of_fields) with
+        the solutions to the linear dispersion relation. This should be
+        calculated using only CPU resources.
+
+        """
+        pass
 
     def ready(self) -> None:
         # Basic setup

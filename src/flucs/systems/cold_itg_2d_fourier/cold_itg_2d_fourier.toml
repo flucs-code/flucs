@@ -4,7 +4,7 @@ chi = 1.0
 a = 0.225
 b = 0.41875
 kappaB = 1.0
-kappaN = 0.0
+kappan = 0.0
 alpha = 0.5
 
 [dimensions]

@@ -36,26 +36,36 @@ __device__ void get_iteration_matrices(const int index,
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
     get_linear_matrix(index, dt, matrix);
-
+#if NUMBER_OF_FIELDS == 1
+    // TODO: one field
+#elif NUMBER_OF_FIELDS == 2
     // Hard-coded 2x2 inversion
-    // Here, we need to implement something general
+    const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
+    const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
+    const FLUCS_FLOAT ONE = (FLUCS_FLOAT)1.0;
 
-    R[0][0] = (FLUCS_FLOAT)(1.0) + (ALPHA - 1)*dt*matrix[0][0];
-    R[0][1] = (ALPHA - 1)*dt*matrix[0][1];
-    R[1][0] = (ALPHA - 1)*dt*matrix[1][0];
-    R[1][1] = (FLUCS_FLOAT)(1.0) + (ALPHA - 1)*dt*matrix[1][1];
+    R[0][0] = ONE + ALPHAMINUS1_DT*matrix[0][0];
+    R[0][1] = ALPHAMINUS1_DT*matrix[0][1];
+    R[1][0] = ALPHAMINUS1_DT*matrix[1][0];
+    R[1][1] = ONE + ALPHAMINUS1_DT*matrix[1][1];
 
-    const FLUCS_COMPLEX L_phiphi = (FLUCS_FLOAT)(1.0) + ALPHA*dt*matrix[0][0];
-    const FLUCS_COMPLEX L_phiT = ALPHA*dt*matrix[0][1];
-    const FLUCS_COMPLEX L_Tphi = ALPHA*dt*matrix[1][0];
-    const FLUCS_COMPLEX L_TT = (FLUCS_FLOAT)(1.0) + ALPHA*dt*matrix[1][1];
+    const FLUCS_COMPLEX L00 = ONE + ALPHA_DT*matrix[0][0];
+    const FLUCS_COMPLEX L01 = ALPHA_DT*matrix[0][1];
+    const FLUCS_COMPLEX L10 = ALPHA_DT*matrix[1][0];
+    const FLUCS_COMPLEX L11 = ONE + ALPHA_DT*matrix[1][1];
 
-    const FLUCS_COMPLEX inv_det_L = (FLUCS_FLOAT)(1.0) / (L_phiphi*L_TT - L_phiT*L_Tphi);
+    const FLUCS_COMPLEX inv_det_L = ONE / (L00*L11 - L01*L10);
 
-    invL[0][0] = L_TT * inv_det_L;
-    invL[0][1] = L_phiT * inv_det_L;
-    invL[1][0] = -L_Tphi * inv_det_L;
-    invL[1][1] = L_phiphi * inv_det_L;
+    invL[0][0] = L11 * inv_det_L;
+    invL[0][1] = -L01 * inv_det_L;
+    invL[1][0] = -L10 * inv_det_L;
+    invL[1][1] = L00 * inv_det_L;
+#elif NUMBER_OF_FIELDS == 3
+    // TODO: hard-code 3 fields
+#else
+    // TODO
+    // LU decomposition?
+#endif
 }
 
 
@@ -157,14 +167,6 @@ __global__ void finish_step(const FLUCS_COMPLEX* fields,
     }
 
 #endif
-    
-
-    // Hard-coded 2D version of the above
-    // const FLUCS_COMPLEX rhs_phi = R[0][0] * fields[index] + R[0][1] * fields[index + HALFUNPADDEDSIZE];
-    // const FLUCS_COMPLEX rhs_T = R[1][0] * fields[index] + R[1][1] * fields[index + HALFUNPADDEDSIZE];
-    //
-    // result[index] = invL[0][0] * rhs_phi + invL[0][1] * rhs_T;
-    // result[index + HALFUNPADDEDSIZE] = invL[1][0] * rhs_phi + invL[1][1] * rhs_T;
-
 }
-}
+
+} // extern "C"
