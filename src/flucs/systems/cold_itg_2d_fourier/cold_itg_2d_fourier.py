@@ -6,9 +6,11 @@ ITG system. The nonlinear term is handled explicitly using the Adams-Bashforth
 
 import numpy as np
 import cupy as cp
+from cupy.cuda import cufft
 from netCDF4 import Dataset
 from numpy import dtype
 import flucs
+from flucs.utilities.cupy import cupy_set_device_pointer
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.solvers.fourier.fourier_system_diagnostics import LinearSpectrumDiag
 from flucs.output import FlucsOutput
@@ -25,7 +27,22 @@ class ColdITG2DFourier(FourierSystem):
 
     # Nonlinear terms
     nonlinear_terms: list
-    current_nonlinear_marker: int = 0
+
+    # Derivatives and 'bits' used for the nonlinear terms
+    dft_derivatives: cp.ndarray
+    real_derivatives: cp.ndarray
+
+    dft_bits: cp.ndarray
+    real_bits: cp.ndarray
+    real_dxphi: cp.ndarray
+    real_dxphi_zonal: cp.ndarray
+
+    # DFT plans
+    plan_r2c: cufft.PlanNd
+    plan_c2r: cufft.PlanNd
+
+    find_derivatives_kernel: cp.RawKernel
+    find_nonlinear_bits_kernel: cp.RawKernel
 
     # Supported diagnostics
     diags_dict = {"heatflux": HeatfluxDiag,
@@ -40,6 +57,12 @@ class ColdITG2DFourier(FourierSystem):
 
     def ready(self):
         # Anything system-specific goes here
+
+        if not self.input["setup.linear"]:
+            cupy_set_device_pointer(self.cupy_module,
+                                    "multistep_nonlinear_terms",
+                                    self.multistep_nonlinear_terms)
+
         super().ready()
 
     def allocate_memory(self):
@@ -67,11 +90,91 @@ class ColdITG2DFourier(FourierSystem):
                                dtype=self.complex,
                                memptr=self.fields[1][1, 0, 0, 0].data),]
 
-        # For the nonlinear terms, we need to keep terms at the current time
-        # step + terms from the past 3 time steps (since we will be using AB3)
-        self.nonlinear_terms = [cp.zeros((2, self.nz, self.nx, self.half_ny),
-                                         dtype=self.complex)
-                                for i in range(4)]
+        # when running linearly, need something to pass to the kernels
+        # this is unused
+        self.dft_bits = cp.zeros(1, dtype=self.complex)
+
+        if not self.input["setup.linear"]:
+            # For the nonlinear terms, we need to keep terms at the current
+            # time step + terms from the past 2 time steps (since we will be
+            # using AB3)
+            # The nonlinear terms are indexed as (step, field, kz, kx, ky)
+            self.multistep_nonlinear_terms = cp.zeros((3, 2, self.nz, self.nx,
+                                                       self.half_ny),
+                                                      dtype=self.complex)
+
+            # All fields and derivatives to be transformed to real space
+            # are kept in one huge array (dft_derivatives).
+            # The first index indexes the fields and it's meaning is
+            # 0 dxphi,
+            # 1 dyphi,
+            # 2 (dx^2 - dy^2) phi,
+            # 3 dxdyphi
+            # 4 p
+            self.dft_derivatives = cp.zeros([5, self.padded_nx,
+                                             self.half_padded_ny],
+                                            dtype=self.complex)
+            self.real_derivatives = cp.zeros([5, self.padded_nx,
+                                              self.padded_ny],
+                                             dtype=self.float)
+
+            # These 'NL bits' are the terms which are calculated in real space.
+            # They are transformed back to Fourier space, where any additional
+            # derivatives are taken by multiplying the NL bits by the
+            # appropriate powers of k. The NL bits here are
+            # 0 dxphi0 * dyphi
+            # 1 (dx^2 - dy^2)phi * p
+            # 2 dxdyphi * p
+            # 3 dxphi * p
+            # 4 dyphi * p
+            # E.g., we calculate {phi, T} by calculating
+            # {phi, p} = dy (dxphi * u) - dx (dyphi * u)
+            self.dft_bits = cp.zeros([5, self.padded_nx, self.half_padded_ny],
+                                     dtype=self.complex)
+            self.real_bits = cp.zeros([5, self.padded_nx, self.padded_ny],
+                                      dtype=self.float)
+
+            # The first derivative in real_derivatives is dx phi.
+            # We need this for computing the zonal flow.
+            self.real_dxphi = cp.ndarray((self.padded_nx, self.padded_ny),
+                                         dtype=self.float,
+                                         memptr=self.real_derivatives.data)
+
+            self.real_dxphi_zonal = cp.zeros((self.padded_nx,),
+                                             dtype=self.float)
+
+            if self.input["setup.precision"] == "single":
+                self.fft_c2r_plan_type = cufft.CUFFT_C2R
+                self.fft_r2c_plan_type = cufft.CUFFT_R2C
+            else:
+                self.fft_c2r_plan_type = cufft.CUFFT_Z2D
+                self.fft_r2c_plan_type = cufft.CUFFT_D2Z
+
+            self.plan_c2r = cufft.PlanNd(shape=tuple([self.padded_nx, self.padded_ny]),
+                istride=1,
+                ostride=1,
+                inembed=tuple([1, self.half_padded_ny]),
+                onembed=tuple([1, self.padded_ny]),
+                idist=self.padded_nx*self.half_padded_ny,
+                odist=self.padded_nx*self.padded_ny,
+                fft_type=self.fft_c2r_plan_type,
+                batch=5,
+                order='C',
+                last_axis=2,
+                last_size=self.padded_ny)
+
+            self.plan_r2c = cufft.PlanNd(shape=tuple([self.padded_nx, self.padded_ny]),
+                istride=1,
+                ostride=1,
+                inembed=tuple([1, self.padded_ny]),
+                onembed=tuple([1, self.half_padded_ny]),
+                idist=self.padded_nx*self.padded_ny,
+                odist=self.padded_nx*self.half_padded_ny,
+                fft_type=self.fft_r2c_plan_type,
+                batch=5,
+                order='C',
+                last_axis=2,
+                last_size=self.half_padded_ny)
 
 
     def _interpret_input(self):
@@ -103,30 +206,47 @@ class ColdITG2DFourier(FourierSystem):
 
         super().compile_cupy_module() # Call this to compile the module
 
+        self.find_derivatives_kernel = self.cupy_module.get_function("find_derivatives")
+        self.find_nonlinear_bits_kernel = self.cupy_module.get_function("find_nonlinear_bits")
+
     def begin_time_step(self) -> None:
-        # Do anything model-specific here (e.g., advance markers for the
-        # nonlinear terms), then call the parent's method
-        pass
+        # Do anything model-specific here, then call the parent's method
         super().begin_time_step()
 
 
     def calculate_nonlinear_terms(self) -> None:
-        pass
+        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
+        padded_kernels_lattice_size = (self.half_padded_size // self.cuda_block_size) + 1
+        real_padded_kernels_lattice_size = (self.full_padded_size // self.cuda_block_size) + 1
+
+        self.find_derivatives_kernel((padded_kernels_lattice_size,),
+                                     (self.cuda_block_size,),
+                                     (self.fields[self.current_step % 2 - 1],
+                                      self.dft_derivatives))
+
+        self.plan_c2r.fft(self.dft_derivatives, self.real_derivatives, cufft.CUFFT_INVERSE)
+        # self.real_derivatives = cp.fft.irfftn(self.dft_derivatives, s=(self.padded_nx, self.padded_ny), norm="forward")
+        #
+        cp.mean(self.real_dxphi, axis=[-1], out=self.real_dxphi_zonal)
+
+
+        self.find_nonlinear_bits_kernel((real_padded_kernels_lattice_size,),
+                                        (self.cuda_block_size,),
+                                        (self.real_derivatives,
+                                         self.real_dxphi_zonal,
+                                         self.real_bits))
+
+        self.plan_r2c.fft(self.real_bits, self.dft_bits, cufft.CUFFT_FORWARD)
+        # self.dft_bits = cp.fft.rfftn(self.real_bits,
+        #                              s=(self.padded_nx, self.padded_ny),
+        #                              norm="forward")
+
 
     def finish_time_step(self) -> None:
-        block_size = 512
-        unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
-
-        self.finish_step_kernel((unpadded_kernels_lattice_size,),
-                           (block_size,),
-                           (self.fields[self.current_field_marker - 1],
-                            self.fields[self.current_field_marker],
-                            self.current_dt))
-
         super().finish_time_step()
 
     def compute_complex_omega(self):
-        linear_matrix = np.zeros(self.lattice_tuple + (2,2), dtype=self.complex)
+        linear_matrix = np.zeros(self.half_unpadded_tuple + (2,2), dtype=self.complex)
 
         kxs, kys, kzs = self.get_broadcast_wavenumbers()
         kperp2 = kxs**2 + kys**2

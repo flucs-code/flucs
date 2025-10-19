@@ -37,8 +37,8 @@ padded_primes = [2, 3]
 nonlinear_order = 2
 
 [setup]
-include_lin = true  # include linear terms
-include_nl = true  # include nonlinear terms
+# If true, run a linear-only simulation
+linear = false
 
 # Crank-Nicolson implicitness parameter
 alpha = 0.5
@@ -52,7 +52,7 @@ restart = false
 restart_time = -1.0
 restart_file = ""
 type = "white_noise"
-amplitude = 1.0
+amplitude = 1e-4
 
 [output]
 

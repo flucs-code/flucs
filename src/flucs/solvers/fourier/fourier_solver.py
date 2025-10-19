@@ -47,8 +47,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         return self.system.current_time < self.system.input["time.tfinal"]
 
-
     def _solver_loop(self) -> float:
+        is_nonlinear = not self.system.input["setup.linear"]
 
         # Diagnostics for the first time step
         self.system.execute_diagnostics()
@@ -58,7 +58,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
             self.system.begin_time_step()
 
-            self.system.calculate_nonlinear_terms()
+            if is_nonlinear:
+                self.system.calculate_nonlinear_terms()
 
             self.system.finish_time_step()
 

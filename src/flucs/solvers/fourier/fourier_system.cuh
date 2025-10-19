@@ -27,6 +27,15 @@ __device__ void get_linear_matrix(const int index,
                                   const FLUCS_FLOAT dt,
                                   FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 
+// Finds the nonlinear terms for the current time
+// step and adds them to rhs_fields.
+// Must be implemented by the user.
+__device__ void add_nonlinear_terms(const int index,
+                                    const FLUCS_FLOAT dt,
+                                    const int current_step,
+                                    const FLUCS_COMPLEX* dft_bits,
+                                    FLUCS_COMPLEX* rhs_fields);
+
 // Finds iterations matrices for a single mode.
 __device__ void get_iteration_matrices(const int index,
                                        const FLUCS_FLOAT dt,
@@ -111,9 +120,11 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 }
 
 
-__global__ void finish_step(const FLUCS_COMPLEX* fields,
-                   FLUCS_COMPLEX* result,
-                   const FLUCS_FLOAT dt) {
+__global__ void finish_step(const FLUCS_FLOAT dt,
+                            const int current_step,
+                            const FLUCS_COMPLEX* previous_fields,
+                            const FLUCS_COMPLEX* dft_bits,
+                            FLUCS_COMPLEX* current_fields){
 
     const int index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -129,11 +140,13 @@ __global__ void finish_step(const FLUCS_COMPLEX* fields,
         rhs_fields[i] = 0;
 
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs_fields[i] += R_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * fields[index + j*HALFUNPADDEDSIZE];
+            rhs_fields[i] += R_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * previous_fields[index + j*HALFUNPADDEDSIZE];
         }
     }
 
-    // Nonlinear terms added here
+#ifdef NONLINEAR
+    add_nonlinear_terms(index, dt, current_step, dft_bits, rhs_fields);
+#endif
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         result[index + i*HALFUNPADDEDSIZE] = 0;
@@ -142,7 +155,7 @@ __global__ void finish_step(const FLUCS_COMPLEX* fields,
             result[index + i*HALFUNPADDEDSIZE] += invL_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
         }
     }
-#else
+#else // not PRECOMPUTE_LINEAR_MATRIX
 
     FLUCS_COMPLEX R[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     FLUCS_COMPLEX invL[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
@@ -152,21 +165,23 @@ __global__ void finish_step(const FLUCS_COMPLEX* fields,
         rhs_fields[i] = 0;
 
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs_fields[i] += R[i][j] * fields[index + j*HALFUNPADDEDSIZE];
+            rhs_fields[i] += R[i][j] * previous_fields[index + j*HALFUNPADDEDSIZE];
         }
     }
 
-    // Nonlinear terms added here
+#ifdef NONLINEAR
+    add_nonlinear_terms(index, dt, current_step, dft_bits, rhs_fields);
+#endif
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        result[index + i*HALFUNPADDEDSIZE] = 0;
+        current_fields[index + i*HALFUNPADDEDSIZE] = 0;
 
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            result[index + i*HALFUNPADDEDSIZE] += invL[i][j] * rhs_fields[j];
+            current_fields[index + i*HALFUNPADDEDSIZE] += invL[i][j] * rhs_fields[j];
         }
     }
 
-#endif
+#endif // PRECOMPUTE_LINEAR_MATRIX
 }
 
 } // extern "C"

@@ -21,14 +21,14 @@ class LinearSpectrumDiag(FlucsDiagnostic):
     def get_data(self):
         # Do not execute at first time step
         if self.system.current_step == 0:
-            return np.zeros(self.system.lattice_tuple, dtype=self.system.complex)
+            return np.zeros(self.system.half_unpadded_tuple, dtype=self.system.complex)
 
         alpha = self.system.input["setup.alpha"]
         current_field = \
-            self.system.fields[self.system.current_field_marker][self.field_index, :]
+            self.system.fields[self.system.current_step%2][self.field_index, :]
 
         previous_field =\
-            self.system.fields[self.system.current_field_marker - 1][self.field_index, :]
+            self.system.fields[self.system.current_step%2 - 1][self.field_index, :]
 
         return cp.asnumpy(
             (1j/self.system.current_dt)

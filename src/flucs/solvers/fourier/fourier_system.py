@@ -25,11 +25,6 @@ class FourierSystem(FlucsSystem):
     # by the algorithm.
     fields: list
 
-    # Markers for the fields list that specify the current fields (i.e., those
-    # that we are solving for at the current time step) and the previous time
-    # step
-    current_field_marker: int = 0
-
     # Linear matrix (used for linear postprocessing)
     linear_matrix: cp.ndarray
 
@@ -40,6 +35,7 @@ class FourierSystem(FlucsSystem):
     # CUDA kernels
     finish_step_kernel: cp.RawKernel
     compute_linear_matrix_kernel: cp.RawKernel
+    cuda_block_size: int = 32
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -59,14 +55,14 @@ class FourierSystem(FlucsSystem):
     half_padded_ny: int
     half_padded_nz: int
 
-    lattice_size: int
-    lattice_tuple: tuple
-    padded_lattice_size: int
-    padded_lattice_tuple: tuple
-    real_lattice_size: int
-    real_lattice_tuple: tuple
-    real_padded_lattice_size: int
-    real_padded_lattice_tuple: tuple
+    half_unpadded_size: int
+    half_unpadded_tuple: tuple
+    half_padded_size: int
+    half_padded_tuple: tuple
+    full_unpadded_size: int
+    full_unpadded_tuple: tuple
+    full_padded_size: int
+    full_padded_tuple: tuple
 
     # Fourier wavenumbers
     kx: np.ndarray
@@ -118,7 +114,7 @@ class FourierSystem(FlucsSystem):
 
                     factor = self.input["dimensions.nonlinear_order"] + 1
                     _x = padded_n // factor
-                    half_padded_n = padded_n // 2
+                    half_padded_n = padded_n // 2 + 1
 
                     # Handle an annoying edge case
                     if padded_n % factor == 0:
@@ -146,19 +142,19 @@ class FourierSystem(FlucsSystem):
             setattr(self, f"half_padded_n{dim}", half_padded_n)
 
         # Set padded and unpadded array sizes
-        self.lattice_size = self.nz * self.nx * self.half_ny
-        self.lattice_tuple = (self.nz, self.nx, self.half_ny)
+        self.half_unpadded_size = self.nz * self.nx * self.half_ny
+        self.half_unpadded_tuple = (self.nz, self.nx, self.half_ny)
 
-        self.padded_lattice_size\
+        self.half_padded_size\
             = self.padded_nz * self.padded_nx * self.half_padded_ny
-        self.padded_lattice_tuple\
+        self.half_padded_tuple\
             = (self.padded_nz, self.padded_nx, self.half_padded_ny)
 
-        self.real_lattice_size = self.nz * self.nx * self.ny
-        self.real_lattice_tuple = (self.nz, self.nx, self.ny)
-        self.real_padded_lattice_size\
+        self.full_unpadded_size = self.nz * self.nx * self.ny
+        self.full_unpadded_tuple = (self.nz, self.nx, self.ny)
+        self.full_padded_size\
             = self.padded_nz * self.padded_nx * self.padded_ny
-        self.real_padded_lattice_tuple\
+        self.full_padded_tuple\
             = (self.padded_nz, self.padded_nx, self.padded_ny)
 
         # Finally, precompute wavenumbers (useful for many things)
@@ -243,10 +239,9 @@ class FourierSystem(FlucsSystem):
         if not self.input["setup.precompute_linear_matrix"]:
             return
 
-        block_size = 512
-        unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
+        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
         self.precompute_iteration_matrices_kernel(
-            (unpadded_kernels_lattice_size,), (block_size,),
+            (unpadded_kernels_lattice_size,), (self.cuda_block_size,),
             (self.current_dt,))
 
     def compile_cupy_module(self) -> None:
@@ -262,15 +257,40 @@ class FourierSystem(FlucsSystem):
                                             self.number_of_fields)
 
         self.module_options.define_constant("HALFUNPADDEDSIZE",
-                                            self.lattice_size)
+                                            self.half_unpadded_size)
+        self.module_options.define_constant("HALFPADDEDSIZE",
+                                            self.half_padded_size)
+        self.module_options.define_constant("PADDEDSIZE",
+                                            self.full_padded_size)
+
+        self.module_options.define_constant("DFT_PADDEDSIZE_FACTOR",
+                                            self.float(1.0 / self.full_padded_size))
 
         self.module_options.define_constant("NX", self.nx)
         self.module_options.define_constant("HALF_NX", self.half_nx)
+        self.module_options.define_constant("PADDED_NX",
+                                            self.padded_nx)
+        self.module_options.define_constant("HALF_PADDED_NX",
+                                            self.half_padded_nx)
+
         self.module_options.define_constant("NY", self.ny)
         self.module_options.define_constant("HALF_NY", self.half_ny)
+        self.module_options.define_constant("PADDED_NY",
+                                            self.padded_ny)
+        self.module_options.define_constant("HALF_PADDED_NY",
+                                            self.half_padded_ny)
+
         self.module_options.define_constant("NZ", self.nz)
         self.module_options.define_constant("HALF_NZ", self.half_nz)
+        self.module_options.define_constant("PADDED_NZ",
+                                            self.padded_nz)
+        self.module_options.define_constant("HALF_PADDED_NZ",
+                                            self.half_padded_nz)
+
         self.module_options.define_constant("ALPHA", self.input["setup.alpha"])
+
+        if not self.input["setup.linear"]:
+            self.module_options.define_constant("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
             print("Will precompute the linear matrix!")
@@ -289,10 +309,9 @@ class FourierSystem(FlucsSystem):
         compute_linear_matrix_kernel\
             = self.cupy_module.get_function("compute_linear_matrix")
 
-        block_size = 512
-        unpadded_kernels_lattice_size = (self.lattice_size // block_size) + 1
+        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
         compute_linear_matrix_kernel(
-            (unpadded_kernels_lattice_size,), (block_size,),
+            (unpadded_kernels_lattice_size,), (self.cuda_block_size,),
             (self.current_dt, self.linear_matrix))
 
     def set_initial_conditions(self) -> None:
@@ -306,7 +325,7 @@ class FourierSystem(FlucsSystem):
                 self.fields_initial =\
                     self.input["init.amplitude"]\
                     * np.random.random(self.number_of_fields
-                                       * self.lattice_size)
+                                       * self.half_unpadded_size)
 
             case _:
                 # Exotic initialisation types should be handled by each solver
@@ -319,8 +338,6 @@ class FourierSystem(FlucsSystem):
         advance any system-specific counters.
 
         """
-        self.current_field_marker = (self.current_field_marker + 1) % 2
-        self.previous_field_marker = self.current_field_marker - 1
         self.current_step += 1
 
     @abstractmethod
@@ -337,4 +354,14 @@ class FourierSystem(FlucsSystem):
     def finish_time_step(self) -> None:
         """Combines the nonlinear and linear terms in order to finish the time
         step"""
+        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
+
+        self.finish_step_kernel((unpadded_kernels_lattice_size,),
+                           (self.cuda_block_size,),
+                           (self.float(self.current_dt),
+                            self.current_step,
+                            self.fields[self.current_step%self.number_of_fields - 1],
+                            self.dft_bits,
+                            self.fields[self.current_step%self.number_of_fields]))
+
         self.current_time += self.current_dt

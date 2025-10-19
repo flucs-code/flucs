@@ -8,6 +8,13 @@
 
 extern "C" {
 
+// Array for AB3 nonlinear terms
+__constant__ FLUCS_COMPLEX* multistep_nonlinear_terms = NULL;
+// AB3 coefficients
+#define AB0 ((FLUCS_FLOAT)(23.0/12))
+#define AB1 ((FLUCS_FLOAT)(-4.0/3))
+#define AB2 ((FLUCS_FLOAT)(5.0/12))
+
 __device__ void get_linear_matrix(const int index, const FLUCS_FLOAT dt, FLUCS_COMPLEX matrix[2][2]){
 
 // #ifdef PRECOMPUTE_LINEAR_MATRIX
@@ -84,6 +91,175 @@ __device__ void get_linear_matrix(const int index, const FLUCS_FLOAT dt, FLUCS_C
 
 // #endif
 
+}
+
+// __global__ void find_derivatives(const FLUCS_COMPLEX* fields,
+//                                  FLUCS_COMPLEX* dft_derivatives){
+//     const int index = blockDim.x * blockIdx.x + threadIdx.x;
+//
+//     // Check if we are within bounds
+//     if (!(index < HALFUNPADDEDSIZE))
+//         return;
+//
+//     const int ikx = index / HALF_NY;
+//     const int padded_ikx = (ikx < HALF_NX) ? ikx : PADDED_NX - NX + ikx;
+//     const int iky = index % HALF_NY;
+//     const int padded_index = iky + HALF_PADDED_NY * padded_ikx;
+//
+//     const FLUCS_FLOAT kx = (ikx < HALF_NX) ? TWOPI_OVER_LX * ikx : TWOPI_OVER_LX * (ikx - NX);
+//     const FLUCS_FLOAT ky = TWOPI_OVER_LY * iky;
+//     const FLUCS_FLOAT ky2minuskx2 = ky*ky - kx*kx;
+//     const FLUCS_FLOAT minus_kxky = -kx*ky;
+//
+//     const FLUCS_COMPLEX phi = fields[index];
+//     const FLUCS_COMPLEX T = fields[index + HALFUNPADDEDSIZE];
+//
+//     dft_derivatives[padded_index]\
+//         = FLUCS_COMPLEX(-kx * phi.imag(), kx * phi.real());
+//
+//     dft_derivatives[padded_index + HALFPADDEDSIZE]\
+//         = FLUCS_COMPLEX(-ky * phi.imag(), ky * phi.real());
+//
+//     dft_derivatives[padded_index + 2*HALFPADDEDSIZE]\
+//         = ky2minuskx2 * phi;
+//
+//     dft_derivatives[padded_index + 3*HALFPADDEDSIZE]\
+//         = minus_kxky * phi;
+//
+//     dft_derivatives[padded_index + 4*HALFPADDEDSIZE]\
+//         = phi + T;
+// }
+
+__global__ void find_derivatives(const FLUCS_COMPLEX* fields,
+                                 FLUCS_COMPLEX* dft_derivatives){
+    const int padded_index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(padded_index < HALFPADDEDSIZE))
+        return;
+
+
+    const int padded_ikx = padded_index / HALF_PADDED_NY;
+    const int padded_iky = padded_index % HALF_PADDED_NY;
+
+    // Check if mode should be zeroed
+    if ((padded_ikx >= HALF_NX && padded_ikx < HALF_NX - NX + PADDED_NX)
+        || padded_iky >= HALF_NY){
+
+        dft_derivatives[padded_index] = 0;
+        dft_derivatives[padded_index + HALFPADDEDSIZE] = 0;
+        dft_derivatives[padded_index + 2*HALFPADDEDSIZE] = 0;
+        dft_derivatives[padded_index + 3*HALFPADDEDSIZE] = 0;
+        dft_derivatives[padded_index + 4*HALFPADDEDSIZE] = 0;
+        return;
+    }
+    
+    const int ikx = (padded_ikx < HALF_NX) ? padded_ikx : NX - PADDED_NX + padded_ikx;
+    const int index = padded_iky + HALF_NY * ikx;
+
+    const FLUCS_FLOAT kx = (ikx < HALF_NX) ? TWOPI_OVER_LX * ikx : TWOPI_OVER_LX * (ikx - NX);
+    const FLUCS_FLOAT ky = TWOPI_OVER_LY * padded_iky;
+    const FLUCS_FLOAT ky2minuskx2 = ky*ky - kx*kx;
+    const FLUCS_FLOAT minus_kxky = -kx*ky;
+
+    const FLUCS_COMPLEX phi = fields[index];
+    const FLUCS_COMPLEX T = fields[index + HALFUNPADDEDSIZE];
+
+    dft_derivatives[padded_index]\
+        = FLUCS_COMPLEX(-kx * phi.imag(), kx * phi.real());
+
+    dft_derivatives[padded_index + HALFPADDEDSIZE]\
+        = FLUCS_COMPLEX(-ky * phi.imag(), ky * phi.real());
+
+    dft_derivatives[padded_index + 2*HALFPADDEDSIZE]\
+        = ky2minuskx2 * phi;
+
+    dft_derivatives[padded_index + 3*HALFPADDEDSIZE]\
+        = minus_kxky * phi;
+
+    dft_derivatives[padded_index + 4*HALFPADDEDSIZE]\
+        = phi + T;
+}
+
+__global__ void find_nonlinear_bits(const FLUCS_FLOAT* real_derivatives,
+                                    const FLUCS_FLOAT* real_dxphi_zonal,
+                                    FLUCS_FLOAT* real_bits){
+    const int real_index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(real_index < PADDEDSIZE))
+        return;
+
+    // index inside the zonal phi array
+    const int ix = real_index / PADDED_NY;
+
+    // dxphi_zonal * dyphi
+    real_bits[real_index] = real_dxphi_zonal[ix] * real_derivatives[real_index + PADDEDSIZE];
+
+    // (dx^2 - dy^2)phi * p
+    real_bits[real_index + PADDEDSIZE] =\
+        real_derivatives[real_index + 2*PADDEDSIZE]*real_derivatives[real_index + 4*PADDEDSIZE];
+                                        
+    // dxdyphi p
+    real_bits[real_index + 2*PADDEDSIZE] =\
+        real_derivatives[real_index + 3*PADDEDSIZE]*real_derivatives[real_index + 4*PADDEDSIZE];
+ 
+    // dxphi p
+    real_bits[real_index + 3*PADDEDSIZE] =\
+        real_derivatives[real_index]*real_derivatives[real_index + 4*PADDEDSIZE];
+
+    // dyphi p
+    real_bits[real_index + 4*PADDEDSIZE] =\
+        real_derivatives[real_index + PADDEDSIZE]*real_derivatives[real_index + 4*PADDEDSIZE];
+}
+
+__device__ void add_nonlinear_terms(const int index,
+                                    const FLUCS_FLOAT dt,
+                                    const int current_step,
+                                    const FLUCS_COMPLEX* dft_bits,
+                                    FLUCS_COMPLEX* rhs_fields){
+    const int ikx = index / HALF_NY;
+    const int iky = index % HALF_NY;
+
+    const FLUCS_FLOAT kx = (ikx < HALF_NX) ? TWOPI_OVER_LX * ikx : TWOPI_OVER_LX * (ikx - NX);
+    const int ikx_padded = (ikx < HALF_NX) ? ikx : PADDED_NX - NX + ikx;
+    const FLUCS_FLOAT ky = TWOPI_OVER_LY * iky;
+
+    const int padded_index = HALF_PADDED_NY*ikx_padded + iky;
+
+
+    const FLUCS_FLOAT kx2mky2 = kx*kx - ky*ky;
+    const FLUCS_FLOAT kperp2 = kx*kx + ky*ky + (FLUCS_FLOAT)(index == 0);
+    const FLUCS_FLOAT eta_inv = (FLUCS_FLOAT)(1.0) / ((FLUCS_FLOAT)(iky > 0) + kperp2);
+    
+    const FLUCS_COMPLEX phiNL = DFT_PADDEDSIZE_FACTOR * \
+        eta_inv*(dft_bits[padded_index]
+                 - kx*ky*dft_bits[padded_index + HALFPADDEDSIZE]
+                 + kx2mky2*dft_bits[padded_index + 2*HALFPADDEDSIZE]);
+
+    const FLUCS_COMPLEX TNL = DFT_PADDEDSIZE_FACTOR * (
+                              FLUCS_COMPLEX(-ky * dft_bits[padded_index + 3*HALFPADDEDSIZE].imag(),
+                                             ky * dft_bits[padded_index + 3*HALFPADDEDSIZE].real())
+                             +FLUCS_COMPLEX( kx * dft_bits[padded_index + 4*HALFPADDEDSIZE].imag(),
+                                            -kx * dft_bits[padded_index + 4*HALFPADDEDSIZE].real()));
+
+    const int multistep_index_0 = ((current_step    ) % 3) * 2 * HALFUNPADDEDSIZE + index;
+    const int multistep_index_1 = ((current_step - 1) % 3) * 2 * HALFUNPADDEDSIZE + index;
+    const int multistep_index_2 = ((current_step - 2) % 3) * 2 * HALFUNPADDEDSIZE + index;
+
+    // phi
+    rhs_fields[0] -= dt * (AB0*phiNL
+                           +AB1*multistep_nonlinear_terms[multistep_index_1]
+                           +AB2*multistep_nonlinear_terms[multistep_index_2]);
+
+    multistep_nonlinear_terms[multistep_index_0] = phiNL;
+
+    // T
+    rhs_fields[1] -= dt * (AB0*TNL
+                           +AB1*multistep_nonlinear_terms[multistep_index_1 + HALFUNPADDEDSIZE]
+                           +AB2*multistep_nonlinear_terms[multistep_index_2 + HALFUNPADDEDSIZE]);
+
+    multistep_nonlinear_terms[multistep_index_0 + HALFUNPADDEDSIZE] = TNL;
 }
 
 
