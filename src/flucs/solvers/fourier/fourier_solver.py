@@ -11,6 +11,11 @@ from flucs.solvers.fourier.fourier_system import FourierSystem
 
 
 class FourierSolver(FlucsSolver[FourierSystem]):
+    """A pseudospectral solver for a system of nonlinear fluid PDEs in 2D or 3D
+    that are specified by a FourierSystem.
+
+    """
+
     def run(self):
         """Run the main solver loop."""
 
@@ -36,9 +41,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
 
-        self._solver_loop()
+        time_taken = self._solver_loop()
 
-        print("flucs given!")
+        print(f"flucs given in {time_taken} seconds!")
 
     def _not_done(self) -> bool:
         if self.state == FlucsSolverState.TIMING:
@@ -55,19 +60,15 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         start_time = time.time()
         while self._not_done():
-
             self.system.begin_time_step()
 
             if is_nonlinear:
                 self.system.calculate_nonlinear_terms()
 
             self.system.finish_time_step()
-
             self.system.execute_diagnostics()
         end_time = time.time()
 
         self.system.write_output()
 
         return end_time - start_time
-
-

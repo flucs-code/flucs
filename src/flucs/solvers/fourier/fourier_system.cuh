@@ -3,7 +3,6 @@
 #include <cupy/complex.cuh>
 
 // Deal with float types
-
 #ifdef DOUBLE_PRECISION
     #define FLUCS_FLOAT double
     #define flucs_fabs(x) fabs(x)
@@ -17,6 +16,7 @@
 
 extern "C" {
 
+// R and L^-1 when using precomputed matrices.
 __constant__ FLUCS_COMPLEX* R_precomp = NULL;
 __constant__ FLUCS_COMPLEX* invL_precomp = NULL;
 
@@ -72,14 +72,14 @@ __device__ void get_iteration_matrices(const int index,
 #elif NUMBER_OF_FIELDS == 3
     // TODO: hard-code 3 fields
 #else
-    // TODO
+    // TODO: something clever
     // LU decomposition?
 #endif
 }
 
 
-// Returns the full (for all modes) linear matrix
-// matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
+// Returns the full (for all modes) linear matrix.
+// Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
 __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linear_matrix){
     const int index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -119,7 +119,9 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 
 }
 
-
+// Called right at the end of a time step,
+// combines the linear matrices and nonlinear
+// terms to find the fields at the current time step.
 __global__ void finish_step(const FLUCS_FLOAT dt,
                             const int current_step,
                             const FLUCS_COMPLEX* previous_fields,

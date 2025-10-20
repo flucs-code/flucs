@@ -5,13 +5,24 @@ abstract methods.
 
 """
 
+import enum
 from typing import TypeVar, Generic
 from abc import ABC, abstractmethod
 from flucs import FlucsInput
-from .flucs_solver_state import FlucsSolverState
+
+
+class FlucsSolverState(enum.Enum):
+    """Keeps track of what the solver is doing."""
+    NOTINITIALISED = enum.auto()
+    INITIALISED = enum.auto()
+    TIMING = enum.auto()
+    RUNNING = enum.auto()
+    PAUSED = enum.auto()
+    DONE = enum.auto()
 
 
 T_System = TypeVar("T_System", bound="FlucsSystem")
+
 class FlucsSolver(Generic[T_System], ABC):
     input: FlucsInput
     system: T_System
@@ -19,7 +30,7 @@ class FlucsSolver(Generic[T_System], ABC):
 
     @abstractmethod
     def run(self) -> None:
-        pass
+        """Main entry point for the solver."""
 
     def __init__(self, flucs_input: FlucsInput,
                  flucs_system: T_System) -> None:
