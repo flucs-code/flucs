@@ -2,9 +2,10 @@
 Contains the definition of the FlucsInput class
 that deals with interpreting TOML input files.
 """
-import os
+
 import toml
 import flucs
+import pathlib as pl
 
 
 class FlucsInput:
@@ -14,12 +15,12 @@ class FlucsInput:
     with added functionality.
     """
 
-    _input_dict = {}            # Dict that holds all the input parameters.
+    _input_dict = {}           # Dict that holds all the input parameters.
     _input_str: str = None     # Represents the input file
-    _default_input_dict = {}    # Holds all the defaults
+    _default_input_dict = {}   # Holds all the defaults
     _solver_type: type         # Solver type for this input
     _system_type: type         # System type for this input
-    _initialised = False        # if True, __setitem__ throws an exception
+    _initialised = False       # if True, __setitem__ throws an exception
 
 
     def create_solver_system(self):
@@ -142,13 +143,13 @@ class FlucsInput:
                     raise ValueError(f"Error casting '{v}' to type '{type(_dict[k])}' for parameter '{k}'!") from e
 
 
-    def __init__(self, filename: str, override: list = None):
+    def __init__(self, filepath: pl.Path, override: list = None):
         """
         Initialises defaults and loads from file.
         """
 
         # Loads the dict for the user-defined inputs
-        input_file_dict = toml.load(filename)
+        input_file_dict = toml.load(filepath)
 
         # Loads the solver
         self._solver_type =\

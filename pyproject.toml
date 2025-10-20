@@ -2,7 +2,10 @@
 name = "flucs"
 version = "0.0"
 description = "Framework for solving fluid models of plasmas"
-authors = []
+authors = [
+    {name = "P. G. Ivanov"}, 
+    {name = "T. Adkins", email = "tadkins@pppl.gov"}
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []

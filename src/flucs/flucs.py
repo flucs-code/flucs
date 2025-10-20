@@ -3,8 +3,8 @@ Main flucs script.
 Used to run simulations.
 """
 
-import os
 import argparse
+import pathlib as pl
 from importlib.metadata import entry_points
 from flucs.input import FlucsInput
 
@@ -94,37 +94,43 @@ def run_flucs():
 
     """
 
-    parser = argparse.ArgumentParser(description="""Runs the appropriate
-                                                 temp_name solver using an
-                                                 input file""")
+    parser = argparse.ArgumentParser(
+        description="""Runs the appropriate flucs solver using an input file"""
+    )
 
-    parser.add_argument("--input", type=str,
-                        help="""Path to the input file. If not specified, looks
-                        for input.toml and, if that is not found, tries
-                        NAME.toml file where NAME matches the name of the
-                        parent directory.""")
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        default=None,
+        required=False,
+        help="""Path to the input file. If not specified, looks in the current working
+        directory for `input.toml` and, if that is not found, looks for `NAME.toml` file 
+        where NAME matches the name of the current working directory."""
+    )
 
-    parser.add_argument("--override", nargs="+",
-                        help="""Additional arguments to override input-file
-                        parameters. Must be specified in TOML grouping
-                        format: e.g., to override the value of dt in group
-                        time to be 0.01, specify 'time.dt 0.01'.""")
+    parser.add_argument(
+        "--override", "-o",
+        nargs="+",
+        required=False,
+        help="""Additional arguments to override input-file parameters. Must be specified 
+        in TOML grouping format: e.g., to override the value of dt in group time to be 0.01, 
+        specify 'time.dt 0.01'."""
+    )
 
     args = parser.parse_args()
-
-    # If no input specified, look for a NAME.toml file, where NAME matches (in
-    # this order of priority):
-    # (1) input
-    # (2) the name of the parent directory
-
     if args.input is None:
-        if os.path.exists("input.toml"):
-            args.input = "input.toml"
-        elif os.path.exists(f"{os.path.basename(os.getcwd())}.toml"):
-            args.input = f"{os.path.basename(os.getcwd())}.toml"
-        else:
-            raise FileNotFoundError("Input file neither specified explicitly "
-                "nor found in the expected places (see flucs -- help)!")
+
+        cwd = pl.Path.cwd()
+        candidates = [
+            cwd / "input.toml", 
+            cwd / f"{cwd.name}.toml"
+            ]
+        args.input = next((str(c) for c in candidates if c.exists()), None)
+
+        if args.input is None:
+            raise FileNotFoundError(
+                "Input file not found. See `flucs -- help`."
+                )           
 
     flucs_input = FlucsInput(args.input, args.override)
 
