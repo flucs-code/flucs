@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import heapq
 import numpy as np
+import pathlib as pl
 from netCDF4 import Dataset, Group
 from flucs.solvers import FlucsSolverState
 
@@ -15,7 +16,7 @@ class FlucsOutput:
 
     """
     name: str
-    filename: str
+    filepath: pl.Path
     save_steps: int
     next_save: int
 
@@ -41,7 +42,7 @@ class FlucsOutput:
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
-        self.filename = f"output.{name}.nc"
+        self.filepath = pl.Path(self.system.input.input_path.parent, f"output.{name}.nc")
 
         self.diagnostics = []
         self.time_cache = []
@@ -93,7 +94,7 @@ class FlucsOutput:
         if self.stdout_only:
             return
 
-        with Dataset(self.filename, "r+", format="NETCDF4") as self.dataset:
+        with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()
 
             # Check if we already have all necessary dimensions
@@ -108,7 +109,7 @@ class FlucsOutput:
 
                         print(
                             f"Dimension {dim_name} in output file"
-                            f" {self.filename} has size"
+                            f" {self.filepath.name} has size"
                             f" {self.group.dimensions[dim_name].size}"
                             f" which differs from expected size"
                             f" {len(dim_data)} required by diagnostic"
@@ -165,7 +166,7 @@ class FlucsOutput:
                 self.system.solver.state != FlucsSolverState.RUNNING):
             return
 
-        with Dataset(self.filename, "r+", format="NETCDF4") as self.dataset:
+        with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()
 
             times_to_write = len(self.time_cache)
