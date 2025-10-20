@@ -8,7 +8,7 @@ abstract methods.
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from pathlib import Path
+import pathlib as pl
 import heapq
 import importlib
 from typing import Type
@@ -64,13 +64,13 @@ class FlucsSystem(ABC):
             Input object that will be initialised with the defaults.
         """
         import importlib
-        from pathlib import Path
+        import pathlib as pl
 
         for parent_cls in reversed(cls.__mro__):
             if not issubclass(parent_cls, FlucsSystem):
                 continue
 
-            p = Path(importlib.import_module(parent_cls.__module__).__file__)
+            p = pl.Path(importlib.import_module(parent_cls.__module__).__file__)
             defaults_path = p.with_name(f'{p.stem}.toml')
             print(f"Loading SOLVER defaults for {defaults_path}")
             with defaults_path.open("r") as f:
@@ -159,7 +159,7 @@ class FlucsSystem(ABC):
         import datetime
 
         # resource_path = Path(importlib.import_module(self.__module__).__file__).parent / f"{self.__module__.split('.')[-1]}.cu"
-        p = Path(importlib.import_module(self.__module__).__file__)
+        p = pl.Path(importlib.import_module(self.__module__).__file__)
         resource_path = p.with_name(f"{p.stem}.cu")
         with open(resource_path) as f:
             cuda_module = f.read()
@@ -191,7 +191,7 @@ class FlucsSystem(ABC):
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        print(f"-I{Path(flucs.__file__).parent}")
-        self.module_options.add_string_option(f"-I{Path(flucs.__file__).parent.parent}")
+        print(f"-I{pl.Path(flucs.__file__).parent}")
+        self.module_options.add_string_option(f"-I{pl.Path(flucs.__file__).parent.parent}")
         self._interpret_input()
         self._set_precision()

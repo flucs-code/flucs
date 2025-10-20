@@ -15,6 +15,7 @@ class FlucsInput:
     with added functionality.
     """
 
+    input_path: pl.Path = None # Path to the input file.
     _input_dict = {}           # Dict that holds all the input parameters.
     _input_str: str = None     # Represents the input file
     _default_input_dict = {}   # Holds all the defaults
@@ -147,6 +148,9 @@ class FlucsInput:
         """
         Initialises defaults and loads from file.
         """
+
+        # Store input filepath
+        self.input_path = pl.Path(filepath)
 
         # Loads the dict for the user-defined inputs
         input_file_dict = toml.load(filepath)
