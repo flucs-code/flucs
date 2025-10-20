@@ -15,14 +15,14 @@ class FlucsInput:
     with added functionality.
     """
 
-    input_path: pl.Path = None # Path to the input file.
-    _input_dict = {}           # Dict that holds all the input parameters.
-    _input_str: str = None     # Represents the input file
-    _default_input_dict = {}   # Holds all the defaults
-    _solver_type: type         # Solver type for this input
-    _system_type: type         # System type for this input
-    _initialised = False       # if True, __setitem__ throws an exception
-
+    input_path: pl.Path         # Path to the input file.
+    io_path: pl.Path            # Input/output directory.
+    _input_dict = {}            # Dict that holds all the input parameters.
+    _input_str: str             # Represents the input file
+    _default_input_dict = {}    # Holds all the defaults
+    _solver_type: type          # Solver type for this input
+    _system_type: type          # System type for this input
+    _initialised = False        # if True, __setitem__ throws an exception
 
     def create_solver_system(self):
         """Creates the solver and system for this input.
@@ -38,7 +38,7 @@ class FlucsInput:
         system.solver = solver
         return solver, system
 
-    def __getitem__(self, arg : str):
+    def __getitem__(self, arg: str):
         """
         Access the dict of input data directly using
         the TOML format aa.bb.cc for nested dicts.
@@ -58,9 +58,10 @@ class FlucsInput:
 
         return _dict[split_arg[-1]]
 
-    def __setitem__(self, arg : str, value):
+    def __setitem__(self, arg: str, value):
         if self._initialised:
-            raise RuntimeError("Input class has finished its initialisation and is now read-only!")
+            raise RuntimeError("Input class has finished its initialisation "
+                               "and is now read-only!")
 
         if not isinstance(arg, str):
             raise ValueError("The key should be a string!")
@@ -77,17 +78,18 @@ class FlucsInput:
         except KeyError as e:
             raise ValueError(f"Parameter {arg} does not exist!") from e
         except ValueError as e:
-            raise TypeError(f"Error casting '{value}' to type '{type(_dict[split_arg[-1]])}' for parameter '{arg}'!") from e
+            raise TypeError(
+                f"Error casting '{value}' to type "
+                f"'{type(_dict[split_arg[-1]])}' for "
+                f"parameter '{arg}'!") from e
 
-
-    def load_toml_str(self, toml_str : str, default=False):
+    def load_toml_str(self, toml_str: str, default=False):
         """
         Loads parameters from a TOML string.
         """
         self.load_dict(toml.loads(toml_str), default)
 
-
-    def load_dict(self, _dict : dict, default=False):
+    def load_dict(self, _dict: dict, default=False):
         """
         Loads a dict into _input_dict or _default_input_dict
         depending on whether default is False or True.
@@ -100,7 +102,6 @@ class FlucsInput:
             FlucsInput._update_dict(self._input_dict, _dict, allow_new=True)
         else:
             FlucsInput._update_dict(self._input_dict, _dict)
-
 
     @staticmethod
     def _update_dict(_dict: dict, _updates: dict, allow_new=False):
@@ -128,21 +129,26 @@ class FlucsInput:
                 _dict[k] = v
                 continue
 
-
-            if isinstance(v, dict):  # If the value is a dict, go into it recursively
+            if isinstance(v, dict):
+                # If the value is a dict, go into it recursively
                 if not isinstance(_dict[k], dict):
-                    raise ValueError(f"'{k}' is a parameter, not a group of parameters! It cannot be set to {str(v)}!")
+                    raise ValueError(
+                        f"'{k}' is a parameter, not a group of "
+                        f"parameters! It cannot be set to {str(v)}!")
 
                 FlucsInput._update_dict(_dict[k], v, allow_new=allow_new)
             else:
                 if isinstance(_dict[k], dict):
-                    raise ValueError(f"'{k}' is a group of parameters, not a parameter itself! It cannot be set to {str(v)}!")
+                    raise ValueError(
+                        f"'{k}' is a group of parameters, not a parameter "
+                        f"itself! It cannot be set to {str(v)}!")
 
                 try:
                     _dict[k] = type(_dict[k])(v)
                 except ValueError as e:
-                    raise ValueError(f"Error casting '{v}' to type '{type(_dict[k])}' for parameter '{k}'!") from e
-
+                    raise ValueError(
+                        f"Error casting '{v}' to type '{type(_dict[k])}' "
+                        f"for parameter '{k}'!") from e
 
     def __init__(self, filepath: pl.Path, override: list = None):
         """
@@ -151,6 +157,9 @@ class FlucsInput:
 
         # Store input filepath
         self.input_path = pl.Path(filepath)
+
+        # All input and output happens in the same directory
+        self.io_path = self.input_path.parent
 
         # Loads the dict for the user-defined inputs
         input_file_dict = toml.load(filepath)
@@ -173,7 +182,6 @@ class FlucsInput:
                 self[parameter] = value
 
         self._initialised = True
-
 
     def __str__(self):
         """

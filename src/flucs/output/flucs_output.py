@@ -1,6 +1,10 @@
+"""
+Defines the FlucsOutput class that handles a group of diagnostics that are
+executed together and output to either a file or the stdout.
+"""
+
 from __future__ import annotations
 from typing import TYPE_CHECKING
-import heapq
 import numpy as np
 import pathlib as pl
 from netCDF4 import Dataset, Group
@@ -9,6 +13,7 @@ from flucs.solvers import FlucsSolverState
 if TYPE_CHECKING:
     from flucs.output import FlucsDiagnostic
     from flucs.systems import FlucsSystem
+
 
 class FlucsOutput:
     """Deals with a single output file. A FlucsSystem typically has several
@@ -42,7 +47,7 @@ class FlucsOutput:
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
-        self.filepath = pl.Path(self.system.input.input_path.parent, f"output.{name}.nc")
+        self.filepath = self.system.input.io_path / f"output.{name}.nc"
 
         self.diagnostics = []
         self.time_cache = []
@@ -100,6 +105,7 @@ class FlucsOutput:
             # Check if we already have all necessary dimensions
             # for every diagnostic
             for diagnostic in self.diagnostics:
+                diag_incompatible = False
                 for dim_name, dim_data in diagnostic.dimensions_dict.items():
                     dim_size = len(dim_data)
 
@@ -115,15 +121,19 @@ class FlucsOutput:
                             f" {len(dim_data)} required by diagnostic"
                             f"  {diagnostic.name}!"
                             "\n"
-                            "Therefore, diagnostic {diagnostic.name}"
-                            "will not operate!")
-                        return
+                            f"Therefore, diagnostic {diagnostic.name}"
+                            " will not operate!")
+                        diag_incompatible = True
+                        break
 
                     self.group.createDimension(dim_name, dim_size)
                     dim_var = self.group.createVariable(dim_name,
                                                         "f4",
                                                         (dim_name,))
                     dim_var[:] = dim_data[:]
+
+                if diag_incompatible:
+                    continue
 
                 # Create variable
                 if diagnostic.is_complex:
@@ -191,7 +201,7 @@ class FlucsOutput:
                         self.group[diag.name][first_index:last_index]\
                             = np.array(diag.data_cache)
                 else:
-                    # Could probably rewrite with np.array
+                    # TODO: Rewrite with np.array
                     if diag.is_complex:
                         for i in range(times_to_write):
                             self.group[f"{diag.name}_real"][first_index + i, :]\
@@ -207,5 +217,6 @@ class FlucsOutput:
 
     def __lt__(self, other):
         if not isinstance(other, FlucsOutput):
-            raise TypeError(f"Makes no sense to compare a FlucsOutput with a {type(other)}")
+            raise TypeError("Makes no sense to compare a FlucsOutput "
+                            f"with a {type(other)}")
         return self.next_save < other.next_save

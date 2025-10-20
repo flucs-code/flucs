@@ -5,6 +5,11 @@ from .fourier_system import FourierSystem
 
 
 class LinearSpectrumDiag(FlucsDiagnostic):
+    """
+    Calculates the linear frequency at the current time step by comparing with
+    the fields at the previous one.
+
+    """
     name = "linear_spectrum"
     system: FourierSystem
     is_complex = True
@@ -21,14 +26,15 @@ class LinearSpectrumDiag(FlucsDiagnostic):
     def get_data(self):
         # Do not execute at first time step
         if self.system.current_step == 0:
-            return np.zeros(self.system.half_unpadded_tuple, dtype=self.system.complex)
+            return np.zeros(self.system.half_unpadded_tuple,
+                            dtype=self.system.complex)
 
         alpha = self.system.input["setup.alpha"]
         current_field = \
-            self.system.fields[self.system.current_step%2][self.field_index, :]
+            self.system.fields[self.system.current_step % 2][self.field_index, :]
 
         previous_field =\
-            self.system.fields[self.system.current_step%2 - 1][self.field_index, :]
+            self.system.fields[self.system.current_step % 2 - 1][self.field_index, :]
 
         return cp.asnumpy(
             (1j/self.system.current_dt)
@@ -36,4 +42,5 @@ class LinearSpectrumDiag(FlucsDiagnostic):
             / (alpha*current_field + (1 - alpha)*previous_field))
 
     def print_diagnostic(self):
+        """TODO: implement something for the linear-spectrum diagnostic"""
         print("TODO: implement something for the linear-spectrum diagnostic")

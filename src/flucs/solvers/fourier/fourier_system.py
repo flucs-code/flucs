@@ -5,7 +5,6 @@ from abc import abstractmethod
 import numpy as np
 import cupy as cp
 from flucs.systems import FlucsSystem
-from flucs import FlucsInput
 from flucs.utilities.smooth_numbers import next_smooth_number
 from flucs.utilities.cupy import cupy_set_device_pointer
 
@@ -17,13 +16,17 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
-    # Number of fields to be DFT'ed
-    number_of_dfts: int
+    # Number of fields to be DFT'ed for the pseudospectral nonlinearity
+    # number_of_dfts: int
 
     # This will hold all the fields. Should be a list of CuPy arrays.
     # It's a list in order to store fields at previous time steps, as required
     # by the algorithm.
     fields: list
+
+    # Fourier-space pieces out of which we construct the nonlinear term at each
+    # time step
+    dft_bits: cp.array
 
     # Linear matrix (used for linear postprocessing)
     linear_matrix: cp.ndarray
@@ -33,6 +36,7 @@ class FourierSystem(FlucsSystem):
     invL: cp.ndarray
 
     # CUDA kernels
+    precompute_iteration_matrices_kernel: cp.RawKernel
     finish_step_kernel: cp.RawKernel
     compute_linear_matrix_kernel: cp.RawKernel
     cuda_block_size: int = 32
@@ -189,18 +193,24 @@ class FourierSystem(FlucsSystem):
         # self.ky = np.broadcast_to(ky_linear, (self.nz, self.nx, self.half_ny))
 
     def get_broadcast_wavenumbers(self):
+        """ Returns wavenumber arrays broadcast to (nz, nx, half_ny)
 
+        Returns
+        -------
+        kx_broadcast, ky_broadcast, kz_broadcast
+            Wavenumber arrays of shape (nz, nx, half_ny)
+
+        """
         kx_broadcast = np.broadcast_to(self.kx, (self.nz, self.half_ny,
-                                                   self.nx)).transpose(0, 2, 1)
+                                                 self.nx)).transpose(0, 2, 1)
 
-        ky_broadcast = np.broadcast_to(self.ky, (self.nz, self.nx, self.half_ny))
+        ky_broadcast = np.broadcast_to(self.ky, (self.nz, self.nx,
+                                                 self.half_ny))
 
         kz_broadcast = np.broadcast_to(self.kz, (self.half_ny, self.nx,
                                                  self.nz)).transpose(2, 1, 0)
 
         return kx_broadcast, ky_broadcast, kz_broadcast
-
-
 
     @abstractmethod
     def compute_complex_omega(self):
@@ -209,7 +219,6 @@ class FourierSystem(FlucsSystem):
         calculated using only CPU resources.
 
         """
-        pass
 
     def ready(self) -> None:
         # Basic setup
@@ -225,13 +234,19 @@ class FourierSystem(FlucsSystem):
 
         if self.input["setup.precompute_linear_matrix"]:
             if not hasattr(self, "R"):  # allocate matrices if not done yet
-                self.R = cp.zeros((2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex)
-                self.invL = cp.zeros((2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex)
+                self.R = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
+                                  dtype=self.complex)
+                self.invL = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
+                                     dtype=self.complex)
 
-            cupy_set_device_pointer(self.cupy_module, "invL_precomp", self.invL)
-            cupy_set_device_pointer(self.cupy_module, "R_precomp", self.R)
+            cupy_set_device_pointer(self.cupy_module,
+                                    "invL_precomp", self.invL)
+            cupy_set_device_pointer(self.cupy_module,
+                                    "R_precomp", self.R)
 
-            self.precompute_iteration_matrices_kernel = self.cupy_module.get_function("precompute_iteration_matrices")
+            self.precompute_iteration_matrices_kernel =\
+                self.cupy_module.get_function("precompute_iteration_matrices")
+
             self.precompute_iteration_matrices()
 
     def precompute_iteration_matrices(self):

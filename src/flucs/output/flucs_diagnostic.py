@@ -9,7 +9,13 @@ if TYPE_CHECKING:
     from flucs.diagnostics.output import FlucsOutput
     from flucs.systems import FlucsSystem
 
+
 class FlucsDiagnostic(ABC):
+    """
+    Prepares data to be saved by a FlucsOutput or directly writes to
+    stdout.
+
+    """
     # Name of the diagnostic
     name: str
 
@@ -37,10 +43,9 @@ class FlucsDiagnostic(ABC):
     @abstractmethod
     def print_diagnostic(self):
         """Called if the diagnostic's output group is stdout_only."""
-        pass
-
 
     def execute(self):
+        """Runs the diagnostic."""
         self.data_cache.append(
             self.get_data())
 
@@ -52,8 +57,8 @@ class FlucsDiagnostic(ABC):
 
     @abstractmethod
     def ready(self) -> None:
-        pass
+        """Called right before execution of the solver loop begins."""
 
     @abstractmethod
     def get_data(self) -> np.ndarray | float:
-        pass
+        """Returns the diagnostic data at the current time step."""
