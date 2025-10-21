@@ -23,6 +23,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.state = FlucsSolverState.TIMING
         
         # Get the system ready
+        self.system.setup_restart()
+        self.system.decide_restart()
         self.system.setup()
         self.system.setup_output()
         self.system.compile_cupy_module()
@@ -41,7 +43,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
-        self.system.setup_restart()
 
         time_taken = self._solver_loop()
 

@@ -52,6 +52,7 @@ class FlucsSystem(ABC):
     _restart_counter: int = 0              
     _restart_path_old: pl.Path | None = None
     _restart_path_new: pl.Path | None = None
+    _restart_source: pl.Path | None = None
 
     # CuPy module for the system
     cupy_module: cp.RawModule
@@ -204,8 +205,8 @@ class FlucsSystem(ABC):
     @abstractmethod
     def get_restart_data(self) -> dict[str, cp.ndarray]:
         """
-        Returns a dictionary mapping variable names to their data
-        arrays for restarting.
+        Returns a tuple of dictionaries for restarting, of the form
+        ({variable_name: variable_data}, {variable_name: (dim1, dim2, ...)}).
         """
         raise NotImplementedError()
 
@@ -227,6 +228,66 @@ class FlucsSystem(ABC):
         self._restart_write_steps = int(self.input["restart.restart_write_steps"])
         self._restart_counter = int(self.input["restart.restart_write_steps"])
 
+    
+    def decide_restart(self) -> None:
+        """
+        Decide whether to restart and select/validate the restart source.
+        A specified restart file takes precedence over automatic detection.
+        """
+
+        restart_file = self.input["restart.restart_file"]
+
+        # Restart from specified file
+        if restart_file != "":
+            p = pl.Path(restart_file).expanduser()
+            if not p.is_absolute(): 
+                p = (self.input.io_path / p).resolve()
+            if not p.exists():
+                print(f"Specified restart file does not exist: {p}")
+                exit(1)
+            try:
+                with Dataset(p, "r") as ds:
+                    self._ensure_restart_complete(ds)
+            except Exception as e:
+                print(f"Invalid restart file {p}: {e}")
+                sys.exit(1)
+            self._restart_source = p
+            print(f"Restarting from specified file: {self._restart_source}")
+
+        # Restart from existing files 
+        elif self.input["restart.restart_if_exists"]:
+
+            # Look for possible restart files in the default location
+            possible_restart_files = [
+                p for p in (self._restart_path_new, self._restart_path_old) if p and p.exists()
+            ]
+
+            # Check whether the files are valid for restart
+            for f in possible_restart_files:
+                try:
+                    with Dataset(f, "r") as ds:
+                        self._ensure_restart_complete(ds)
+                    self._restart_source = f
+                    break
+                except Exception as e:
+                    print(f"Found restart file {f} but it is invalid: {e}")
+
+            if self._restart_source is not None:
+                except Exception as e:
+                    # Found a candidate but it is invalid.
+                    print(f"Found restart file {f} but it is invalid: {e}")
+
+            if self._restart_source is not None:
+                print(f"Restart files found in {self.input.io_path}.")
+                print(f"Restarting from {self._restart_source}.")
+            else:
+                print(f"Initialising using type: {self.input['init.type']}")
+
+        # Initialise using specified initial conditions.
+        else:
+            print(f"Initialising using type: {self.input['init.type']}")
+
+        return 
     
     def write_restart(self, force: bool=False) -> None:
         """
@@ -276,6 +337,7 @@ class FlucsSystem(ABC):
             ds.setncattr("created", datetime.datetime.now(datetime.timezone.utc).isoformat())
             ds.setncattr("location", str(tmp_path.parent))
             ds.setncattr("pid", int(os.getpid()))
+            ds.setncattr("type", str("restart file"))
             ds.setncattr("restart_write_steps", np.int32(self._restart_write_steps))
             ds.setncattr("complete", np.int32(0))
 
@@ -323,6 +385,18 @@ class FlucsSystem(ABC):
                 tmp_path.unlink()
         except Exception:
             pass
+
+    def _ensure_restart_complete(self, ds: Dataset) -> None:
+    """
+    Raise ValueError unless the restart file is marked complete (complete == 1).
+    Missing or non-numeric 'complete' is treated as incomplete.
+    """
+    try:
+        if int(getattr(ds, "complete", 0)) != 1:
+            raise ValueError("incomplete")
+    except Exception:
+        # Any parsing/type error counts as incomplete
+        raise ValueError("incomplete")
 
 
     def __init__(self, input : FlucsInput) -> None:
