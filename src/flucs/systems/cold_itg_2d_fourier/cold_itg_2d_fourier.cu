@@ -243,9 +243,9 @@ __device__ void add_nonlinear_terms(const int index,
                              +FLUCS_COMPLEX( kx * dft_bits[padded_index + 4*HALFPADDEDSIZE].imag(),
                                             -kx * dft_bits[padded_index + 4*HALFPADDEDSIZE].real()));
 
-    const int multistep_index_0 = ((current_step    ) % 3) * 2 * HALFUNPADDEDSIZE + index;
-    const int multistep_index_1 = ((current_step - 1) % 3) * 2 * HALFUNPADDEDSIZE + index;
-    const int multistep_index_2 = ((current_step - 2) % 3) * 2 * HALFUNPADDEDSIZE + index;
+    const int multistep_index_0 = ((current_step      % 3 + 3) % 3) * 2 * HALFUNPADDEDSIZE + index;
+    const int multistep_index_1 = ((current_step + 2) % 3)          * 2 * HALFUNPADDEDSIZE + index;
+    const int multistep_index_2 = ((current_step + 1) % 3)          * 2 * HALFUNPADDEDSIZE + index;
 
     // phi
     rhs_fields[0] -= dt * (AB0*phiNL

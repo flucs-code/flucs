@@ -221,8 +221,8 @@ class FourierSystem(FlucsSystem):
     def ready(self) -> None:
         # Basic setup
         self.current_step = self.int(0)
-        self.current_time = self.float(getattr(self, "restart_time", 0.0))
-        self.current_dt = self.float(getattr(self, "restart_dt", self.input["time.dt"]))
+        self.current_time = self.init_time
+        self.current_dt = self.init_dt
 
         # Print message.
         print(f"Starting at time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
@@ -334,7 +334,7 @@ class FourierSystem(FlucsSystem):
         """Generic setup for the first time step."""
 
         # Restart if a restart source is found
-        if getattr(self, "_restart_source", None) is not None:
+        if self._restart_source is not None:
             restart_data = self.load_restart_data()
 
             if "fields" not in restart_data:

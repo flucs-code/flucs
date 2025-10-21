@@ -45,6 +45,9 @@ class FlucsSystem(ABC):
     current_time: float
     final_time: float
 
+    init_time: float
+    init_dt: float
+
     # Variables for restarting
     _save_for_restart: bool = False
     _restart_write_steps: int = 0
@@ -52,9 +55,6 @@ class FlucsSystem(ABC):
     _restart_path_old: pl.Path | None = None
     _restart_path_new: pl.Path | None = None
     _restart_source: pl.Path | None = None
-
-    restart_time: float 
-    restart_dt: float
 
     # CuPy module for the system
     cupy_module: cp.RawModule
@@ -304,6 +304,8 @@ class FlucsSystem(ABC):
 
         # Initialise using specified method
         print(f"Initialising using type: {self.input['init.type']}")
+        self.init_time = 0.0
+        self.init_dt = float(self.input["time.dt"])
         self.final_time = float(self.input["time.tfinal"])
 
         return 
@@ -322,9 +324,9 @@ class FlucsSystem(ABC):
 
         try:
             # Set restart variables
-            self.restart_time = float(ds.variables["current_time"][...])
-            self.restart_dt = float(ds.variables["current_dt"][...])
-            self.final_time = self.restart_time + float(self.input["time.tfinal"])
+            self.init_time = float(ds.variables["current_time"][...])
+            self.init_dt = float(ds.variables["current_dt"][...])
+            self.final_time = self.init_time + float(self.input["time.tfinal"])
 
         except KeyError as e:
             raise ValueError(f"Missing variable in restart file: {e}")
