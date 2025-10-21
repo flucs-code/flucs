@@ -23,8 +23,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.state = FlucsSolverState.TIMING
         
         # Get the system ready
-        self.system.setup_restart()
-        self.system.decide_restart()
         self.system.setup()
         self.system.setup_output()
         self.system.compile_cupy_module()
@@ -53,8 +51,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             return self.system.current_step\
                    < self.system.input["setup.timing_steps"]
 
-        return self.system.current_time < self.system.input["time.tfinal"]
-
+        return self.system.current_time < self.system.final_time
+        
     def _solver_loop(self) -> float:
         is_nonlinear = not self.system.input["setup.linear"]
 

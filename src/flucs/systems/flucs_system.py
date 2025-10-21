@@ -12,8 +12,6 @@ import pathlib as pl
 import os
 import heapq
 import datetime
-import socket
-import getpass
 from netCDF4 import Dataset
 import importlib
 from typing import Type
@@ -45,6 +43,7 @@ class FlucsSystem(ABC):
     current_step: int
     current_dt: float
     current_time: float
+    final_time: float
 
     # Variables for restarting
     _save_for_restart: bool = False
@@ -53,6 +52,9 @@ class FlucsSystem(ABC):
     _restart_path_old: pl.Path | None = None
     _restart_path_new: pl.Path | None = None
     _restart_source: pl.Path | None = None
+
+    restart_time: float 
+    restart_dt: float
 
     # CuPy module for the system
     cupy_module: cp.RawModule
@@ -135,8 +137,20 @@ class FlucsSystem(ABC):
             output_to_execute.execute()
             heapq.heappush(self.output_heap, output_to_execute)
 
-    @abstractmethod
     def setup(self) -> None:
+        """
+        First sets up restart options and then delegates to the
+        system-specific setup hook.
+        """
+
+        self._setup_restart()
+        self._setup_system()
+
+    @abstractmethod
+    def _setup_system(self) -> None:
+        """
+        System-specific setup (allocate, set initial conditions, etc.).
+        """
         pass
 
     def write_output(self):
@@ -203,21 +217,31 @@ class FlucsSystem(ABC):
         pass
 
     @abstractmethod
-    def get_restart_data(self) -> dict[str, cp.ndarray]:
+    def _get_restart_data(self) -> dict[str, dict]:
         """
-        Returns a tuple of dictionaries for restarting, of the form
-        ({variable_name: variable_data}, {variable_name: (dim1, dim2, ...)}).
+        Return a dictionary describing restart variables.
+
+        Structure:
+        {
+            "<var_name>": {
+            "data": <ndarray (NumPy or CuPy)>,
+            "dimension_names": (<dim1>, <dim2>, ...)  # optional, tuple/list of str
+            },
+            ...
+        }
         """
         raise NotImplementedError()
 
-    def setup_restart(self) -> None:
+    
+    def _setup_restart(self) -> None:
         """
-        Reads [restart] flags and sets up restart variables.
+        Sets up restart variables and decides whether to restart.
+        A specified restart file takes precedence over automatic detection.
         """
 
+        # Flag for whether to save restart data
         self._save_for_restart = bool(self.input["restart.save_for_restart"])
-        if not self._save_for_restart:
-            return
+        self._restart_source = None
 
         # Set up paths
         self._restart_path_old = pl.Path(self.input.io_path / "restart.old.nc")
@@ -228,13 +252,7 @@ class FlucsSystem(ABC):
         self._restart_write_steps = int(self.input["restart.restart_write_steps"])
         self._restart_counter = int(self.input["restart.restart_write_steps"])
 
-    
-    def decide_restart(self) -> None:
-        """
-        Decide whether to restart and select/validate the restart source.
-        A specified restart file takes precedence over automatic detection.
-        """
-
+        # Check for specified restart file
         restart_file = self.input["restart.restart_file"]
 
         # Restart from specified file
@@ -250,7 +268,7 @@ class FlucsSystem(ABC):
                     self._ensure_restart_complete(ds)
             except Exception as e:
                 print(f"Invalid restart file {p}: {e}")
-                sys.exit(1)
+                exit(1)
             self._restart_source = p
             print(f"Restarting from specified file: {self._restart_source}")
 
@@ -263,29 +281,27 @@ class FlucsSystem(ABC):
             ]
 
             # Check whether the files are valid for restart
-            for f in possible_restart_files:
-                try:
-                    with Dataset(f, "r") as ds:
-                        self._ensure_restart_complete(ds)
-                    self._restart_source = f
-                    break
-                except Exception as e:
-                    print(f"Found restart file {f} but it is invalid: {e}")
+            if possible_restart_files:
+                for f in possible_restart_files:
+                    try:
+                        with Dataset(f, "r") as ds:
+                            self._ensure_restart_complete(ds)
+                        self._restart_source = f
+                        break
+                    except Exception as e:
+                        print(f"Found restart file {f} but it is invalid: {e}")
 
-            if self._restart_source is not None:
-                except Exception as e:
-                    # Found a candidate but it is invalid.
-                    print(f"Found restart file {f} but it is invalid: {e}")
+                if self._restart_source is not None:
+                    print(f"Restart files found in {self.input.io_path}.")
+                    print(f"Restarting from {self._restart_source}.")
+                else:
+                    print("All found restart files are invalid.")
+                    exit(1)
 
-            if self._restart_source is not None:
-                print(f"Restart files found in {self.input.io_path}.")
-                print(f"Restarting from {self._restart_source}.")
-            else:
-                print(f"Initialising using type: {self.input['init.type']}")
-
-        # Initialise using specified initial conditions.
-        else:
+        # Initialise using specified method
+        if self._restart_source is None:
             print(f"Initialising using type: {self.input['init.type']}")
+            self.final_time = float(self.input["time.tfinal"])
 
         return 
     
@@ -322,10 +338,10 @@ class FlucsSystem(ABC):
         # Filepaths
         old_path = self._restart_path_old
         new_path = self._restart_path_new
-        tmp_path = new_path.parent / "restart.tmp.nc"
+        tmp_path = self._restart_path_tmp
 
         # Get restart data 
-        restart_data, dimension_names = self.get_restart_data()
+        restart_data = self._get_restart_data()
 
         # Set precision for netCDF variables
         precision = "f4" if self.float is np.float32 else "f8"
@@ -347,26 +363,30 @@ class FlucsSystem(ABC):
             ds.createVariable("current_step", "i8", ())[...] = int(self.current_step)
 
             # Arrays
-            for array_name, array_data in restart_data.items():
-                dim_names = dimension_names.get(array_name)
+            for var_name, var_dict in restart_data.items():
+                var_data = var_dict["data"]
+                if isinstance(var_data, cp.ndarray):
+                    var_data = cp.asnumpy(var_data)
+
+                dim_names = var_dict.get("dimension_names", None)
                 if dim_names is not None:
-                    for dname, dsize in zip(dim_names, array_data.shape):
+                    for dname, dsize in zip(dim_names, var_data.shape):
                         if dname not in ds.dimensions:
                             ds.createDimension(dname, int(dsize))
                 else:
-                    dim_names = tuple(f"{array_name}_dim{i}" for i in range(array_data.ndim))
-                    for dname, dsize in zip(dim_names, array_data.shape):
+                    dim_names = tuple(f"{var_name}_dim{i}" for i in range(var_data.ndim))
+                    for dname, dsize in zip(dim_names, var_data.shape):
                         if dname not in ds.dimensions:
                             ds.createDimension(dname, int(dsize))
 
-            if np.iscomplexobj(array_data):
-                v_r = ds.createVariable(f"{array_name}_real", precision, tuple(dim_names))
-                v_i = ds.createVariable(f"{array_name}_imag", precision, tuple(dim_names))
-                v_r[:] = array_data.real
-                v_i[:] = array_data.imag
-            else:
-                v = ds.createVariable(array_name, precision, tuple(dim_names))
-                v[:] = array_data
+                if np.iscomplexobj(var_data):
+                    v_r = ds.createVariable(f"{var_name}_real", precision, tuple(dim_names))
+                    v_i = ds.createVariable(f"{var_name}_imag", precision, tuple(dim_names))
+                    v_r[:] = var_data.real
+                    v_i[:] = var_data.imag
+                else:
+                    v = ds.createVariable(var_name, precision, tuple(dim_names))
+                    v[:] = var_data
 
             # Mark write as complete
             ds.setncattr("complete", np.int32(1))
@@ -386,17 +406,29 @@ class FlucsSystem(ABC):
         except Exception:
             pass
 
+    
     def _ensure_restart_complete(self, ds: Dataset) -> None:
-    """
-    Raise ValueError unless the restart file is marked complete (complete == 1).
-    Missing or non-numeric 'complete' is treated as incomplete.
-    """
-    try:
-        if int(getattr(ds, "complete", 0)) != 1:
+        """
+        Validates that the restart data is complete, and if so sets the 
+        final simulation time accordingly.
+        """
+        try:
+            if int(getattr(ds, "complete", 0)) != 1:
+                raise ValueError("incomplete")
+        except Exception:
+            # Any parsing/type error counts as incomplete
             raise ValueError("incomplete")
-    except Exception:
-        # Any parsing/type error counts as incomplete
-        raise ValueError("incomplete")
+
+        try:
+            # Set restart variables
+            self.restart_time = float(ds.variables["current_time"][...])
+            self.restart_dt = float(ds.variables["current_dt"][...])
+            self.final_time = self.restart_time + float(self.input["time.tfinal"])
+
+        except KeyError as e:
+            raise ValueError(f"Missing variable in restart file: {e}")
+        except Exception as e:
+            raise ValueError(f"Failed to read variables in restart file: {e}")
 
 
     def __init__(self, input : FlucsInput) -> None:

@@ -164,15 +164,13 @@ class FourierSystem(FlucsSystem):
         # Finally, precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
 
-    def setup(self) -> None:
+    def _setup_system(self) -> None:
         """Sets up the system for running the solver. Should be called *after*
         any child class has done its setup, i.e., do not forget to do
         super().setup() in anything that inherits FourierSystem.
 
         """
         self.set_initial_conditions()
-
-        super().setup()
 
     def _precompute_wavenumbers(self):
         self.kx = 2 * np.pi * self.nx * np.fft.fftfreq(self.nx)\
@@ -223,8 +221,11 @@ class FourierSystem(FlucsSystem):
     def ready(self) -> None:
         # Basic setup
         self.current_step = self.int(0)
-        self.current_time = self.float(0.0)
-        self.current_dt = self.float(self.input["time.dt"])
+        self.current_time = self.float(getattr(self, "restart_time", 0.0))
+        self.current_dt = self.float(getattr(self, "restart_dt", self.input["time.dt"]))
+
+        # Print message.
+        print(f"Starting from time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
 
         # Copy initial condition
         self.fields[0][:]\
@@ -347,7 +348,7 @@ class FourierSystem(FlucsSystem):
                 # separately.
                 pass
 
-    def get_restart_data(self) -> dict[str, np.ndarray]:
+    def _get_restart_data(self) -> dict[str, np.ndarray]:
         """
         Get the complex Fourier data for the fields at the current step.
         """
@@ -355,14 +356,15 @@ class FourierSystem(FlucsSystem):
         index = int(self.current_step)%self.number_of_fields
         current_fields = self.fields[index]
 
-        arrays = {
-            "fields": cp.asnumpy(current_fields) 
-            if isinstance(current_fields, cp.ndarray) 
+        data = cp.asnumpy(current_fields) if isinstance(current_fields, cp.ndarray) \
             else np.asarray(current_fields)
-        }
-        dimension_names = {"fields": ("nfields", "nz", "nx", "half_ny")}
 
-        return arrays, dimension_names
+        return {
+            "fields": {
+                "data": data,
+                "dimension_names": ("number_of_fields", "nz", "nx", "half_ny"),
+            }
+        }
 
     @abstractmethod
     def begin_time_step(self) -> None:

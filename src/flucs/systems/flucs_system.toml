@@ -19,7 +19,7 @@ amplitude = 1e-4
 
 [restart]
 save_for_restart = true
-restart_if_exists = true
+restart_if_exists = false
 restart_write_steps = 10000
 restart_file = ""
 
