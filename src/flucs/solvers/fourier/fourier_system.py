@@ -347,6 +347,23 @@ class FourierSystem(FlucsSystem):
                 # separately.
                 pass
 
+    def get_restart_data(self) -> dict[str, np.ndarray]:
+        """
+        Get the complex Fourier data for the fields at the current step.
+        """
+
+        index = int(self.current_step)%self.number_of_fields
+        current_fields = self.fields[index]
+
+        arrays = {
+            "fields": cp.asnumpy(current_fields) 
+            if isinstance(current_fields, cp.ndarray) 
+            else np.asarray(current_fields)
+        }
+        dimension_names = {"fields": ("nfields", "nz", "nx", "half_ny")}
+
+        return arrays, dimension_names
+
     @abstractmethod
     def begin_time_step(self) -> None:
         """Executed in the beginning of the time step. Should be used to

@@ -12,6 +12,16 @@ precision = "single"  # floating-point precision
 timing = false
 timing_steps = 1000
 
+[init]
+rand_seed = 113  # seed for random-number generation
+type = "white_noise"
+amplitude = 1e-4
+
+[restart]
+save_for_restart = true
+restart_write_steps = 10000
+restart_file = ""
+
 [output]
 write_time = 10  # time, in seconds, between writes to the drive
 

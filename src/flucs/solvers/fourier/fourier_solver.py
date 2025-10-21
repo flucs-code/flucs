@@ -21,6 +21,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         # We first time the solver
         self.state = FlucsSolverState.TIMING
+        
         # Get the system ready
         self.system.setup()
         self.system.setup_output()
@@ -40,6 +41,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
+        self.system.setup_restart()
 
         time_taken = self._solver_loop()
 
@@ -67,8 +69,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
             self.system.finish_time_step()
             self.system.execute_diagnostics()
+            self.system.write_restart(force=False)
         end_time = time.time()
 
         self.system.write_output()
+        self.system.write_restart(force=True)
 
         return end_time - start_time

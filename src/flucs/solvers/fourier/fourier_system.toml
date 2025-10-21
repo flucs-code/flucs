@@ -46,14 +46,6 @@ alpha = 0.5
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false
 
-[init]
-rand_seed = 113  # seed for random-number generation
-restart = false
-restart_time = -1.0
-restart_file = ""
-type = "white_noise"
-amplitude = 1e-4
-
 [output]
 
 [output.0d]

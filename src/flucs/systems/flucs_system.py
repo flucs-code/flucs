@@ -9,7 +9,12 @@ abstract methods.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import pathlib as pl
+import os
 import heapq
+import datetime
+import socket
+import getpass
+from netCDF4 import Dataset
 import importlib
 from typing import Type
 import numpy as np
@@ -40,6 +45,13 @@ class FlucsSystem(ABC):
     current_step: int
     current_dt: float
     current_time: float
+
+    # Variables for restarting
+    _save_for_restart: bool = False
+    _restart_write_steps: int = 0
+    _restart_counter: int = 0              
+    _restart_path_old: pl.Path | None = None
+    _restart_path_new: pl.Path | None = None
 
     # CuPy module for the system
     cupy_module: cp.RawModule
@@ -174,7 +186,8 @@ class FlucsSystem(ABC):
         self.cupy_module.compile()
 
     def ready(self) -> None:
-        """This method is called immediately before the solver starts
+        """
+        This method is called immediately before the solver starts
         execution.
 
         """
@@ -187,6 +200,130 @@ class FlucsSystem(ABC):
     @abstractmethod
     def _interpret_input(self) -> None:
         pass
+
+    @abstractmethod
+    def get_restart_data(self) -> dict[str, cp.ndarray]:
+        """
+        Returns a dictionary mapping variable names to their data
+        arrays for restarting.
+        """
+        raise NotImplementedError()
+
+    def setup_restart(self) -> None:
+        """
+        Reads [restart] flags and sets up restart variables.
+        """
+
+        self._save_for_restart = bool(self.input["restart.save_for_restart"])
+        if not self._save_for_restart:
+            return
+
+        # Set up paths
+        self._restart_path_old = pl.Path(self.input.io_path / "restart.old.nc")
+        self._restart_path_new = pl.Path(self.input.io_path / "restart.new.nc")
+        self._restart_path_tmp = pl.Path(self.input.io_path / "restart.tmp.nc")
+
+        # Initialise saving cadence
+        self._restart_write_steps = int(self.input["restart.restart_write_steps"])
+        self._restart_counter = int(self.input["restart.restart_write_steps"])
+
+    
+    def write_restart(self, force: bool=False) -> None:
+        """
+        Executes writing restart data if necessary.
+
+        Parameters
+        ----------
+        force : bool
+            If force is True, the restart data is written at that timestep.
+        """
+
+        if self._save_for_restart is False:
+            return
+
+        # Check whether its time to write
+        if not force:
+            self._restart_counter -= 1
+            if self._restart_counter != 0:
+                return
+            self._restart_counter = self._restart_write_steps
+
+        # Write the data
+        self._write_restart_data()
+
+
+    def _write_restart_data(self) -> None:
+        """
+        Writes restart data to netCDF files, rotating old and new files
+        as necessary.
+        """
+
+        # Filepaths
+        old_path = self._restart_path_old
+        new_path = self._restart_path_new
+        tmp_path = new_path.parent / "restart.tmp.nc"
+
+        # Get restart data 
+        restart_data, dimension_names = self.get_restart_data()
+
+        # Set precision for netCDF variables
+        precision = "f4" if self.float is np.float32 else "f8"
+
+        # Write to temporary file
+        with Dataset(tmp_path, "w", format="NETCDF4") as ds:
+
+            # Set file attributes
+            ds.setncattr("created", datetime.datetime.now(datetime.timezone.utc).isoformat())
+            ds.setncattr("location", str(tmp_path.parent))
+            ds.setncattr("pid", int(os.getpid()))
+            ds.setncattr("restart_write_steps", np.int32(self._restart_write_steps))
+            ds.setncattr("complete", np.int32(0))
+
+            # Scalar values
+            ds.createVariable("current_time", precision, ())[...] = float(self.current_time)
+            ds.createVariable("current_dt", precision, ())[...] = float(self.current_dt)
+            ds.createVariable("current_step", "i8", ())[...] = int(self.current_step)
+
+            # Arrays
+            for array_name, array_data in restart_data.items():
+                dim_names = dimension_names.get(array_name)
+                if dim_names is not None:
+                    for dname, dsize in zip(dim_names, array_data.shape):
+                        if dname not in ds.dimensions:
+                            ds.createDimension(dname, int(dsize))
+                else:
+                    dim_names = tuple(f"{array_name}_dim{i}" for i in range(array_data.ndim))
+                    for dname, dsize in zip(dim_names, array_data.shape):
+                        if dname not in ds.dimensions:
+                            ds.createDimension(dname, int(dsize))
+
+            if np.iscomplexobj(array_data):
+                v_r = ds.createVariable(f"{array_name}_real", precision, tuple(dim_names))
+                v_i = ds.createVariable(f"{array_name}_imag", precision, tuple(dim_names))
+                v_r[:] = array_data.real
+                v_i[:] = array_data.imag
+            else:
+                v = ds.createVariable(array_name, precision, tuple(dim_names))
+                v[:] = array_data
+
+            # Mark write as complete
+            ds.setncattr("complete", np.int32(1))
+
+        # Replace files
+        try:
+            if new_path.exists():
+                os.replace(new_path, old_path)
+        except FileNotFoundError:
+            pass
+
+        os.replace(tmp_path, new_path)
+
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
+
 
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
