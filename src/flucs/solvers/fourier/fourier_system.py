@@ -225,7 +225,7 @@ class FourierSystem(FlucsSystem):
         self.current_dt = self.float(getattr(self, "restart_dt", self.input["time.dt"]))
 
         # Print message.
-        print(f"Starting from time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
+        print(f"Starting at time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
 
         # Copy initial condition
         self.fields[0][:]\
@@ -332,6 +332,25 @@ class FourierSystem(FlucsSystem):
 
     def set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
+
+        # Restart if a restart source is found
+        if getattr(self, "_restart_source", None) is not None:
+            restart_data = self.load_restart_data()
+
+            if "fields" not in restart_data:
+                raise ValueError("Restart data does not contain 'fields'.")
+            
+            field_data = restart_data["fields"]["data"]
+
+            # TODO: remove when allowing for changing of sizes
+            expected_shape = self.fields[0].shape
+            if field_data.shape != expected_shape:
+                raise ValueError(f"Restart data has incorrect shape: {field_data.shape}, expected: {expected_shape}")
+
+            # Set initial field data
+            self.fields_initial = np.asarray(field_data)
+
+            return
 
         # Handle known initialisation types
         match self.input["init.type"]:
