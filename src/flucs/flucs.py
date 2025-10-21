@@ -7,6 +7,7 @@ import argparse
 import pathlib as pl
 from importlib.metadata import entry_points
 from flucs.input import FlucsInput
+from flucs.utilities.clean_directory import clean_directory
 
 
 # Load lists of registered solvers and systems
@@ -47,7 +48,6 @@ def get_system_type(system_name: str):
     """
     return systems[system_name].load()
 
-
 def run_flucs():
     """Main starting point for flucs.
 
@@ -80,7 +80,29 @@ def run_flucs():
              "of dt in group time to be 0.01, specify 'time.dt 0.01'."
     )
 
+    parser.add_argument(
+        "--clean", "-c",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Remove 'output.*' and 'restart.*' files in the current directory"
+             "and exit."
+    )
+
+    parser.add_argument(#TODO
+        "--test", "-t",
+        action="store_true",
+        default=False,
+        required=False,
+        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit"
+    )
+
     args = parser.parse_args()
+
+    if args.clean:
+        clean_directory(pl.Path.cwd(), ("restart.*", "output.*"))
+        return
+
     if args.input is None:
 
         cwd = pl.Path.cwd()
