@@ -333,13 +333,13 @@ class FourierSystem(FlucsSystem):
     def set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
 
-        # Restart if a restart source is found
-        if self._restart_source is not None:
-            restart_data = self.load_restart_data()
+        # Use restart data if it was read
+        if self.restart_manager.data is not None:
+            restart_data = self.restart_manager.data
 
             if "fields" not in restart_data:
                 raise ValueError("Restart data does not contain 'fields'.")
-            
+
             field_data = restart_data["fields"]["data"]
 
             # TODO: remove when allowing for changing of sizes
@@ -367,7 +367,7 @@ class FourierSystem(FlucsSystem):
                 # separately.
                 pass
 
-    def _get_restart_data(self) -> dict[str, np.ndarray]:
+    def get_restart_data(self) -> dict[str, np.ndarray]:
         """
         Get the complex Fourier data for the fields at the current step.
         """
