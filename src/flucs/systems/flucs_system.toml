@@ -22,6 +22,7 @@ write_restart_file = true
 restart_if_exists = false
 write_steps = 10000
 restart_from = ""
+reset_time = false
 
 [output]
 write_time = 10  # time, in seconds, between writes to the drive

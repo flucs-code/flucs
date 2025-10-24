@@ -61,12 +61,12 @@ def run_flucs():
     )
 
     parser.add_argument(
-        "--input", "-i",
+        "--io_path", "-io",
         type=str,
-        default=None,
+        default=pl.Path.cwd(),
         required=False,
-        help="Path to the input file. If not specified, looks in the current "
-             "working directory for 'input.toml'."
+        help="Path to the i/o directory, which must contain 'input.toml'."
+             "If no path is specified, will assume the current working directory."
     )
 
     parser.add_argument(
@@ -104,33 +104,27 @@ def run_flucs():
 
     args = parser.parse_args()
 
+    io_path = args.io_path
+
     # Run possible helpers
     if args.clean:
-        clean_directory(pl.Path.cwd(), ("restart.*", "output.*"))
+        clean_directory(io_path, ("restart.*", "output.*"))
         return
 
     if args.reconstruct is not None:
         # Import here to avoid circular imports at module load time
         from flucs.systems.flucs_restart_manager import FlucsRestartManager
-        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct)
+        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct,
+                                                           io_path)
         return
 
-    # Parse input file for flucs
-    if args.input is None:
+    input_path = pl.Path(io_path) / "input.toml"
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found in {io_path} "
+        )
 
-        cwd = pl.Path.cwd()
-        candidates = [
-            cwd / "input.toml",
-            cwd / f"{cwd.name}.toml"
-            ]
-        args.input = next((str(c) for c in candidates if c.exists()), None)
-
-        if args.input is None:
-            raise FileNotFoundError(
-                "Input file not found. See 'flucs -- help'."
-                )
-
-    flucs_input = FlucsInput(args.input, args.override)
+    flucs_input = FlucsInput(input_path, args.override)
 
     solver, system = flucs_input.create_solver_system()
 
