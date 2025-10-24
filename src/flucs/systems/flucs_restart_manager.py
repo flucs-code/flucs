@@ -30,6 +30,9 @@ class FlucsRestartManager:
     backup_path: pl.Path
     steps_until_write: int = 0
 
+    # Flag to reset simulation
+    reset_time: bool = False
+
     def __init__(self, system: FlucsSystem):
         self.system = system
 
@@ -109,7 +112,8 @@ class FlucsRestartManager:
 
         with Dataset(self.initial_path, "r") as ds:
             # Set system's time variables to continue from the restart file
-            system.init_time = float(ds.variables["current_time"][...])
+            system.init_time = float(ds.variables["current_time"][...]) if \
+                                    not system.input["restart.reset_time"] else 0.0
             system.init_dt = float(ds.variables["current_dt"][...])
             system.final_time = (
                 system.init_time
@@ -256,7 +260,6 @@ class FlucsRestartManager:
             ds.setncattr("type", str("restart file")) # why?
 
             # Add input file as a string
-            ds.setncattr("input_filename", str(self.system.input.input_path.name))
             ds.setncattr("input_file", str(self.system.input))
 
             # Scalar values
@@ -331,11 +334,9 @@ class FlucsRestartManager:
                     f"Restart file {input_file} does not contain"
                      "an input file stored as a string."
                 ) from e
-            
-            input_filename = getattr(ds, "input_filename", "input.toml")
 
         # Check whether an input file of the same name already exists 
-        input_path = restart_path.parent / str(input_filename)
+        input_path = restart_path.parent / "input.toml"
         if input_path.exists():
             raise FileExistsError(
                 f"Input file already exists: {input_path}"
