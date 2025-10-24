@@ -8,6 +8,14 @@ import flucs
 import pathlib as pl
 
 
+class InvalidFlucsInputFileError(ValueError):
+    """Raised when the input file is a valid TOML file but has invalid
+    contents.
+
+    """
+    pass
+
+
 class FlucsInput:
     """
     Deals with interpreting TOML input files for

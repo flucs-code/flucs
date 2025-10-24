@@ -18,10 +18,10 @@ type = "white_noise"
 amplitude = 1e-4
 
 [restart]
-save_for_restart = true
+write_restart_file = true
 restart_if_exists = false
-restart_write_steps = 10000
-restart_file = ""
+write_steps = 10000
+restart_from = ""
 
 [output]
 write_time = 10  # time, in seconds, between writes to the drive

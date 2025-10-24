@@ -66,9 +66,7 @@ def run_flucs():
         default=None,
         required=False,
         help="Path to the input file. If not specified, looks in the current "
-             "working directory for 'input.toml' and, if that is not found, "
-             "looks for 'NAME.toml' file where NAME matches the name of the "
-             "current working directory."
+             "working directory for 'input.toml'."
     )
 
     parser.add_argument(
@@ -89,6 +87,13 @@ def run_flucs():
              "and exit."
     )
 
+    parser.add_argument(
+        "--reconstruct", "-r",
+        type=str,
+        required=False,
+        help="Reconstruct the input file from the specified restart file."
+    )
+
     parser.add_argument(#TODO
         "--test", "-t",
         action="store_true",
@@ -99,10 +104,18 @@ def run_flucs():
 
     args = parser.parse_args()
 
+    # Run possible helpers
     if args.clean:
         clean_directory(pl.Path.cwd(), ("restart.*", "output.*"))
         return
 
+    if args.reconstruct is not None:
+        # Import here to avoid circular imports at module load time
+        from flucs.systems.flucs_restart_manager import FlucsRestartManager
+        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct)
+        return
+
+    # Parse input file for flucs
     if args.input is None:
 
         cwd = pl.Path.cwd()

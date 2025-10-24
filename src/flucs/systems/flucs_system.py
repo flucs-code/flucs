@@ -22,6 +22,7 @@ import flucs
 from flucs import FlucsInput
 from flucs.output import FlucsOutput, FlucsDiagnostic
 from flucs.utilities.cupy import ModuleOptions
+from flucs.systems.flucs_restart_manager import FlucsRestartManager
 
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
@@ -48,13 +49,8 @@ class FlucsSystem(ABC):
     init_time: float
     init_dt: float
 
-    # Variables for restarting
-    _save_for_restart: bool = False
-    _restart_write_steps: int = 0
-    _restart_counter: int = 0              
-    _restart_path_old: pl.Path | None = None
-    _restart_path_new: pl.Path | None = None
-    _restart_source: pl.Path | None = None
+    # Restart manager
+    restart_manager: FlucsRestartManager
 
     # CuPy module for the system
     cupy_module: cp.RawModule
@@ -139,11 +135,16 @@ class FlucsSystem(ABC):
 
     def setup(self) -> None:
         """
-        First sets up restart options and then delegates to the
-        system-specific setup hook.
+        Sets up the initial time data, calls the restart manager
+        and then delegates to the system-specific setup hook.
+
         """
 
-        self._setup_restart()
+        self.init_time = 0.0
+        self.init_dt = float(self.input["time.dt"])
+        self.final_time = float(self.input["time.tfinal"])
+
+        self.restart_manager = FlucsRestartManager(self)
         self._setup_system()
 
     @abstractmethod
@@ -217,7 +218,7 @@ class FlucsSystem(ABC):
         pass
 
     @abstractmethod
-    def _get_restart_data(self) -> dict[str, dict]:
+    def get_restart_data(self) -> dict[str, dict]:
         """
         Return a dictionary describing restart variables.
 
@@ -230,266 +231,6 @@ class FlucsSystem(ABC):
             ...
         }
         """
-        raise NotImplementedError()
-
-    
-    def _setup_restart(self) -> None:
-        """
-        Sets up restart variables and decides whether to restart.
-        A specified restart file takes precedence over automatic detection.
-        """
-
-        # Flag for whether to save restart data
-        self._save_for_restart = bool(self.input["restart.save_for_restart"])
-        self._restart_source = None
-
-        # Set up paths
-        self._restart_path_old = pl.Path(self.input.io_path / "restart.old.nc")
-        self._restart_path_new = pl.Path(self.input.io_path / "restart.new.nc")
-        self._restart_path_tmp = pl.Path(self.input.io_path / "restart.tmp.nc")
-
-        # Initialise saving cadence
-        self._restart_write_steps = int(self.input["restart.restart_write_steps"])
-        self._restart_counter = int(self.input["restart.restart_write_steps"])
-
-        # Check for specified restart file
-        restart_file = self.input["restart.restart_file"]
-        restart_file_bool = (restart_file != "")
-        restart_if_exists = self.input["restart.restart_if_exists"]
-
-        # Look for possible restart files in the default location
-        existing_files = [
-            p for p in (self._restart_path_new, self._restart_path_old) if p and p.exists()
-        ]
-        if existing_files:
-            print(f"Restart files found in {self.input.io_path}")
-
-        # TODO: remove this block to allow the user to overwrite?
-        if (restart_file == "") and not restart_if_exists and existing_files:
-            print(f"No [restart] flags set. Aborting.")
-            exit(1)
-
-        # Restart from specified file
-        if restart_file != "":
-            p = pl.Path(restart_file).expanduser()
-            if not p.is_absolute(): 
-                p = (self.input.io_path / p).resolve()
-            if not p.exists():
-                print(f"Specified restart file does not exist: {p}")
-                exit(1)
-            try:
-                with Dataset(p, "r") as ds:
-                    self._ensure_restart_complete(ds)
-            except Exception as e:
-                print(f"Invalid restart file {p}: {e}")
-                exit(1)
-            self._restart_source = p
-            print(f"Restarting from specified file: {self._restart_source}")
-            return
-
-        # Restart from existing files 
-        elif restart_if_exists:
-            if existing_files:
-                for f in existing_files:
-                    try:
-                        with Dataset(f, "r") as ds:
-                            self._ensure_restart_complete(ds)
-                        self._restart_source = f
-                        print(f"Restarting from {self._restart_source}.")
-                        return
-                    except Exception as e:
-                        print(f"Found restart file {f} but it is invalid: {e}")
-                print("All found restart files are invalid.")
-                exit(1)
-
-        # Initialise using specified method
-        print(f"Initialising using type: {self.input['init.type']}")
-        self.init_time = 0.0
-        self.init_dt = float(self.input["time.dt"])
-        self.final_time = float(self.input["time.tfinal"])
-
-        return 
-
-    def _ensure_restart_complete(self, ds: Dataset) -> None:
-        """
-        Validates that the restart data is complete, and if so sets the 
-        final simulation time accordingly.
-        """
-        try:
-            if int(getattr(ds, "complete", 0)) != 1:
-                raise ValueError("incomplete")
-        except Exception:
-            # Any parsing/type error counts as incomplete
-            raise ValueError("incomplete")
-
-        try:
-            # Set restart variables
-            self.init_time = float(ds.variables["current_time"][...])
-            self.init_dt = float(ds.variables["current_dt"][...])
-            self.final_time = self.init_time + float(self.input["time.tfinal"])
-
-        except KeyError as e:
-            raise ValueError(f"Missing variable in restart file: {e}")
-        except Exception as e:
-            raise ValueError(f"Failed to read variables in restart file: {e}")
-    
-    def write_restart(self, force: bool=False) -> None:
-        """
-        Executes writing restart data if necessary.
-
-        Parameters
-        ----------
-        force : bool
-            If force is True, the restart data is written at that timestep.
-        """
-
-        if self._save_for_restart is False:
-            return
-
-        # Check whether its time to write
-        if not force:
-            self._restart_counter -= 1
-            if self._restart_counter != 0:
-                return
-            self._restart_counter = self._restart_write_steps
-
-        # Write the data
-        self._write_restart_data()
-
-
-    def _write_restart_data(self) -> None:
-        """
-        Writes restart data to netCDF files, rotating old and new files
-        as necessary.
-        """
-
-        # Filepaths
-        old_path = self._restart_path_old
-        new_path = self._restart_path_new
-        tmp_path = self._restart_path_tmp
-
-        # Get restart data 
-        restart_data = self._get_restart_data()
-
-        # Set precision for netCDF variables
-        precision = "f4" if self.float is np.float32 else "f8"
-
-        # Write to temporary file
-        with Dataset(tmp_path, "w", format="NETCDF4") as ds:
-
-            # Set file attributes
-            ds.setncattr("created", datetime.datetime.now(datetime.timezone.utc).isoformat())
-            ds.setncattr("location", str(tmp_path.parent))
-            ds.setncattr("pid", int(os.getpid()))
-            ds.setncattr("type", str("restart file"))
-            ds.setncattr("restart_write_steps", np.int32(self._restart_write_steps))
-            ds.setncattr("complete", np.int32(0))
-
-            # Scalar values
-            ds.createVariable("current_time", precision, ())[...] = float(self.current_time)
-            ds.createVariable("current_dt", precision, ())[...] = float(self.current_dt)
-
-            # Arrays
-            for var_name, var_dict in restart_data.items():
-                var_data = var_dict["data"]
-                if isinstance(var_data, cp.ndarray):
-                    var_data = cp.asnumpy(var_data)
-
-                dim_names = var_dict.get("dimension_names", None)
-                if dim_names is not None:
-                    for dname, dsize in zip(dim_names, var_data.shape):
-                        if dname not in ds.dimensions:
-                            ds.createDimension(dname, int(dsize))
-                else:
-                    dim_names = tuple(f"{var_name}_dim{i}" for i in range(var_data.ndim))
-                    for dname, dsize in zip(dim_names, var_data.shape):
-                        if dname not in ds.dimensions:
-                            ds.createDimension(dname, int(dsize))
-
-                if np.iscomplexobj(var_data):
-                    v_r = ds.createVariable(f"{var_name}_real", precision, tuple(dim_names))
-                    v_i = ds.createVariable(f"{var_name}_imag", precision, tuple(dim_names))
-                    v_r[:] = var_data.real
-                    v_i[:] = var_data.imag
-                else:
-                    v = ds.createVariable(var_name, precision, tuple(dim_names))
-                    v[:] = var_data
-
-            # Mark write as complete
-            ds.setncattr("complete", np.int32(1))
-
-        # Replace files
-        try:
-            if new_path.exists():
-                os.replace(new_path, old_path)
-        except FileNotFoundError:
-            pass
-
-        os.replace(tmp_path, new_path)
-
-        try:
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except Exception:
-            pass
-
-
-    def load_restart_data(self) -> None:
-        """
-        Load restart array data from self._restart_source and return a dict
-        identical to that returned by _get_restart_data.
-
-        Returns:
-            {
-                "<var_name>": {
-                    "data": np.ndarray,  # NumPy arrays (host)
-                    "dimension_names": (<dim1>, <dim2>, ...),  # tuple[str]
-                },
-                ...
-            }
-
-        """
-        if self._restart_source is None:
-            raise ValueError("No restart source set; call _setup_restart first.")
-
-        restart_data = {}    
-            
-        with Dataset(self._restart_source, "r") as ds:
-            var_names = [v for v in ds.variables.keys() if v not in {"current_time", "current_dt"}]
-
-            for name in var_names:
-                # Imaginary part handled simulatneously with real part
-                if name.endswith("_imag"):
-                    continue
-
-                # Complex arrays stored as <base>_real and <base>_imag
-                if name.endswith("_real"):
-                    base_name = name.rstrip("_real")
-                    imag_name = base_name + "_imag"
-
-                    v_r = ds.variables[name]
-                    if imag_name in ds.variables:
-                        v_i = ds.variables[imag_name]
-                        real = np.asarray(v_r[...])
-                        imag = np.asarray(v_i[...])
-                        data = real + 1j * imag
-                        dims = tuple(v_r.dimensions)
-                        restart_data[base_name] = {"data": data, "dimension_names": dims}
-                    else:
-                        # No matching imag: treat as a regular real-valued variable with its own name
-                        data = np.asarray(v_r[...])
-                        dims = tuple(v_r.dimensions)
-                        restart_data[name] = {"data": data, "dimension_names": dims}
-                    continue
-                        
-                # Regular real-valued array
-                var = ds.variables[name]
-                data = np.asarray(var[...])
-                dims = tuple(var.dimensions)
-                restart_data[name] = {"data": data, "dimension_names": dims}
-
-        return restart_data
-
 
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
