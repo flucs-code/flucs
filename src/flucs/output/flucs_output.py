@@ -109,7 +109,7 @@ class FlucsOutput:
                 datetime.datetime.now(datetime.timezone.utc).isoformat()
             )
             self.dataset.setncattr("location", str(self.filepath.parent))
-            self.dataset.setncattr("type", str("output file"))
+            self.dataset.setncattr("type", str("flucs_output"))
 
             # Check if we already have all necessary dimensions
             # for every diagnostic

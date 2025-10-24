@@ -63,7 +63,7 @@ def run_flucs():
     parser.add_argument(
         "--io_path", "-io",
         type=str,
-        default=None,
+        default=pl.Path.cwd(),
         required=False,
         help="Path to the i/o directory, which must contain 'input.toml'."
              "If no path is specified, will assume the current working directory."
@@ -87,15 +87,16 @@ def run_flucs():
 
     args = parser.parse_args()
 
+    io_path = args.io_path
+
     if args.reconstruct is not None:
         # Import here to avoid circular imports at module load time
         from flucs.systems.flucs_restart_manager import FlucsRestartManager
-        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct)
+        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct,
+                                                           io_path)
         return
 
-    # Construct input
-    io_path    = pl.Path(args.io_path).resolve() if args.io_path is not None else pl.Path.cwd()
-    input_path = pl.Path(io_path) / "input.toml" if io_path is not None else pl.Path("input.toml")
+    input_path = pl.Path(io_path) / "input.toml"
     if not input_path.exists():
         raise FileNotFoundError(
             f"Input file not found in {io_path} "
