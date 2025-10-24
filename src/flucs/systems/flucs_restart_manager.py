@@ -1,7 +1,3 @@
-"""
-Helper class that handles writing and reading restart files.
-"""
-
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import datetime
@@ -16,8 +12,11 @@ from flucs.solvers import FlucsSolverState
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
 
-
 class FlucsRestartManager:
+    """
+    Helper class that handles writing and reading restart files.
+    """
+
     # Parent system
     system: FlucsSystem
 
@@ -56,7 +55,7 @@ class FlucsRestartManager:
         if restart_if_exists and is_restart_from_specified:
             raise InvalidFlucsInputFileError(
                 "'restart_from' and 'restart_if_exists' cannot be specified"
-                " simultaneously!"
+                " simultaneously."
             )
 
         # Restart from default restart file
@@ -79,10 +78,10 @@ class FlucsRestartManager:
             if not self.initial_path.exists():
                 raise InvalidFlucsInputFileError(
                     f"The restart_from file {self.initial_path}"
-                    " cannot be found!"
+                    " cannot be found."
                 )
 
-        print(f"Restarting from specified file: {self.initial_path}")
+        print(f"Restarting from file: {self.initial_path}")
 
     def _load_restart_data(self) -> None:
         """
@@ -178,8 +177,8 @@ class FlucsRestartManager:
         if (self.write_path.exists()
                 and not system_input["restart.restart_if_exists"]):
             raise InvalidFlucsInputFileError(
-                "You must remove restart.nc manually if write_restart_file is "
-                "True but restart_if_exists is False!"
+                "You must remove existing 'restart.nc' manually if write_restart_file"
+                "is 'True' but restart_if_exists is 'False'."
             )
 
     def write_restart(self, force: bool = False) -> None:
@@ -253,12 +252,12 @@ class FlucsRestartManager:
                 "created",
                 datetime.datetime.now(datetime.timezone.utc).isoformat()
             )
-
             ds.setncattr("location", str(self.write_path.parent))
-            # ds.setncattr("pid", int(os.getpid()))  # why?
-            # ds.setncattr("type", str("restart file")) # why?
-            # ds.setncattr("restart_write_steps", np.int32(self._restart_write_steps)) # why?
-            # ds.setncattr("complete", np.int32(0))
+            ds.setncattr("type", str("restart file")) # why?
+
+            # Add input file as a string
+            ds.setncattr("input_filename", str(self.system.input.input_path.name))
+            ds.setncattr("input_file", str(self.system.input))
 
             # Scalar values
             ds.createVariable("current_time", precision, ())[...] =\
@@ -292,3 +291,57 @@ class FlucsRestartManager:
                 else:
                     v = ds.createVariable(var_name, precision, tuple(dim_names))
                     v[:] = var_data
+
+        # Remove backup file after successful write
+        if self.backup_path.exists():
+            self.backup_path.unlink()
+
+    @staticmethod
+    def reconstruct_input_from_restart(filepath: str | pl.Path) -> FlucsInput:
+        """
+        Reconstructs an input file from a restart file.
+
+        Parameters
+        ----------
+        filepath : str | Path
+            Path to the restart file.
+
+        Returns
+        -------
+        filepath: Path
+            The reconstructed input file path.
+
+        """
+
+        # Check supplied path
+        restart_path = pl.Path(filepath).expanduser().resolve()
+        if not restart_path.exists():
+            raise FileNotFoundError(f"Restart file not found: {restart_path}")
+
+        # Get input file from restart file
+        with Dataset(restart_path, "r") as ds:
+            if getattr(ds, "type", None) != "restart file":
+                raise ValueError(
+                    f"File {restart_path} is not a restart file."
+                )
+            try:
+                input_file = ds.getncattr("input_file")
+            except Exception as e:
+                raise ValueError(
+                    f"Restart file {input_file} does not contain"
+                     "an input file stored as a string."
+                ) from e
+            
+            input_filename = getattr(ds, "input_filename", "input.toml")
+
+        # Check whether an input file of the same name already exists 
+        input_path = restart_path.parent / str(input_filename)
+        if input_path.exists():
+            raise FileExistsError(
+                f"Input file already exists: {input_path}"
+            )
+
+        input_path.write_text(input_file)
+        print(f"Reconstructed input file: {input_path}")
+
+        return

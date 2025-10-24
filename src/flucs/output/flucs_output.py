@@ -6,6 +6,7 @@ executed together and output to either a file or the stdout.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import numpy as np
+import datetime
 import pathlib as pl
 from netCDF4 import Dataset, Group
 from flucs.solvers import FlucsSolverState
@@ -101,6 +102,14 @@ class FlucsOutput:
 
         with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()
+
+            # Set global attributes
+            self.dataset.setncattr(
+                "created",
+                datetime.datetime.now(datetime.timezone.utc).isoformat()
+            )
+            self.dataset.setncattr("location", str(self.filepath.parent))
+            self.dataset.setncattr("type", str("output file"))
 
             # Check if we already have all necessary dimensions
             # for every diagnostic
