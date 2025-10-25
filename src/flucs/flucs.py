@@ -48,16 +48,29 @@ def get_system_type(system_name: str):
     """
     return systems[system_name].load()
 
-def run_flucs():
+
+def run_flucs(input_path: pl.Path, override: list = None):
+    """
+    Construct FlucsInput then call the appropriate solver.
+
+    """
+    flucs_input = FlucsInput(input_path, override)
+
+    solver, _ = flucs_input.create_solver_system()
+
+    solver.run()
+
+
+def main():
     """Main starting point for flucs.
 
-    This function interprets command-line arguments, feeds them
-    to FlucsInput, then finally calls the appropriate solver.
+    This function interprets command-line arguments and decides what to do
+    next.
 
     """
 
     parser = argparse.ArgumentParser(
-        description="Runs the appropriate flucs solver using an input file"
+        description="flucs = fluid cuda solver."
     )
 
     parser.add_argument(
@@ -78,7 +91,19 @@ def run_flucs():
              "of dt in group time to be 0.01, specify 'time.dt 0.01'."
     )
 
-    parser.add_argument(
+    # The script can only do one thing at a time.
+    # Here are the options.
+    operation_modes = parser.add_mutually_exclusive_group()
+
+    operation_modes.add_argument(
+        "--run",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Runs the appropriate solver using input.toml from --io_path."
+    )
+
+    operation_modes.add_argument(
         "--clean", "-c",
         action="store_true",
         default=False,
@@ -87,14 +112,15 @@ def run_flucs():
              "and exit."
     )
 
-    parser.add_argument(
+    operation_modes.add_argument(
         "--reconstruct", "-r",
         type=str,
         required=False,
         help="Reconstruct the input file from the specified restart file."
+             " Note that --override is ignored."
     )
 
-    parser.add_argument(#TODO
+    operation_modes.add_argument(#TODO
         "--test", "-t",
         action="store_true",
         default=False,
@@ -103,34 +129,33 @@ def run_flucs():
     )
 
     args = parser.parse_args()
-
     io_path = args.io_path
 
-    # Run possible helpers
+    # If nothing is specified, assume --run
+    if not any((args.run, args.clean, args.reconstruct, args.test)):
+        args.run = True
+
+    # Actually solve something
+    if args.run:
+        input_path = pl.Path(io_path) / "input.toml"
+
+        if not input_path.exists():
+            raise FileNotFoundError(
+                f"Input file not found in {io_path} "
+            )
+
+        run_flucs(input_path, args.override)
+        return
+
+    # Cleanup
     if args.clean:
         clean_directory(io_path, ("restart.*", "output.*"))
         return
 
+    # Input-file reconstruction
     if args.reconstruct is not None:
         # Import here to avoid circular imports at module load time
         from flucs.systems.flucs_restart_manager import FlucsRestartManager
         FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct,
                                                            io_path)
         return
-
-    input_path = pl.Path(io_path) / "input.toml"
-    if not input_path.exists():
-        raise FileNotFoundError(
-            f"Input file not found in {io_path} "
-        )
-
-    flucs_input = FlucsInput(input_path, args.override)
-
-    solver, system = flucs_input.create_solver_system()
-
-    # Start execution
-    solver.run()
-
-
-if __name__ == "__main__":
-    run_flucs()

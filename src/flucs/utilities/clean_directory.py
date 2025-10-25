@@ -1,12 +1,11 @@
 import pathlib as pl
 
+
 def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
     """
     Cleans up files matching given patterns in the specified directory.
     """
 
-    # Ensure typing
-    path = pl.Path(path).resolve()
     abort_msg = "Cleaning aborted."
 
     # Collect unique files matching patterns
@@ -28,17 +27,17 @@ def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
         print(f" - {p.name}")
 
     try:
-        resp = input("Confirm with <ENTER>")
+        resp = input("Type YES to proceed:")
     except (KeyboardInterrupt, EOFError):
         print("\n" + abort_msg)
         return
 
-    if resp == "":
+    if resp == "YES":
         for p in candidates:
             try:
                 p.unlink(missing_ok=True)
-            except Exception as e:
-                print(f"Could not delete {p.name}: {e}")
+            except (IsADirectoryError, PermissionError, OSError) as e:
+                print(f"Could not delete {p.name}:\n{e}")
         print("Cleanup complete.")
     else:
         print(abort_msg)

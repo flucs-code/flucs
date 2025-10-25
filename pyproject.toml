@@ -24,4 +24,4 @@ FourierSolver = "flucs.solvers.fourier.fourier_solver:FourierSolver"
 ColdITG2DFourier = "flucs.systems.cold_itg_2d_fourier.cold_itg_2d_fourier:ColdITG2DFourier"
 
 [project.scripts]
-flucs = "flucs.flucs:run_flucs"
+flucs = "flucs.flucs:main"
