@@ -69,6 +69,9 @@ def run_flucs(input_path: pl.Path, override: list = None):
 
     with open(log_path, "a", encoding="utf-8") as log_file:
         with FlucsLogHandler(log_file, keep_stdout=True):
+
+            print(f"\n{'-'*80}\nRunning flucs\n{'-'*80}")
+
             flucs_input = FlucsInput(input_path, override)
 
             solver, _ = flucs_input.create_solver_system()
@@ -123,7 +126,7 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Remove 'output.*' and 'restart.*' files in the current directory"
+        help="Remove 'output.*' and 'restart.*' files in the current directory "
              "and exit."
     )
 
