@@ -11,6 +11,23 @@ from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
 
 
+FLUCS_HEADER = (
+    r"""
+*******************************************************************
+*                                                                 *
+*     _______________________________________________________     *
+*     /~~~~~~~~\_/~~\_______/~~\__/~~\__/~~~~~~\___/~~~~~~\__     *
+*     /~~\_______/~~\_______/~~\__/~~\_/~~\__/~~\_/~~\_______     *
+*     /~~~~~~\___/~~\_______/~~\__/~~\_/~~\________/~~~~~~\__     *
+*     /~~\_______/~~\_______/~~\__/~~\_/~~\__/~~\_______/~~\_     *
+*     /~~\_______/~~~~~~~~\__/~~~~~~\___/~~~~~~\___/~~~~~~\__     *
+*     _______________________________________________________     *
+*                                                                 *
+*                                                                 *
+*******************************************************************
+    """
+)
+
 # Load lists of registered solvers and systems
 solvers = entry_points().select(group="flucs.solvers")
 systems = entry_points().select(group="flucs.systems")
@@ -70,7 +87,7 @@ def run_flucs(input_path: pl.Path, override: list = None):
     with open(log_path, "a", encoding="utf-8") as log_file:
         with FlucsLogHandler(log_file, keep_stdout=True):
 
-            print(f"\n{'-'*80}\nRunning flucs\n{'-'*80}")
+            print(f"{FLUCS_HEADER}")
 
             flucs_input = FlucsInput(input_path, override)
 
