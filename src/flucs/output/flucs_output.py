@@ -151,10 +151,20 @@ class FlucsOutputText(FlucsOutput):
                 f"{diag.name:>{self.column_width}}"
             )
 
-        if not self.filepath.exists():
-            with open(self.filepath, "a", encoding="utf-8") as file:
-                file.write(self.column_pad.join(column_names))
+        file_existed = self.filepath.exists()
+        columns_n = (len(self.timing_data_column_names)
+                     + len(self.diagnostics))
+        total_data_width = (
+            columns_n * self.column_width
+            + (columns_n - 1) * len(self.column_pad)
+        )
+
+        with open(self.filepath, "a", encoding="utf-8") as file:
+            if file_existed:
+                file.write("-" * total_data_width)
                 file.write('\n')
+            file.write(self.column_pad.join(column_names))
+            file.write('\n')
 
     def _add_diagnostics_from_input(self):
         """ Add additional check for scalar diagnostics. """
