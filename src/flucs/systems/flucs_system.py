@@ -326,7 +326,7 @@ class FlucsSystem(ABC):
             print(f"({info['id']}) {info['name']}: {global_used_gb:.3f} of "
                   f"{global_total_gb:.3f} GB "
                   f"({global_used_gb / global_total_gb * 100:.2f}%). "
-                  f"CuPy: {cupy_total_gb:.3f} GB "
+                  f"CuPy's share: {cupy_total_gb:.3f} GB "
                   f"({cupy_total_gb / global_total_gb * 100:.2f}%).")
 
         return device_info
