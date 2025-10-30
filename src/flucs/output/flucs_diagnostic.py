@@ -11,11 +11,7 @@ if TYPE_CHECKING:
 
 
 class FlucsDiagnostic(ABC):
-    """
-    Prepares data to be saved by a FlucsOutput or directly writes to
-    stdout.
-
-    """
+    """ Prepares data to be written by a FlucsOutput. """
     # Name of the diagnostic
     name: str
 
@@ -40,20 +36,10 @@ class FlucsDiagnostic(ABC):
         self.output = output
         self.data_cache = []
 
-    @abstractmethod
-    def print_diagnostic(self):
-        """Called if the diagnostic's output group is stdout_only."""
-
     def execute(self):
         """Runs the diagnostic."""
         self.data_cache.append(
             self.get_data())
-
-        if self.output.stdout_only:
-            self.print_diagnostic()
-
-            # No need to keep stuff in memory if stdout_only
-            self.data_cache.clear()
 
     @abstractmethod
     def ready(self) -> None:

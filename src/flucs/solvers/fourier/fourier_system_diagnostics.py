@@ -11,6 +11,7 @@ class LinearSpectrumDiag(FlucsDiagnostic):
 
     """
     name = "linear_spectrum"
+    shape = ("kz", "kx", "ky")
     system: FourierSystem
     is_complex = True
 
@@ -18,7 +19,6 @@ class LinearSpectrumDiag(FlucsDiagnostic):
     field_index: int = 0
 
     def ready(self):
-        self.shape = ("kz", "kx", "ky")
         self.dimensions_dict = {"kx": self.system.kx,
                                 "ky": self.system.ky,
                                 "kz": self.system.kz}

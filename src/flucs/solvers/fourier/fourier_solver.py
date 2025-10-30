@@ -60,6 +60,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.execute_diagnostics()
 
         start_time = time.time()
+        self.system.steps_until_next_write = self.system.input["output.write_steps"]
+
         while self._not_done():
             self.system.begin_time_step()
 
@@ -68,10 +70,12 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
             self.system.finish_time_step()
             self.system.execute_diagnostics()
-            self.system.restart_manager.write_restart(force=False)
+            self.system.write_output()
+            self.system.restart_manager.write_restart()
         end_time = time.time()
 
-        self.system.write_output()
+        # One final write
+        self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
 
         return end_time - start_time

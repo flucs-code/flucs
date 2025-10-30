@@ -51,18 +51,22 @@ precompute_linear_matrix = false
 [output.0d]
 save_steps = -1
 diags = []
+type = "netcdf4"
 
 [output.1d]
 save_steps = -1
 diags = []
+type = "netcdf4"
 
 [output.2d]
 save_steps = -1
 diags = []
+type = "netcdf4"
 
 [output.3d]
 save_steps = -1
 diags = []
+type = "netcdf4"
 
 [hyper]
 perphypervisc = 0.0

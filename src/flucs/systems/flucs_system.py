@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import pathlib as pl
 import os
+import time
 import heapq
 import datetime
 from netCDF4 import Dataset
@@ -60,6 +61,7 @@ class FlucsSystem(ABC):
 
     # A priority queue of outputs
     output_heap: list[FlucsOutput] | None = None
+    steps_until_next_write: int
 
     # A dict of supported diagnostics
     diags_dict: dict[str, Type[FlucsDiagnostic]]
@@ -109,22 +111,26 @@ class FlucsSystem(ABC):
 
         heapq.heappush(self.output_heap, output)
 
-    def execute_diagnostics(self, ignore_next_save: bool = False):
+    def execute_diagnostics(self, force: bool = False):
         """Executes diagnostics based on the current time step.
 
         Parameters
         ----------
-        ignore_next_save : bool
-            If ignore_next_save is True, then all diagnostics are executed
+        force: bool
+            If force is True, then all diagnostics are executed
             regardless of their next save time.
 
         """
         if self.output_heap is None:
             return
 
-        if ignore_next_save:
+        if force:
             for output_to_execute in self.output_heap:
                 output_to_execute.execute()
+
+            # Reset heap for the next save
+            heapq.heapify(self.output_heap)
+
             return
 
         # Execute only those that need to be executed at the current time step
@@ -154,7 +160,13 @@ class FlucsSystem(ABC):
         """
         pass
 
-    def write_output(self):
+    def write_output(self, force=False):
+        self.steps_until_next_write -= 1
+        if self.steps_until_next_write > 0 and not force:
+            return
+
+        self.steps_until_next_write = self.input["output.write_steps"]
+
         if self.output_heap is not None:
             for output in self.output_heap:
                 output.write()
@@ -212,6 +224,9 @@ class FlucsSystem(ABC):
         if self.output_heap is not None:
             for output in self.output_heap:
                 output.ready()
+
+            # Reset heap for the next save
+            heapq.heapify(self.output_heap)
 
     @abstractmethod
     def _interpret_input(self) -> None:
