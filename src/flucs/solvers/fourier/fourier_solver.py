@@ -26,6 +26,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.setup()
         self.system.setup_output()
         self.system.compile_cupy_module()
+        self.system.get_memory_usage()
 
         # Timing
         self.system.ready()
@@ -44,7 +45,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         time_taken = self._solver_loop()
 
-        print(f"flucs given in {time_taken} seconds.")
+        print(f"flucs given in {time_taken} seconds.\n")
 
     def _not_done(self) -> bool:
         if self.interrupted:

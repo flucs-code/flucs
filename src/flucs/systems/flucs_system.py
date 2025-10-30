@@ -198,7 +198,6 @@ class FlucsSystem(ABC):
 
         import datetime
 
-        # resource_path = Path(importlib.import_module(self.__module__).__file__).parent / f"{self.__module__.split('.')[-1]}.cu"
         p = pl.Path(importlib.import_module(self.__module__).__file__)
         resource_path = p.with_name(f"{p.stem}.cu")
         with open(resource_path) as f:
@@ -212,6 +211,115 @@ class FlucsSystem(ABC):
                                         options=self.module_options.get_options())
 
         self.cupy_module.compile()
+
+    def get_memory_usage(self, devices=None, synchronize=True) -> dict:
+
+        """
+        Checks the memory usage on the current devices and returns a dictionary
+        with the results.
+
+        Parameters
+        ----------
+        devices : list[int] | None
+            Specific device ordinals to query. If None, queries all visible devices.
+        synchronize : bool
+            If True, calls deviceSynchronize() on each device before sampling.
+
+        Returns
+        -------
+        device_info: dict
+            Dictionary with memory usage data
+
+        Notes
+        -----
+        All of the memory values in device_info are in bytes.
+
+        """
+        
+        # Get device count
+        n_devices = cp.cuda.runtime.getDeviceCount()
+        if devices is None:
+            devices = list(range(n_devices))
+
+        # Initialise dictionary
+        device_info = {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "number_of_devices": n_devices,
+        }
+
+        # Save current device to keep context stable
+        current_device = cp.cuda.Device()
+
+        for index in devices:
+            with cp.cuda.Device(int(index)) as device:
+                
+                # Setup dict
+                key = f"device_{device.id:03d}"
+                device_info[key] = {}
+
+                # Ensure everything is synchronised before getting data
+                if synchronize:
+                    try:
+                        cp.cuda.runtime.deviceSynchronize()
+                    except Exception:
+                        pass
+
+                # Global device memory
+                global_free, global_total = cp.cuda.runtime.memGetInfo()
+                global_used = global_total - global_free
+
+                # CuPy pools (device + pinned/host)
+                pool = cp.get_default_memory_pool()
+                pool_total = pool.total_bytes()
+                pool_used = pool.used_bytes()
+                pool_free = max(pool_total - pool_used, 0.0)
+
+                # Device properties
+                name, compute_capability, multiprocessors = None, None, None
+                try:
+                    properties = cp.cuda.runtime.getDeviceProperties(device.id)
+                    name = properties.get("name")
+                    if isinstance(name, (bytes, bytearray)):
+                        name = name.decode()
+                    compute_capability = f"{properties.get('major', '?')}.{properties.get('minor', '?')}"
+                    multiprocessors = properties.get("multiProcessorCount")
+                except Exception:
+                    pass
+
+                # Collate info
+                device_info[key] = {
+                    "id": int(device.id),
+                    "name": name,
+                    "compute_capability": compute_capability,
+                    "multiprocessors": multiprocessors,
+                    "global": {
+                        "total": int(global_total),
+                        "free": int(global_free),
+                        "used": int(global_used),
+                    },
+                    "cupy": {
+                        "totals": int(pool_total),
+                        "used": int(pool_used),
+                        "free": int(pool_free),
+                    }
+                }
+
+        # Ensure return to original context
+        with current_device:
+            pass
+
+        # Print device information
+        for key, info in device_info.items():
+            if not key.startswith("device_"):
+                continue
+
+            bytes_to_gb = 1024**3
+            used_gb = info['global']['used'] / bytes_to_gb
+            total_gb = info['global']['total'] / bytes_to_gb
+
+            print(f"{info['name']}: {used_gb:.3f} of {total_gb:.3f} GB ({used_gb / total_gb * 100:.2f}%)")
+
+        return device_info
 
     def ready(self) -> None:
         """
@@ -250,7 +358,7 @@ class FlucsSystem(ABC):
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        print(f"-I{pl.Path(flucs.__file__).parent}")
+        print(f"-I{pl.Path(flucs.__file__).parent}\n")
         self.module_options.add_string_option(f"-I{pl.Path(flucs.__file__).parent.parent}")
         self._interpret_input()
         self._set_precision()
