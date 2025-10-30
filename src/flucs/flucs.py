@@ -5,6 +5,8 @@ Used to run simulations.
 
 import argparse
 import pathlib as pl
+import importlib.metadata
+from datetime import datetime
 from importlib.metadata import entry_points
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
@@ -12,20 +14,22 @@ from flucs.utilities.log_handler import FlucsLogHandler
 
 
 FLUCS_HEADER = (
-    r"""
+rf"""
 *******************************************************************
-*                                                                 *
-*     __________ ____       ____  ____   ______     ______        *
-*     |~~~~~~~~| |~~|       |~~|  |~~|  /~~~~~~\   /~~~~~~\       *
-*     |~~|       |~~|       |~~|  |~~| /~~/  \~~\ |~~|            *
-*     |~~~~~~|   |~~|       |~~|  |~~| |~~|        \~~~~~~\       *
-*     |~~|       |~~\       \~~\  /~~/ \~~\  /~~/       |~~|      *
-*     |~~|       |~~~~~~~~|  \~~~~~~/   \~~~~~~/   /~~~~~~/       *
-*     _______________________________________________________     *
-*                                                                 *
-*                                                                 *
+                                                                   
+      __________ ____       ____  ____   ______     ______         
+      |   _____| |  |       |  |  |  |  /  __  \   /  ____\        
+      |  |___    |  |       |  |  |  | /  /  \__\ |  |____         
+      |   ___|   |  |       |  |  |  | |  |   __   \____  \        
+      |  |       |  |_____  \  \__/  / \  \__/  /   ____|  |         
+      |__|       |________|  \______/   \______/   /______/           
+                                                                   
+                                                                   
 *******************************************************************
-    """
+
+{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Version: {importlib.metadata.version('flucs')}
+"""
 )
 
 # Load lists of registered solvers and systems

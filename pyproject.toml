@@ -1,6 +1,5 @@
 [project]
 name = "flucs"
-version = "0.0"
 description = "Framework for solving fluid models of plasmas"
 authors = [
     {name = "P. G. Ivanov"}, 
@@ -9,13 +8,18 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
+dynamic = ["version"]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools_scm]
+write_to = "src/flucs/_version.py"   # create this at build/install time
+fallback_version = "0.0"    
 
 [project.entry-points."flucs.solvers"]
 FourierSolver = "flucs.solvers.fourier.fourier_solver:FourierSolver"
