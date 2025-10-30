@@ -213,16 +213,17 @@ class FlucsSystem(ABC):
         self.cupy_module.compile()
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
-
         """
         Checks the memory usage on the current devices and returns a dictionary
         with the results.
 
         Parameters
         ----------
-        devices : list[int] | None
-            Specific device ordinals to query. If None, queries all visible devices.
-        synchronize : bool
+        devices: list[int] | None
+            Specific device ordinals to query. If None, queries all visible
+            devices.
+
+        synchronize: bool
             If True, calls deviceSynchronize() on each device before sampling.
 
         Returns
@@ -235,7 +236,7 @@ class FlucsSystem(ABC):
         All of the memory values in device_info are in bytes.
 
         """
-        
+
         # Get device count
         n_devices = cp.cuda.runtime.getDeviceCount()
         if devices is None:
@@ -252,7 +253,7 @@ class FlucsSystem(ABC):
 
         for index in devices:
             with cp.cuda.Device(int(index)) as device:
-                
+
                 # Setup dict
                 key = f"device_{device.id:03d}"
                 device_info[key] = {}
@@ -298,7 +299,7 @@ class FlucsSystem(ABC):
                         "used": int(global_used),
                     },
                     "cupy": {
-                        "totals": int(pool_total),
+                        "total": int(pool_total),
                         "used": int(pool_used),
                         "free": int(pool_free),
                     }
@@ -308,16 +309,25 @@ class FlucsSystem(ABC):
         with current_device:
             pass
 
+        print(f"CuPy is using GPU device {current_device.id}.")
+
+        bytes_to_gb = 1024**3
+
         # Print device information
         for key, info in device_info.items():
             if not key.startswith("device_"):
                 continue
 
-            bytes_to_gb = 1024**3
-            used_gb = info['global']['used'] / bytes_to_gb
-            total_gb = info['global']['total'] / bytes_to_gb
+            global_used_gb = info['global']['used'] / bytes_to_gb
+            global_total_gb = info['global']['total'] / bytes_to_gb
 
-            print(f"{info['name']}: {used_gb:.3f} of {total_gb:.3f} GB ({used_gb / total_gb * 100:.2f}%)")
+            cupy_total_gb = info['cupy']['total'] / bytes_to_gb
+
+            print(f"({info['id']}) {info['name']}: {global_used_gb:.3f} of "
+                  f"{global_total_gb:.3f} GB "
+                  f"({global_used_gb / global_total_gb * 100:.2f}%). "
+                  f"CuPy: {cupy_total_gb:.3f} GB "
+                  f"({cupy_total_gb / global_total_gb * 100:.2f}%).")
 
         return device_info
 
@@ -358,7 +368,6 @@ class FlucsSystem(ABC):
     def __init__(self, input : FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        print(f"-I{pl.Path(flucs.__file__).parent}\n")
         self.module_options.add_string_option(f"-I{pl.Path(flucs.__file__).parent.parent}")
         self._interpret_input()
         self._set_precision()
