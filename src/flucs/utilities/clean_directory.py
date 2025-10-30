@@ -27,7 +27,7 @@ def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
         print(f" - {p.name}")
 
     try:
-        resp = input("Type YES to proceed:")
+        resp = input("Type YES to proceed: ")
     except (KeyboardInterrupt, EOFError):
         print("\n" + abort_msg)
         return

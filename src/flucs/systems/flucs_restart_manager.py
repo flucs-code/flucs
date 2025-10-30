@@ -68,6 +68,7 @@ class FlucsRestartManager:
             if not self.initial_path.exists():
                 # Well, it does not exist
                 self.initial_path = None
+                return
 
         if is_restart_from_specified:
             self.initial_path = pl.Path(restart_from).expanduser()

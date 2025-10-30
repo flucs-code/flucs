@@ -44,7 +44,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         time_taken = self._solver_loop()
 
-        print(f"flucs given in {time_taken} seconds!")
+        print(f"flucs given in {time_taken} seconds.")
 
     def _not_done(self) -> bool:
         if self.state == FlucsSolverState.TIMING:

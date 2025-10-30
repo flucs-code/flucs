@@ -14,7 +14,7 @@ from flucs.utilities.log_handler import FlucsLogHandler
 
 
 FLUCS_HEADER = (
-r"""
+rf"""
 *******************************************************************
                                                                    
       __________ ____       ____  ____   ______     ______

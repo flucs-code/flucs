@@ -61,7 +61,6 @@ class FlucsOutput(ABC):
 
     def __new__(cls, name: str, system: FlucsSystem):
         output_type = system.input[f"output.{name}.type"]
-        print(_registered_outputs)
         output_class = _registered_outputs[output_type].load()
         return super().__new__(output_class)
 
@@ -130,7 +129,7 @@ class FlucsOutputText(FlucsOutput):
 
     # The first few columns are always the same and contain simple timing data
     timing_data = []
-    timing_data_column_names = ["time", "time step", "dt"]
+    timing_data_column_names = ["time", "step", "dt"]
 
     # Data formatting options
     column_width = 12
