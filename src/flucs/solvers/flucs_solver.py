@@ -6,6 +6,7 @@ abstract methods.
 """
 
 import enum
+import signal
 from typing import TypeVar, Generic
 from abc import ABC, abstractmethod
 from flucs import FlucsInput
@@ -27,6 +28,7 @@ class FlucsSolver(Generic[T_System], ABC):
     input: FlucsInput
     system: T_System
     state: FlucsSolverState
+    interrupted: bool = False
 
     @abstractmethod
     def run(self) -> None:
@@ -37,3 +39,13 @@ class FlucsSolver(Generic[T_System], ABC):
         self.input = flucs_input
         self.system = flucs_system
         self.state = FlucsSolverState.NOTINITIALISED
+
+        # Handle signals in order to exit gracefully
+        def signal_handler(signum, frame):
+            print(f"\nCaught signal {signum}. Exiting gracefully...")
+            self.interrupted = True
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGUSR1, signal_handler)
+        signal.signal(signal.SIGUSR2, signal_handler)

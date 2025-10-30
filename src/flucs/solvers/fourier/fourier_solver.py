@@ -47,6 +47,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         print(f"flucs given in {time_taken} seconds.")
 
     def _not_done(self) -> bool:
+        if self.interrupted:
+            return False
+
         if self.state == FlucsSolverState.TIMING:
             return self.system.current_step\
                    < self.system.input["setup.timing_steps"]
@@ -54,8 +57,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         return self.system.current_time < self.system.final_time
 
     def _solver_loop(self) -> float:
-        is_nonlinear = not self.system.input["setup.linear"]
+        if self.interrupted:
+            return 0.0
 
+        is_nonlinear = not self.system.input["setup.linear"]
         # Diagnostics for the first time step
         self.system.execute_diagnostics()
 
