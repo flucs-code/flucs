@@ -309,8 +309,6 @@ class FlucsSystem(ABC):
         with current_device:
             pass
 
-        print(f"CuPy is using GPU device {current_device.id}.")
-
         bytes_to_gb = 1024**3
 
         # Print device information
@@ -323,10 +321,10 @@ class FlucsSystem(ABC):
 
             cupy_total_gb = info['cupy']['total'] / bytes_to_gb
 
-            print(f"({info['id']}) {info['name']}: {global_used_gb:.3f} of "
+            print(f"({info['id']}) {info['name']}: {global_used_gb:.3f} / "
                   f"{global_total_gb:.3f} GB "
-                  f"({global_used_gb / global_total_gb * 100:.2f}%). "
-                  f"CuPy's share: {cupy_total_gb:.3f} GB "
+                  f"({global_used_gb / global_total_gb * 100:.2f}%), "
+                  f"CuPy usage: {cupy_total_gb:.3f} GB "
                   f"({cupy_total_gb / global_total_gb * 100:.2f}%).")
 
         return device_info
