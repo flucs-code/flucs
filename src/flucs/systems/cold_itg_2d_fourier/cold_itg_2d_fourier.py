@@ -41,8 +41,21 @@ class ColdITG2DFourier(FourierSystem):
     plan_r2c: cufft.PlanNd
     plan_c2r: cufft.PlanNd
 
+    # CUDA grids
+    half_unpadded_cuda_grid_size: int
+    half_padded_cuda_grid_size: int
+    full_padded_cuda_grid_size: int
+    zonal_average_cuda_block: tuple
+    zonal_average_cuda_grid: tuple
+    zonal_average_shared_mem: int
+
+    # CUDA FFTs
+    fft_c2r_plan_type: int
+    fft_r2c_plan_type: int
+
     find_derivatives_kernel: cp.RawKernel
     find_nonlinear_bits_kernel: cp.RawKernel
+    zonal_average_kernel: cp.RawKernel
 
     # Supported diagnostics
     diags_dict = {"heatflux": HeatfluxDiag,
@@ -62,6 +75,38 @@ class ColdITG2DFourier(FourierSystem):
             cupy_set_device_pointer(self.cupy_module,
                                     "multistep_nonlinear_terms",
                                     self.multistep_nonlinear_terms)
+        # Setup kernel parameters (grid, block, shared memory)
+        self.half_unpadded_cuda_grid_size = (
+            (self.half_unpadded_size + self.cuda_block_size - 1)
+            // self.cuda_block_size
+        )
+
+        self.half_padded_cuda_grid_size = (
+            (self.half_padded_size + self.cuda_block_size - 1)
+            // self.cuda_block_size
+        )
+
+        self.full_padded_cuda_grid_size = (
+            (self.full_padded_size + self.cuda_block_size - 1)
+            // self.cuda_block_size
+        )
+
+        self.zonal_average_cuda_block = (32, 16)
+        self.zonal_average_cuda_grid = (
+            (self.padded_nx + self.zonal_average_cuda_block[0] - 1)
+            // self.zonal_average_cuda_block[0],
+            (self.padded_ny + self.zonal_average_cuda_block[1] - 1)
+            // self.zonal_average_cuda_block[1]
+        )
+        self.zonal_average_shared_mem = (
+            self.zonal_average_cuda_block[0]
+            * self.zonal_average_cuda_block[1]
+            * self.float().nbytes
+        )
+
+        self.nonlinear_bits_shared_mem = (
+            self.cuda_block_size * self.float().nbytes
+        )
 
         super().ready()
 
@@ -134,6 +179,8 @@ class ColdITG2DFourier(FourierSystem):
             self.real_bits = cp.zeros([5, self.padded_nx, self.padded_ny],
                                       dtype=self.float)
 
+            self.max_cfl = cp.zeros([1], dtype=self.float)
+
             # The first derivative in real_derivatives is dx phi.
             # We need this for computing the zonal flow.
             self.real_dxphi = cp.ndarray((self.padded_nx, self.padded_ny),
@@ -150,7 +197,8 @@ class ColdITG2DFourier(FourierSystem):
                 self.fft_c2r_plan_type = cufft.CUFFT_Z2D
                 self.fft_r2c_plan_type = cufft.CUFFT_D2Z
 
-            self.plan_c2r = cufft.PlanNd(shape=tuple([self.padded_nx, self.padded_ny]),
+            self.plan_c2r = cufft.PlanNd(
+                shape=tuple([self.padded_nx, self.padded_ny]),
                 istride=1,
                 ostride=1,
                 inembed=tuple([1, self.half_padded_ny]),
@@ -163,7 +211,8 @@ class ColdITG2DFourier(FourierSystem):
                 last_axis=2,
                 last_size=self.padded_ny)
 
-            self.plan_r2c = cufft.PlanNd(shape=tuple([self.padded_nx, self.padded_ny]),
+            self.plan_r2c = cufft.PlanNd(
+                shape=tuple([self.padded_nx, self.padded_ny]),
                 istride=1,
                 ostride=1,
                 inembed=tuple([1, self.padded_ny]),
@@ -176,7 +225,6 @@ class ColdITG2DFourier(FourierSystem):
                 last_axis=2,
                 last_size=self.half_padded_ny)
 
-
     def _interpret_input(self):
         """Checks if the input file makes sense"""
 
@@ -187,11 +235,13 @@ class ColdITG2DFourier(FourierSystem):
         # Anything custom goes here
 
         if self.nz != 1 or self.padded_nz != 1:
-            raise ValueError("Both nz and padded_nz should be set to 1 for the 2D system!")
-
+            raise ValueError("Both nz and padded_nz should be "
+                             "set to 1 for the 2D system!")
 
     def compile_cupy_module(self) -> None:
-        self.module_options.define_constant("CHI", self.input["parameters.chi"])
+        # System-specific constants for the kernels
+        self.module_options.define_constant("CHI",
+                                            self.input["parameters.chi"])
         self.module_options.define_constant("A_TIMES_CHI",
                                             self.input["parameters.a"]
                                             * self.input["parameters.chi"])
@@ -200,47 +250,79 @@ class ColdITG2DFourier(FourierSystem):
                                             self.input["parameters.b"]
                                             * self.input["parameters.chi"])
 
-        self.module_options.define_constant("KAPPA_T", self.input["parameters.kappaT"])
-        self.module_options.define_constant("KAPPA_N", self.input["parameters.kappan"])
-        self.module_options.define_constant("KAPPA_B", self.input["parameters.kappaB"])
+        self.module_options.define_constant("KAPPA_T",
+                                            self.input["parameters.kappaT"])
+        self.module_options.define_constant("KAPPA_N",
+                                            self.input["parameters.kappan"])
+        self.module_options.define_constant("KAPPA_B",
+                                            self.input["parameters.kappaB"])
 
-        super().compile_cupy_module() # Call this to compile the module
+        # Call this to compile the module
+        super().compile_cupy_module()
 
-        self.find_derivatives_kernel = self.cupy_module.get_function("find_derivatives")
-        self.find_nonlinear_bits_kernel = self.cupy_module.get_function("find_nonlinear_bits")
+        # System-specific kernels
+        self.find_derivatives_kernel =\
+            self.cupy_module.get_function("find_derivatives")
+
+        self.find_nonlinear_bits_kernel =\
+            self.cupy_module.get_function("find_nonlinear_bits")
+
+        self.zonal_average_kernel =\
+            self.cupy_module.get_function("zonal_average")
 
     def begin_time_step(self) -> None:
         # Do anything model-specific here, then call the parent's method
         super().begin_time_step()
 
-
     def calculate_nonlinear_terms(self) -> None:
-        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
-        padded_kernels_lattice_size = (self.half_padded_size // self.cuda_block_size) + 1
-        real_padded_kernels_lattice_size = (self.full_padded_size // self.cuda_block_size) + 1
+        """
+        Calculates the nonlinear terms. This is the most computationaly
+        intensive part of taking a time step. Here, we also determine the
+        nonlinear CFL coefficient.
 
-        self.find_derivatives_kernel((padded_kernels_lattice_size,),
+        """
+        # unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
+        # padded_kernels_lattice_size = (self.half_padded_size // self.cuda_block_size) + 1
+        # real_padded_kernels_lattice_size = (self.full_padded_size // self.cuda_block_size) + 1
+        #
+        # zonal_block = (32, 32)
+        # zonal_grid = ((self.padded_nx + zonal_block[0] - 1) // zonal_block[0],
+        # (self.padded_ny + zonal_block[1] - 1) // zonal_block[1])
+        # shared_mem = zonal_block[0] * zonal_block[1] * self.float().nbytes
+
+        # self.real_dxphi_zonal = cp.random.rand(self.padded_nx, dtype=self.float)
+
+        self.find_derivatives_kernel((self.half_padded_cuda_grid_size,),
                                      (self.cuda_block_size,),
                                      (self.fields[self.current_step % 2 - 1],
-                                      self.dft_derivatives))
+                                      self.dft_derivatives,
+                                      self.real_dxphi_zonal,
+                                      self.max_cfl))
 
-        self.plan_c2r.fft(self.dft_derivatives, self.real_derivatives, cufft.CUFFT_INVERSE)
+        self.plan_c2r.fft(self.dft_derivatives,
+                          self.real_derivatives,
+                          cufft.CUFFT_INVERSE)
+
         # self.real_derivatives = cp.fft.irfftn(self.dft_derivatives, s=(self.padded_nx, self.padded_ny), norm="forward")
-        #
-        cp.mean(self.real_dxphi, axis=[-1], out=self.real_dxphi_zonal)
+        # cp.mean(self.real_dxphi, axis=[-1], out=self.real_dxphi_zonal)
 
+        self.zonal_average_kernel(self.zonal_average_cuda_grid,
+                                  self.zonal_average_cuda_block,
+                                  (self.real_dxphi, self.real_dxphi_zonal),
+                                  shared_mem=self.zonal_average_shared_mem)
 
-        self.find_nonlinear_bits_kernel((real_padded_kernels_lattice_size,),
-                                        (self.cuda_block_size,),
-                                        (self.real_derivatives,
-                                         self.real_dxphi_zonal,
-                                         self.real_bits))
+        self.find_nonlinear_bits_kernel(
+            (self.full_padded_cuda_grid_size,),
+            (self.cuda_block_size,),
+            (self.real_derivatives, self.real_dxphi_zonal,
+             self.real_bits, self.max_cfl),
+            shared_mem=self.nonlinear_bits_shared_mem
+        )
 
         self.plan_r2c.fft(self.real_bits, self.dft_bits, cufft.CUFFT_FORWARD)
         # self.dft_bits = cp.fft.rfftn(self.real_bits,
         #                              s=(self.padded_nx, self.padded_ny),
         #                              norm="forward")
-
 
     def finish_time_step(self) -> None:
         super().finish_time_step()

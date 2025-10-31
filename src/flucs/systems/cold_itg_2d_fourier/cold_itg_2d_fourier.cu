@@ -130,8 +130,43 @@ __device__ void get_linear_matrix(const int index, const FLUCS_FLOAT dt, FLUCS_C
 //         = phi + T;
 // }
 
+__global__ void zonal_average(const float* __restrict__ input,
+                                  float* __restrict__ output) {
+    extern __shared__ float sdata[];
+
+    const int ix = blockDim.x * blockIdx.x + threadIdx.x;
+    const int iy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    int local_idx = threadIdx.x * blockDim.y + threadIdx.y;
+    if (ix >= PADDED_NX)
+        return;
+
+    if (iy >= PADDED_NY)
+        sdata[local_idx] = 0.0f;
+    else
+        sdata[local_idx] = input[ix * PADDED_NY + iy];
+
+    __syncthreads();
+
+    // Reduce across threads in block
+    for (int stride = blockDim.y / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.y < stride) {
+            int base = threadIdx.x * blockDim.y;
+            sdata[base + threadIdx.y] += sdata[base + threadIdx.y + stride];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.y == 0) {
+        atomicAdd(&output[ix], sdata[threadIdx.x * blockDim.y] / PADDED_NY);
+    }
+}
+
+
 __global__ void find_derivatives(const FLUCS_COMPLEX* fields,
-                                 FLUCS_COMPLEX* dft_derivatives){
+                                 FLUCS_COMPLEX* dft_derivatives,
+                                 FLUCS_FLOAT* real_dxphi_zonal,
+                                 FLUCS_FLOAT* max_cfl){
     const int padded_index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -141,6 +176,13 @@ __global__ void find_derivatives(const FLUCS_COMPLEX* fields,
 
     const int padded_ikx = padded_index / HALF_PADDED_NY;
     const int padded_iky = padded_index % HALF_PADDED_NY;
+
+    // Use this kernel to also zero out real_dxphi_zonal and max_cfl
+    if (padded_iky == 0)
+        real_dxphi_zonal[padded_ikx] = 0;
+
+    if (padded_index == 0)
+        max_cfl[0] = 0;
 
     // Check if mode should be zeroed
     if ((padded_ikx >= HALF_NX && padded_ikx < HALF_NX - NX + PADDED_NX)
@@ -181,14 +223,49 @@ __global__ void find_derivatives(const FLUCS_COMPLEX* fields,
         = phi + T;
 }
 
+__device__ float atomicMaxFloat(float* addr, float value) {
+    int* address_as_int = (int*) addr;
+    int old = *address_as_int, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_int, assumed,
+                        __float_as_int(fmaxf(value, __int_as_float(assumed))));
+    } while (assumed != old);
+    return __int_as_float(old);
+}
+
 __global__ void find_nonlinear_bits(const FLUCS_FLOAT* real_derivatives,
                                     const FLUCS_FLOAT* real_dxphi_zonal,
-                                    FLUCS_FLOAT* real_bits){
+                                    FLUCS_FLOAT* real_bits,
+                                    FLUCS_FLOAT* max_cfl){
+    // Shared memory for CFL calculations
+    extern __shared__ float cfl_shared[];
+
     const int real_index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
     if (!(real_index < PADDEDSIZE))
         return;
+
+    const FLUCS_FLOAT cfl = flucs_fabs(real_derivatives[real_index]) * (NY / LY) + flucs_fabs(real_derivatives[real_index + PADDEDSIZE]) * (NX / LX);
+    // cfl_array[real_index] = cfl;
+
+    // Find max CFL using shared memory
+    cfl_shared[threadIdx.x] = cfl;
+    __syncthreads();
+
+    // Parallel reduction in shared memory
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            cfl_shared[threadIdx.x] = fmaxf(cfl_shared[threadIdx.x], cfl_shared[threadIdx.x + stride]);
+        }
+        __syncthreads();
+    }
+
+    // First thread in block writes to global max via atomic
+    if (threadIdx.x == 0) {
+        atomicMaxFloat(max_cfl, cfl_shared[0]); // custom atomic for float
+    }
 
     // index inside the zonal phi array
     const int ix = real_index / PADDED_NY;

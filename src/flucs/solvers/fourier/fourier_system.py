@@ -26,7 +26,7 @@ class FourierSystem(FlucsSystem):
 
     # Fourier-space pieces out of which we construct the nonlinear term at each
     # time step
-    dft_bits: cp.array
+    dft_bits: cp.ndarray
 
     # Linear matrix (used for linear postprocessing)
     linear_matrix: cp.ndarray
@@ -35,11 +35,14 @@ class FourierSystem(FlucsSystem):
     R: cp.ndarray
     invL: cp.ndarray
 
+    # CFL coefficient at the current time step
+    max_cfl: cp.ndarray
+
     # CUDA kernels
     precompute_iteration_matrices_kernel: cp.RawKernel
     finish_step_kernel: cp.RawKernel
     compute_linear_matrix_kernel: cp.RawKernel
-    cuda_block_size: int = 32
+    cuda_block_size: int = 512
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -283,6 +286,7 @@ class FourierSystem(FlucsSystem):
                                             self.float(1.0 / self.full_padded_size))
 
         self.module_options.define_constant("NX", self.nx)
+        self.module_options.define_constant("LX", self.input["dimensions.Lx"])
         self.module_options.define_constant("HALF_NX", self.half_nx)
         self.module_options.define_constant("PADDED_NX",
                                             self.padded_nx)
@@ -290,6 +294,7 @@ class FourierSystem(FlucsSystem):
                                             self.half_padded_nx)
 
         self.module_options.define_constant("NY", self.ny)
+        self.module_options.define_constant("LY", self.input["dimensions.Ly"])
         self.module_options.define_constant("HALF_NY", self.half_ny)
         self.module_options.define_constant("PADDED_NY",
                                             self.padded_ny)
@@ -297,6 +302,7 @@ class FourierSystem(FlucsSystem):
                                             self.half_padded_ny)
 
         self.module_options.define_constant("NZ", self.nz)
+        self.module_options.define_constant("LZ", self.input["dimensions.Lz"])
         self.module_options.define_constant("HALF_NZ", self.half_nz)
         self.module_options.define_constant("PADDED_NZ",
                                             self.padded_nz)
