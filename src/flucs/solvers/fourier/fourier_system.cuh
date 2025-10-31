@@ -151,10 +151,10 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
 #endif
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        result[index + i*HALFUNPADDEDSIZE] = 0;
+        current_fields[index + i*HALFUNPADDEDSIZE] = 0;
 
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            result[index + i*HALFUNPADDEDSIZE] += invL_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
+            current_fields[index + i*HALFUNPADDEDSIZE] += invL_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
         }
     }
 #else // not PRECOMPUTE_LINEAR_MATRIX

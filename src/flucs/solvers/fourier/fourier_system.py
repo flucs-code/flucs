@@ -258,7 +258,7 @@ class FourierSystem(FlucsSystem):
         unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
         self.precompute_iteration_matrices_kernel(
             (unpadded_kernels_lattice_size,), (self.cuda_block_size,),
-            (self.current_dt,))
+            (self.float(self.current_dt),))
 
     def compile_cupy_module(self) -> None:
         # Add module options
