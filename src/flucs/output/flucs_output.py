@@ -1,13 +1,15 @@
 """
 Defines the FlucsOutput class that handles a group of diagnostics that are
-executed together and output to either a file or the stdout.
+executed together and output to a file of specified format.
 """
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-import numpy as np
+from abc import ABC, abstractmethod
+from importlib.metadata import entry_points
 import datetime
 import pathlib as pl
+import numpy as np
 from netCDF4 import Dataset, Group
 from flucs.solvers import FlucsSolverState
 
@@ -16,18 +18,37 @@ if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
 
 
-class FlucsOutput:
-    """Deals with a single output file. A FlucsSystem typically has several
-    FlucsOuputs that handle different kinds of diagnostics
+_registered_outputs = entry_points().select(group="flucs.outputs")
+
+def get_output_type(output_type: str):
+    """Returns an output type.
+
+    Parameters
+    ----------
+    output_type: str
+        Name of the output type. Must be registered as an
+        entry point in the flucs.outputs group.
+
+    Returns
+    -------
+    Appropriate FlucsOutput type.
 
     """
+    return _registered_outputs[output_type].load()
+
+class FlucsOutput(ABC):
+    """Deals with a single output file. A FlucsSystem typically has several
+    FlucsOuputs that handle different kinds of diagnostics and different kinds
+    of output formats.
+
+    """
+
     name: str
+    type: str
     filepath: pl.Path
+    extension: str
     save_steps: int
     next_save: int
-
-    # If true, no netCDF4 file is created
-    stdout_only: bool = False
 
     # Associated system
     system: FlucsSystem
@@ -38,17 +59,53 @@ class FlucsOutput:
     # Cache of times at which data was saved
     time_cache: list[float]
 
-    # Dataset for the netCDF4 file
-    dataset: Dataset
+    def __new__(cls, name: str, system: FlucsSystem):
+        output_type = system.input[f"output.{name}.type"]
+        output_class = _registered_outputs[output_type].load()
+        return super().__new__(output_class)
 
-    # netCDF4 group to write to
-    group_name: str
-    group: Group
+    @abstractmethod
+    def _setup_output_file(self):
+        pass
+
+    @abstractmethod
+    def write(self):
+        pass
+
+    def _add_diagnostics_from_input(self):
+        """Adds all diagnostics from the input of the associated FlucsSystem"""
+        for diag_name in self.system.input[f"output.{self.name}.diags"]:
+            diag_to_add =\
+                self.system.diags_dict[diag_name](system=self.system,
+                                                  output=self)
+            diag_to_add.output = self
+            self.diagnostics.append(diag_to_add)
+
+    def execute(self):
+        """Executes each diagnostic. Does not save to disk."""
+        for diag in self.diagnostics:
+            diag.execute()
+
+        self.next_save += self.save_steps
+        self.time_cache.append(self.system.current_time)
+
+    def ready(self):
+        """Sets up the diagnostic for running."""
+        self.time_cache.clear()
+        self.next_save = 0
+        for diag in self.diagnostics:
+            diag.ready()
+            diag.data_cache.clear()
+
+        if self.system.solver.state == FlucsSolverState.RUNNING:
+            self._setup_output_file()
 
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
-        self.filepath = self.system.input.io_path / f"output.{name}.nc"
+        self.filepath = (
+            self.system.input.io_path / f"output.{name}.{self.extension}"
+        )
 
         self.diagnostics = []
         self.time_cache = []
@@ -57,12 +114,151 @@ class FlucsOutput:
         self.next_save = 0
         self.save_steps = self.system.input[f"output.{self.name}.save_steps"]
 
-        # if stdout_only, add diagnostics but do not create a netcdf4 file
-        if ("stdout_only" in system.input[f"output.{name}"] and
-                system.input[f"output.{name}.stdout_only"]):
-            self.stdout_only = True
-
         self._add_diagnostics_from_input()
+
+    def __lt__(self, other):
+        if not isinstance(other, FlucsOutput):
+            raise TypeError("Makes no sense to compare a FlucsOutput "
+                            f"with a {type(other)}")
+        return self.next_save < other.next_save
+
+
+class FlucsOutputText(FlucsOutput):
+    """ Space-separated text output"""
+    extension = "txt"
+
+    # The first few columns are always the same and contain simple timing data
+    timing_data = []
+    timing_data_column_names = ["time", "step", "dt"]
+
+    # Data formatting options
+    column_width = 12
+    column_pad = "    "  # 4 spaces
+    float_format = "3e"
+    complex_format = "1e"
+
+    def _setup_output_file(self):
+        column_names = []
+
+        # Add timing data (first few columns)
+        for timing_column_name in self.timing_data_column_names:
+            column_names.append(
+                f"{timing_column_name:>{self.column_width}}"
+            )
+
+        for diag in self.diagnostics:
+            column_names.append(
+                f"{diag.name:>{self.column_width}}"
+            )
+
+        file_existed = self.filepath.exists()
+        columns_n = (len(self.timing_data_column_names)
+                     + len(self.diagnostics))
+        total_data_width = (
+            columns_n * self.column_width
+            + (columns_n - 1) * len(self.column_pad)
+        )
+
+        with open(self.filepath, "a", encoding="utf-8") as file:
+            if file_existed:
+                file.write("-" * total_data_width)
+                file.write('\n')
+            file.write(self.column_pad.join(column_names))
+            file.write('\n')
+
+    def _add_diagnostics_from_input(self):
+        """ Add additional check for scalar diagnostics. """
+        super()._add_diagnostics_from_input()
+
+        for diag in self.diagnostics:
+            if len(diag.shape) != 0:
+                raise ValueError(
+                    f"Cannot add diagnostic {diag.name} to text output "
+                    f"{self.name} because text output supports only scalar "
+                    "diagnostics."
+                )
+
+    def ready(self):
+        """
+        In addition to clearing the usual things, we need to clear the
+        timing data, too.
+        """
+
+        self.timing_data.clear()
+        super().ready()
+
+    def execute(self):
+        """Saves timing data in addition to the individual diagnostics."""
+        self.timing_data.append([
+            self.system.current_time,
+            self.system.current_step,
+            self.system.current_dt
+        ])
+
+        super().execute()
+
+    def format_data(self, data):
+        """ Returns an appropriately formatted representation of given data as
+        a string of fixed width equal to FlucsOutputText.column_width.
+
+        Parameters
+        ----------
+        data: str, int, float, or complex
+            The data to be formatted
+
+        """
+        if isinstance(data, (str, int, np.integer)):
+            return f"{data:>{self.column_width}}"
+
+        if isinstance(data, (float, np.floating)):
+            return f"{data:>{self.column_width}.{self.float_format}}"
+
+        if isinstance(data, (complex, np.complexfloating)):
+            return f"{data:>{self.column_width}.{self.complex_format}}"
+
+        raise ValueError(f"Data type {type(data)}"
+                         "is not supported by FlucsOutputText.")
+
+    def write(self):
+        """ Writes formatted rows to the text output file. """
+        if self.system.solver.state != FlucsSolverState.RUNNING:
+            return
+
+        # Don't do anything if we don't have any data
+        if not self.time_cache:
+            return
+
+        with open(self.filepath, "a", encoding="utf-8") as file:
+            for save_index, _ in enumerate(self.time_cache):
+                row_to_write = []
+                for value in self.timing_data[save_index]:
+                    row_to_write.append(self.format_data(value))
+
+                for diag in self.diagnostics:
+                    row_to_write.append(
+                        self.format_data(diag.data_cache[save_index])
+                    )
+
+                file.write(self.column_pad.join(row_to_write))
+                file.write('\n')
+
+        # Clear caches
+        for diag in self.diagnostics:
+            diag.data_cache.clear()
+        self.time_cache.clear()
+        self.timing_data.clear()
+
+
+class FlucsOutputNC(FlucsOutput):
+    """ netCDF4 output """
+
+    extension = "nc"
+    # Dataset for the netCDF4 file
+    dataset: Dataset
+
+    # netCDF4 group to write to
+    group_name: str
+    group: Group
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
@@ -81,15 +277,6 @@ class FlucsOutput:
 
         self.group = dataset.groups[self.group_name]
 
-    def _add_diagnostics_from_input(self):
-        """Adds all diagnostics from the input of the associated FlucsSystem"""
-        for diag_name in self.system.input[f"output.{self.name}.diags"]:
-            diag_to_add =\
-                self.system.diags_dict[diag_name](system=self.system,
-                                                  output=self)
-            diag_to_add.output = self
-            self.diagnostics.append(diag_to_add)
-
     def _setup_output_file(self):
         """Creates all the necessary groups, dimensions, and variables in the
         netCDF4 file where the output data will be written. Should be called
@@ -97,8 +284,6 @@ class FlucsOutput:
         routines).
 
         """
-        if self.stdout_only:
-            return
 
         with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()
@@ -157,32 +342,16 @@ class FlucsOutput:
                     self.group.createVariable(diagnostic.name, "f4",
                                               ("time", ) + diagnostic.shape)
 
-    def ready(self):
-        """Sets up the diagnostic for running."""
-        self.time_cache.clear()
-        self.next_save = 0
-        for diag in self.diagnostics:
-            diag.ready()
-            diag.data_cache.clear()
-
-        if self.system.solver.state == FlucsSolverState.RUNNING:
-            self._setup_output_file()
-
-    def execute(self):
-        """Executes each diagnostic. Does not save to disk."""
-        for diag in self.diagnostics:
-            diag.execute()
-
-        self.next_save += self.save_steps
-        self.time_cache.append(self.system.current_time)
-
     def write(self):
         """Saves any cached diagnostic data to disk and clears the cache.
         Saves data only if we are not timing.
 
         """
-        if (self.stdout_only or
-                self.system.solver.state != FlucsSolverState.RUNNING):
+        if self.system.solver.state != FlucsSolverState.RUNNING:
+            return
+
+        # Don't do anything if we don't have any data
+        if not self.time_cache:
             return
 
         with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
@@ -223,9 +392,3 @@ class FlucsOutput:
                                 = diag.data_cache[i][:]
 
                 diag.data_cache.clear()
-
-    def __lt__(self, other):
-        if not isinstance(other, FlucsOutput):
-            raise TypeError("Makes no sense to compare a FlucsOutput "
-                            f"with a {type(other)}")
-        return self.next_save < other.next_save

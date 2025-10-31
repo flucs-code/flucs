@@ -5,10 +5,32 @@ Used to run simulations.
 
 import argparse
 import pathlib as pl
+import importlib.metadata
+from datetime import datetime
 from importlib.metadata import entry_points
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
+from flucs.utilities.log_handler import FlucsLogHandler
 
+
+FLUCS_HEADER = (
+rf"""
+*******************************************************************
+                                                                   
+      __________ ____       ____  ____   ______     ______
+      |   _____| |  |       |  |  |  |  /  __  \   /  ____\
+      |  |___    |  |       |  |  |  | /  /  \__\ |  |____
+      |   ___|   |  |       |  |  |  | |  |   __   \____  \
+      |  |       |  |_____  \  \__/  / \  \__/  /   ____|  |
+      |__|       |________|  \______/   \______/   /______/
+                                                                   
+                                                                   
+*******************************************************************
+
+{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Version: {importlib.metadata.version('flucs')}
+"""
+)
 
 # Load lists of registered solvers and systems
 solvers = entry_points().select(group="flucs.solvers")
@@ -50,15 +72,32 @@ def get_system_type(system_name: str):
 
 
 def run_flucs(input_path: pl.Path, override: list = None):
-    """
-    Construct FlucsInput then call the appropriate solver.
+    """Construct FlucsInput then call the appropriate solver.
+
+    Parameters
+    ----------
+    input_path : pl.Path
+        Path to the input file
+    override : list
+        Additional override parameters specified by the --override flag in the
+        command line.
 
     """
-    flucs_input = FlucsInput(input_path, override)
 
-    solver, _ = flucs_input.create_solver_system()
+    # Set up redirection of stdout and stderr to an additional log file
+    input_path = pl.Path(input_path)
+    log_path = input_path.parent / "output.log"
 
-    solver.run()
+    with open(log_path, "a", encoding="utf-8") as log_file:
+        with FlucsLogHandler(log_file, keep_stdout=True):
+
+            print(f"{FLUCS_HEADER}")
+
+            flucs_input = FlucsInput(input_path, override)
+
+            solver, _ = flucs_input.create_solver_system()
+
+            solver.run()
 
 
 def main():
@@ -108,7 +147,7 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Remove 'output.*' and 'restart.*' files in the current directory"
+        help="Remove 'output.*' and 'restart.*' files in the current directory "
              "and exit."
     )
 

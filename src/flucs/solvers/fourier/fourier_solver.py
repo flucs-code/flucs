@@ -26,6 +26,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.setup()
         self.system.setup_output()
         self.system.compile_cupy_module()
+        self.system.get_memory_usage()
 
         # Timing
         self.system.ready()
@@ -44,9 +45,12 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         time_taken = self._solver_loop()
 
-        print(f"flucs given in {time_taken} seconds!")
+        print(f"flucs given in {time_taken} seconds.\n")
 
     def _not_done(self) -> bool:
+        if self.interrupted:
+            return False
+
         if self.state == FlucsSolverState.TIMING:
             return self.system.current_step\
                    < self.system.input["setup.timing_steps"]
@@ -54,12 +58,16 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         return self.system.current_time < self.system.final_time
 
     def _solver_loop(self) -> float:
-        is_nonlinear = not self.system.input["setup.linear"]
+        if self.interrupted:
+            return 0.0
 
+        is_nonlinear = not self.system.input["setup.linear"]
         # Diagnostics for the first time step
         self.system.execute_diagnostics()
 
         start_time = time.time()
+        self.system.steps_until_next_write = self.system.input["output.write_steps"]
+
         while self._not_done():
             self.system.begin_time_step()
 
@@ -68,10 +76,12 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
             self.system.finish_time_step()
             self.system.execute_diagnostics()
-            self.system.restart_manager.write_restart(force=False)
+            self.system.write_output()
+            self.system.restart_manager.write_restart()
         end_time = time.time()
 
-        self.system.write_output()
+        # One final write
+        self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
 
         return end_time - start_time

@@ -25,9 +25,9 @@ restart_from = ""
 reset_time = false
 
 [output]
-write_time = 10  # time, in seconds, between writes to the drive
+write_steps = 50000  # number of time steps between writes to the hard drive
 
-[output.stdout]  # The stdout output group.
+[output.time]  # The most basic, text-based output of space-separated columns
 # Each system can define additional output groups.
 # The diagnostics in this output group are run every save_steps time steps.
 # -1 means that the output group is not active.
@@ -38,5 +38,9 @@ save_steps = -1
 # diagnostics are mapped to the diagnostic classes.
 diags = []
 
-# stdout_only = true means that this output group does not have a netCDF4 file
-stdout_only = true
+# Currently supported types are "text" and "netcdf4", where the former is a
+# text file of space-separated columns where each row corresponds to a
+# different scalar quantity. The first row contains the names of the columns.
+# The first three columns are always current_step, current_time, and
+# current_dt.
+type = "text"
