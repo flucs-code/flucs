@@ -117,7 +117,7 @@ def main():
         type=str,
         default=pl.Path.cwd(),
         required=False,
-        help="Path to the i/o directory, which must contain 'input.toml'."
+        help="Path to the i/o directory, which must contain 'input.toml'. "
              "If no path is specified, will assume the current working directory."
     )
 
@@ -142,6 +142,14 @@ def main():
         help="Runs the appropriate solver using input.toml from --io_path."
     )
 
+    operation_modes.add_argument(#TODO
+        "--test", "-t",
+        action="store_true",
+        default=False,
+        required=False,
+        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit"
+    )
+
     operation_modes.add_argument(
         "--clean", "-c",
         action="store_true",
@@ -152,31 +160,32 @@ def main():
     )
 
     operation_modes.add_argument(
-        "--reconstruct", "-r",
-        type=str,
-        required=False,
-        help="Reconstruct the input file from the specified restart file."
-             " Note that --override is ignored."
-    )
-
-    operation_modes.add_argument(#TODO
-        "--test", "-t",
+        "--postprocess", "-p",
         action="store_true",
         default=False,
         required=False,
-        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit"
+        help="Provides information about post-processing options for a given "
+             "i/o directory (specified via '--io_path') and exit."
+    )
+
+    operation_modes.add_argument(
+        "--reconstruct", "-r",
+        type=str,
+        required=False,
+        help="Reconstruct the input file from the specified restart file. "
+             "Note that --override is ignored."
     )
 
     args = parser.parse_args()
-    io_path = args.io_path
+    io_path = pl.Path(args.io_path).resolve()
 
     # If nothing is specified, assume --run
-    if not any((args.run, args.clean, args.reconstruct, args.test)):
+    if not any((args.run, args.clean, args.reconstruct, args.test, args.postprocess)):
         args.run = True
 
     # Actually solve something
     if args.run:
-        input_path = pl.Path(io_path) / "input.toml"
+        input_path = io_path / "input.toml"
 
         if not input_path.exists():
             raise FileNotFoundError(
@@ -197,4 +206,10 @@ def main():
         from flucs.systems.flucs_restart_manager import FlucsRestartManager
         FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct,
                                                            io_path)
+        return
+
+    # Post-processing
+    if args.postprocess:
+        from flucs.postprocessing import FlucsPostProcessing
+        postprocessor = FlucsPostProcessing(io_path)
         return

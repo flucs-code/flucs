@@ -318,7 +318,6 @@ class FlucsSystem(ABC):
 
             global_used_gb = info['global']['used'] / bytes_to_gb
             global_total_gb = info['global']['total'] / bytes_to_gb
-
             cupy_total_gb = info['cupy']['total'] / bytes_to_gb
 
             print(f"({info['id']}) {info['name']}: {global_used_gb:.3f} / "
