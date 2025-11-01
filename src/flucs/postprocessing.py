@@ -9,7 +9,7 @@ from netCDF4 import Dataset, Group
 
 class FlucsPostProcessing:
     """
-    Class that handles post-processing of output data from flucs.
+    Class that handles post-processing of output data.
     """
 
     # Postprocessing-specific attributes
@@ -23,6 +23,9 @@ class FlucsPostProcessing:
     _system_names: dict[pl.Path, str]
     _solver_types: dict[pl.Path, type]
     _system_types: dict[pl.Path, type]
+
+    # Formatting for printing
+    _indent = "   "
 
 
     def _get_solver_and_system_types(self) -> None:
@@ -83,9 +86,9 @@ class FlucsPostProcessing:
 
         print("Available postprocessing scripts:")
         for type_name, paths in self._script_paths.items():
-            print(f"--- {type_name}:")
+            print(f"{self._indent}{type_name}:")
             for path in paths:
-                print(f"     {path}")
+                print(f"{2*self._indent}{path}")
         print("For information on a specific script, run '<script path> --help'.")
 
 
@@ -123,7 +126,7 @@ class FlucsPostProcessing:
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
-    def _get_netcdf_variables(self, ignore=("time", "dt")) -> dict[str, dict[str, list[int]]]:
+    def _get_all_netcdf_variables(self, ignore=("time", "dt")) -> dict[str, dict[str, list[int]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file 
         specified by self.output_type, and the groups that they appear in.
@@ -136,7 +139,7 @@ class FlucsPostProcessing:
         Returns
         -------
         dict[str, dict[str, list[int]]]
-            Mapping io_path (as a string) -> {variable: [group_ids], ... }
+            Mapping nc_path (as a string) -> {variable: [group_ids], ... }
         """
 
         if self.output_type is None:
@@ -146,9 +149,9 @@ class FlucsPostProcessing:
         for io_path in self.io_paths:
             nc_path = io_path / self.output_type
             if not nc_path.exists():
-                result[str(io_path)] = {}
+                result[str(nc_path)] = {}
                 continue
-            result[str(io_path)] = FlucsPostProcessing.get_netcdf_variables(nc_path, ignore=ignore)
+            result[str(nc_path)] = FlucsPostProcessing.get_netcdf_variables(nc_path, ignore=ignore)
 
         return result
     
@@ -160,9 +163,40 @@ class FlucsPostProcessing:
         """
 
         print("Available netCDF variables:")
-        netcdf_variables = self._get_netcdf_variables(ignore=ignore)
-        for io_path, variables_dict in netcdf_variables.items():
-            print(rf"{io_path}: {sorted(variables_dict.keys())}")
+        netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
+        for nc_path, variables_dict in netcdf_variables.items():
+            print(rf"{self._indent}{nc_path}: {sorted(variables_dict.keys())}")
+
+
+    def get_valid_files(self, variable: str) -> list[pl.Path]:
+        """
+        Return the netCDF filepaths that contain a given variable.
+
+        Returns
+        -------
+        list[pathlib.Path]
+            Filepaths that contain the given variable.
+        """
+
+        mapping = self._get_all_netcdf_variables(ignore=())
+
+        # Check files for variable
+        found = []
+        missing = []
+
+        for nc_path, variables in mapping.items():
+            nc_path = pl.Path(nc_path)
+            if variable in variables and variables[variable]:
+                found.append(nc_path)
+            else:
+                missing.append(nc_path)
+
+        # Report files that are missing the variable
+        print(f"Variable {variable} not found in:")
+        for path in missing:
+            print(f"{self._indent}{path}")
+
+        return found
 
 
     def __init__(self, 
@@ -223,7 +257,7 @@ class FlucsPostProcessing:
 
         if consistent in ("solver", "both") and len(solver_types) > 1:
             raise ValueError("All inputs must use the same solver when "
-                             "consistent='solver' or 'both'.")
+                             "'consistent' is 'solver' or 'both'.")
         if consistent in ("system", "both") and len(system_types) > 1:
             raise ValueError("All inputs must use the same system when "
-                             "consistent='system' or 'both'.")
+                             "'consistent' is 'system' or 'both'.")
