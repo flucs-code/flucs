@@ -211,5 +211,5 @@ def main():
     # Post-processing
     if args.postprocess:
         from flucs.postprocessing import FlucsPostProcessing
-        FlucsPostProcessing(io_path).print_script_paths()
+        FlucsPostProcessing(io_path).list_script_paths()
         return
