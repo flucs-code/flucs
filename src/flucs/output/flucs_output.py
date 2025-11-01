@@ -56,8 +56,9 @@ class FlucsOutput(ABC):
     # List of diagnostics
     diagnostics: list[FlucsDiagnostic]
 
-    # Cache of times at which data was saved
+    # Cache of times and dts at which data was saved
     time_cache: list[float]
+    dt_cache: list[float]
 
     def __new__(cls, name: str, system: FlucsSystem):
         output_type = system.input[f"output.{name}.type"]
@@ -88,10 +89,12 @@ class FlucsOutput(ABC):
 
         self.next_save += self.save_steps
         self.time_cache.append(self.system.current_time)
+        self.dt_cache.append(self.system.current_dt)
 
     def ready(self):
         """Sets up the diagnostic for running."""
         self.time_cache.clear()
+        self.dt_cache.clear()
         self.next_save = 0
         for diag in self.diagnostics:
             diag.ready()
@@ -109,6 +112,7 @@ class FlucsOutput(ABC):
 
         self.diagnostics = []
         self.time_cache = []
+        self.dt_cache = []
 
         # Setup steps and diagnostics from input file and system
         self.next_save = 0
@@ -246,6 +250,7 @@ class FlucsOutputText(FlucsOutput):
         for diag in self.diagnostics:
             diag.data_cache.clear()
         self.time_cache.clear()
+        self.dt_cache.clear()
         self.timing_data.clear()
 
 
@@ -274,6 +279,7 @@ class FlucsOutputNC(FlucsOutput):
             grp = dataset.createGroup(self.group_name)
             grp.createDimension("time", None)
             grp.createVariable("time", "f4", ("time",))
+            grp.createVariable("dt", "f4", ("time",))
 
         self.group = dataset.groups[self.group_name]
 
@@ -360,11 +366,15 @@ class FlucsOutputNC(FlucsOutput):
             times_to_write = len(self.time_cache)
             first_index = self.group["time"].shape[0]
             last_index = first_index + times_to_write
+            
             # Write time data
             self.group["time"][first_index:last_index]\
                 = np.array(self.time_cache)[:]
+            self.group["dt"][first_index:last_index]\
+                = np.array(self.dt_cache)[:]
 
             self.time_cache.clear()
+            self.dt_cache.clear()
 
             # Write individual diagnostics and clear data cache
             for diag in self.diagnostics:
