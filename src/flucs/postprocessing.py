@@ -2,7 +2,8 @@ import toml
 import flucs
 import inspect
 import argparse
-import pathlib as pl
+import numpy as np  
+import pathlib as pl 
 from typing import Sequence, Literal
 from netCDF4 import Dataset
 
@@ -24,7 +25,7 @@ class FlucsPostProcessing:
     _system_types: dict[pl.Path, type]
 
     # Formatting for printing
-    _indent = "   "
+    _indent = 3 * " "
 
 
     def _get_solver_and_system_types(self) -> None:
@@ -114,14 +115,14 @@ class FlucsPostProcessing:
 
         with Dataset(pl.Path(nc_path), "r", format="NETCDF4") as ds:
             for grp_name, grp in ds.groups.items():
-                grp_id = int(grp_name)
+                grp_number = int(grp_name)
                 for var in grp.variables.keys():
                     if var in ignore:
                         continue
                     if var not in netcdf_variables:
                         netcdf_variables[var] = []
-                    if grp_id not in netcdf_variables[var]:
-                        netcdf_variables[var].append(grp_id)
+                    if grp_number not in netcdf_variables[var]:
+                        netcdf_variables[var].append(grp_number)
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
@@ -184,25 +185,95 @@ class FlucsPostProcessing:
         missing = []
 
         for io_path, variables in mapping.items():
-            io_path = pl.Path(io_path)
+            nc_path = pl.Path(io_path) / self.output_type
             if variable in variables and variables[variable]:
-                found.append(io_path)
+                found.append(nc_path)
             else:
-                missing.append(io_path)
-
+                missing.append(nc_path)
         # Report files that are missing the variable
-        print(f"Variable '{variable}' not found in:")
-        for path in missing:
-            print(f"{self._indent}{path}")
+        if missing:
+            print(f"Variable '{variable}' not found in:")
+            for path in missing:
+                print(f"{self._indent}{path}")
 
         return found
 
 
+    def load_netcdf_variable(self, nc_path: pl.Path, variable: str, fill_value: float = 0.0):
+        """
+        Load a variable across all groups in a netCDF file and concatenate
+        along time (zeroth axis). Groups missing the variable are filled with
+        'fill_value'.
+
+        Parameters
+        ----------
+        nc_path : pathlib.Path
+            Path to the netCDF file to read.
+        variable : str
+            Name of the variable to load.
+        fill_value : float
+            Value to use for groups that do not contain 'variable'.
+
+        Returns
+        -------
+        tuple
+            (values, boundary_indices) where
+            - values is an np.ndarray with shape (sum(time_lengths), ...) after
+              concatenation across groups
+            - boundary_indices is a list of integer indices marking the boundaries
+              between groups in the concatenated time axis
+        """
+
+        with Dataset(str(nc_path), "r", format="NETCDF4") as ds:
+
+            # Get output groups sorted by group id
+            groups = [(int(name), grp) for name, grp in ds.groups.items()]
+
+            # Check whether the groups are in the correct order
+            grp_numbers = [grp_number for grp_number, _ in groups]
+            if grp_numbers != sorted(grp_numbers):
+                raise ValueError("Output groups are not in order; check netCDF file.")
+
+            # Determine residual shape and dtype of output variable
+            var_iter = ((grp_number, grp.variables[variable]) for grp_number, grp in groups if variable in grp.variables)
+            try:
+                grp_number, var = next(var_iter)
+            except StopIteration:
+                raise ValueError(f"Variable '{variable}' not found in any group of {nc_path}")
+            
+            res_shape = var.shape[1:]
+            var_dtype = var.dtype
+
+            # Get data from each group
+            group_data = []
+            boundaries = []
+            for grp_number, grp in groups:
+                time_length = int(grp.variables["time"].shape[0])
+                boundaries.append(time_length)
+
+                if variable in grp.variables:
+                    arr = np.asarray(grp.variables[variable][:])
+                    if arr.shape[0] != time_length:
+                        raise ValueError(
+                            f"Time dimension mistmatch for variable '{variable}' in group "
+                            f"{grp_number} (has {arr.shape} but expected {time_length}). "
+                        )
+                    group_data.append(arr.astype(var_dtype, copy=False))
+                else:
+                    # Fill missing group segment with zeros of appropriate shape
+                    group_data.append(np.full((time_length, *res_shape), fill_value, dtype=var_dtype))
+
+        # Concatenate along time (zeroth axis)
+        values = np.concatenate(group_data, axis=0)
+        boundary_indices = list(np.cumsum(boundaries)[:-1])
+
+        return values, boundary_indices
+    
     def __init__(self, 
             io_paths: pl.Path | Sequence[pl.Path],
-            output_type: str | None = None,
             save_directory: pl.Path | None = None,
-            consistent: Literal["none", "solver", "system", "both"] = "none",
+            output_type: str | None = None,
+            constraint: Literal["none", "solver", "system", "both"] = "none",
         ) -> None:
         
         """
@@ -214,14 +285,14 @@ class FlucsPostProcessing:
         io_paths : pl.Path | Sequence[pl.Path]
             Path or paths to i/o directories containing 'input.toml'.
 
+        save_directory : pl.Path | None
+            Optional path where to save results. If None, nothing will be saved.
+
         output_type : str | None
             Type of output being analysed for this instance of post-processing.
             If None, no specific output type is assumed.
 
-        save_directory : pl.Path | None
-            Optional path where to save results. If None, nothing will be saved.
-
-        consistent : {"none", "solver", "system", "both"}
+        constraint : {"none", "solver", "system", "both"}
             Constraint on mixing solvers/systems across provided i/o directories. 
             If "solver", all solvers must match. If "system", all systems must
             match. If "both", both solvers and systems must match.
@@ -247,23 +318,53 @@ class FlucsPostProcessing:
         # Determine solver and system types across all i/o directories
         self._get_solver_and_system_types()
 
-        # Enforce consistency across provided inputs
-        if consistent not in ("none", "solver", "system", "both"):
-            raise ValueError("Invalid value for 'consistent'.")
+        # Enforce constraint across provided inputs
+        if constraint not in ("none", "solver", "system", "both"):
+            raise ValueError("Invalid value for 'constraint'.")
 
         solver_types = set(self._solver_types.values())
         system_types = set(self._system_types.values())
 
-        if consistent in ("solver", "both") and len(solver_types) > 1:
+        if constraint in ("solver", "both") and len(solver_types) > 1:
             raise ValueError("All i/o directories must contain output from the same "
-                             "solver when 'consistent' is 'solver' or 'both'.")
-        if consistent in ("system", "both") and len(system_types) > 1:
+                             "solver when 'constraint' is 'solver' or 'both'.")
+        if constraint in ("system", "both") and len(system_types) > 1:
             raise ValueError("All i/o directories must contain output from the same "
-                             "system when 'consistent' is 'system' or 'both'.")
+                             "system when 'constraint' is 'system' or 'both'.")
         
         print(f"FlucsPostProcessing "
               f"({len(self.io_paths)}, "
               f"{self.output_type}, "
               f"{self.save_directory})")
 
-# need to construct a commmon argparse structure for postprocessing scripts to use
+
+def FlucsPostProcessing_parser() -> argparse.ArgumentParser:
+    """
+    A common parser for postprocessing scripts that use FlucsPostProcessing.
+    """
+
+    parser = argparse.ArgumentParser(add_help=False)
+
+    parser.add_argument(
+        "--io_path", "-io",
+        nargs='+',
+        type=str,
+        default=pl.Path.cwd(),
+        required=False,
+        help="Paths to the i/o directories, which must contain 'input.toml'. "
+             "If no path is specified, will assume the current working directory.",
+    )
+
+    parser.add_argument(
+        "--save_directory", "-s",
+        nargs="?",
+        type=lambda s: pl.Path(s).expanduser().resolve(),
+        const=pl.Path.cwd(),
+        default=None,
+        help=(
+            "Directory to which postprocessing outputs are saved. If omitted, nothing "
+            "is saved. If no path is specified, will assume the current working directory."
+        ),
+    )
+
+    return parser
