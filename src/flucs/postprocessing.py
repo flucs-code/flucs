@@ -4,8 +4,11 @@ import inspect
 import argparse
 import numpy as np  
 import pathlib as pl 
+import matplotlib.pyplot as plt
 from typing import Sequence, Literal
 from netCDF4 import Dataset
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 class FlucsPostProcessing:
     """
@@ -26,7 +29,6 @@ class FlucsPostProcessing:
 
     # Formatting for printing
     _indent = 3 * " "
-
 
     def _get_solver_and_system_types(self) -> None:
         """
@@ -268,8 +270,107 @@ class FlucsPostProcessing:
         boundary_indices = list(np.cumsum(boundaries)[:-1])
 
         return values, boundary_indices
+
+
+    def save(
+        self,
+        obj,
+        *,
+        name: str,
+        suffix: str,
+        conflict_strategy: Literal["overwrite", "error"] = "overwrite",
+        save_kwargs: dict | None = None,
+    ) -> None:
+        """
+        Save the result of post-processing to 'self.save_directory'.
+
+        Parameters
+        ----------
+        obj : Any
+            The object to save. Its type will determine the save handler used.
+        name : str | None
+            The desired filename stem (without suffix).
+        suffix : str | None
+            File extension.
+        conflict_strategy : {"overwrite", "error"}
+            Behaviour when the target save filepath already exists.
+        save_kwargs : dict | None
+            Arguments forwarded to the type-specific save function.
+        """
+
+        # Do nothing is there is no save directory
+        if self.save_directory is None:
+            return None
+        
+        # Validate conflict strategy
+        if conflict_strategy not in ("overwrite", "error"):
+            raise ValueError("Invalid value for 'conflict_strategy'.")
+
+        # Ensure directory exists
+        directory = self.save_directory
+        directory.mkdir(parents=True, exist_ok=True)
+
+        # Construct base save filepath
+        ext = f".{suffix.lstrip('.')}" if suffix else ""
+        base_save_filepath = directory / f"{name}{ext}"
+
+        # If conflict_strategy = 'error', raise an error if any existing files
+        # match '{name}_*{ext}'.
+        if conflict_strategy == "error":
+            pattern = f"{name}_*{ext}"
+            if any(directory.glob(pattern)):
+                raise OSError(
+                    f"Conflicting files matching '{pattern}' already exist: {directory}"
+                )
+        
+        # Call type-specific save function
+        if isinstance(obj, (Figure, Axes)):
+            self._save_matplotlib_figures(
+                base_save_filepath=base_save_filepath,
+                save_kwargs=save_kwargs,
+            )
+        else:
+            raise NotImplementedError(
+                f"Saving objects of type '{type(obj).__name__}' is not yet implemented."
+            )
+
+        return
     
-    def __init__(self, 
+    def _save_matplotlib_figures(
+        self,
+        base_save_filepath: pl.Path,
+        save_kwargs: dict | None,
+    ) -> None:
+        """
+        Save all open Matplotlib figures to self.save_directory.
+        """
+
+        # Get all figures to save
+        fignums = plt.get_fignums()
+        if not fignums:
+            raise RuntimeError("No Matplotlib figures available to save.")
+
+        # Parse kwargs
+        kwargs = dict(save_kwargs or {})
+        close_fig = bool(kwargs.pop("close", False))
+
+        # Save each figure
+        f = base_save_filepath
+        for fignum in fignums:
+
+            fig = plt.figure(fignum)
+            number = f"_{int(fig.number):03d}" if len(fignums) > 1 else ""
+            filename = f"{f.with_suffix('').name}{number}{f.suffix}"
+            save_path = f.parent / filename
+
+            fig.savefig(save_path, **kwargs)
+            if close_fig:
+                plt.close(fig)
+
+        return
+    
+    def __init__(self,
+            *,
             io_paths: pl.Path | Sequence[pl.Path],
             save_directory: pl.Path | None = None,
             output_type: str | None = None,

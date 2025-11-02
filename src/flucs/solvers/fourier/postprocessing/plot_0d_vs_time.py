@@ -1,4 +1,3 @@
-import glob
 import argparse
 import numpy as np
 import pathlib as pl
@@ -14,7 +13,9 @@ def plot_0d_vs_time(post, variable=None):
 
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout='constrained')
-    fig.canvas.manager.set_window_title(f"test")
+
+    figure_name = f"{variable}_vs_time"
+    fig.canvas.manager.set_window_title(figure_name)
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
@@ -39,14 +40,10 @@ def plot_0d_vs_time(post, variable=None):
 
     ax.legend()
 
-    plt.show()
+    # Save figures if required
+    post.save(fig, name=figure_name, suffix="png", save_kwargs={"dpi":300, "close": True})
 
-    save_directory = post.save_directory
-    if save_directory is not None:
-        save_directory.mkdir(parents=True, exist_ok=True)
-        save_path = save_directory / f"test.png"
-        fig.savefig(save_path)
-        print(f"Save location: {save_path}")
+    plt.show()
 
     return
 
@@ -90,6 +87,3 @@ if __name__ == "__main__":
 
     # Run script
     plot_0d_vs_time(post, variable=args.variable)
-
-        
-  
