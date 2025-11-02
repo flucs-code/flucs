@@ -1,11 +1,10 @@
-import argparse
 import toml
-import glob
 import flucs
 import inspect
+import argparse
 import pathlib as pl
 from typing import Sequence, Literal
-from netCDF4 import Dataset, Group
+from netCDF4 import Dataset
 
 class FlucsPostProcessing:
     """
@@ -139,7 +138,7 @@ class FlucsPostProcessing:
         Returns
         -------
         dict[str, dict[str, list[int]]]
-            Mapping nc_path (as a string) -> {variable: [group_ids], ... }
+            Mapping io_path (as a string) -> {variable: [group_ids], ... }
         """
 
         if self.output_type is None:
@@ -149,9 +148,9 @@ class FlucsPostProcessing:
         for io_path in self.io_paths:
             nc_path = io_path / self.output_type
             if not nc_path.exists():
-                result[str(nc_path)] = {}
+                result[str(io_path)] = {}
                 continue
-            result[str(nc_path)] = FlucsPostProcessing.get_netcdf_variables(nc_path, ignore=ignore)
+            result[str(io_path)] = FlucsPostProcessing.get_netcdf_variables(nc_path, ignore=ignore)
 
         return result
     
@@ -162,10 +161,10 @@ class FlucsPostProcessing:
         of the provided i/o directories given a specific output type.
         """
 
-        print("Available netCDF variables:")
+        print(f"Available netCDF variables:")
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
-        for nc_path, variables_dict in netcdf_variables.items():
-            print(rf"{self._indent}{nc_path}: {sorted(variables_dict.keys())}")
+        for io_path, variables_dict in netcdf_variables.items():
+            print(rf"{self._indent}{io_path}: {sorted(variables_dict.keys())}")
 
 
     def get_valid_files(self, variable: str) -> list[pl.Path]:
@@ -184,15 +183,15 @@ class FlucsPostProcessing:
         found = []
         missing = []
 
-        for nc_path, variables in mapping.items():
-            nc_path = pl.Path(nc_path)
+        for io_path, variables in mapping.items():
+            io_path = pl.Path(io_path)
             if variable in variables and variables[variable]:
-                found.append(nc_path)
+                found.append(io_path)
             else:
-                missing.append(nc_path)
+                missing.append(io_path)
 
         # Report files that are missing the variable
-        print(f"Variable {variable} not found in:")
+        print(f"Variable '{variable}' not found in:")
         for path in missing:
             print(f"{self._indent}{path}")
 
@@ -213,7 +212,7 @@ class FlucsPostProcessing:
         Parameters
         ----------
         io_paths : pl.Path | Sequence[pl.Path]
-            Path or paths to i/o directories (each must contain 'input.toml')
+            Path or paths to i/o directories containing 'input.toml'.
 
         output_type : str | None
             Type of output being analysed for this instance of post-processing.
@@ -256,8 +255,15 @@ class FlucsPostProcessing:
         system_types = set(self._system_types.values())
 
         if consistent in ("solver", "both") and len(solver_types) > 1:
-            raise ValueError("All inputs must use the same solver when "
-                             "'consistent' is 'solver' or 'both'.")
+            raise ValueError("All i/o directories must contain output from the same "
+                             "solver when 'consistent' is 'solver' or 'both'.")
         if consistent in ("system", "both") and len(system_types) > 1:
-            raise ValueError("All inputs must use the same system when "
-                             "'consistent' is 'system' or 'both'.")
+            raise ValueError("All i/o directories must contain output from the same "
+                             "system when 'consistent' is 'system' or 'both'.")
+        
+        print(f"FlucsPostProcessing "
+              f"({len(self.io_paths)}, "
+              f"{self.output_type}, "
+              f"{self.save_directory})")
+
+# need to construct a commmon argparse structure for postprocessing scripts to use
