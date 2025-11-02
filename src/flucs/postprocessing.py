@@ -370,8 +370,8 @@ class FlucsPostProcessing:
         return
     
     def __init__(self,
-            *,
             io_paths: pl.Path | Sequence[pl.Path],
+            *, 
             save_directory: pl.Path | None = None,
             output_type: str | None = None,
             constraint: Literal["none", "solver", "system", "both"] = "none",

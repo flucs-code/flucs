@@ -6,15 +6,15 @@ from netCDF4 import Dataset
 from flucs.postprocessing import FlucsPostProcessing, FlucsPostProcessing_parser
 
 
-def plot_0d_vs_time(post, variable=None):
+def plot_heatflux_vs_time(post):
 
     # Get valid files for the specified variable 
-    nc_paths = post.get_valid_files(str(variable))
+    nc_paths = post.get_valid_files("heatflux")
 
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout='constrained')
 
-    figure_name = f"{variable}_vs_time"
+    figure_name = "heatflux_vs_time"
     fig.canvas.manager.set_window_title(figure_name)
 
     # Iterate over output files
@@ -26,14 +26,14 @@ def plot_0d_vs_time(post, variable=None):
 
         # Read data from netCDF file
         time, _ = post.load_netcdf_variable(nc_path, "time")
-        data, _ = post.load_netcdf_variable(nc_path, variable)
+        data, _ = post.load_netcdf_variable(nc_path, "heatflux")
 
         # Plot data
         ax.plot(time, data, label=sim_label, linewidth=1.5, color=sim_color, linestyle='solid')
 
     # Setting plot options
-    ax.set_xlabel("Time")
-    ax.set_ylabel(variable)
+    ax.set_xlabel(r"$(2c_s/L_B)t$")
+    ax.set_ylabel(r"$Q_i/[4 n_e T_e c_s (\rho_s/L_B)^2]$")
 
     ax.set_xlim(np.min(time), np.max(time))
     ax.set_ylim(ymin=0.0)
@@ -55,22 +55,6 @@ if __name__ == "__main__":
         description="Plots any of the variables from 'output.0d.nc' against time.", 
     )
 
-    operation_modes = parser.add_mutually_exclusive_group(required=True)
-
-    operation_modes.add_argument(
-        "--list", "-l",
-        action="store_true",
-        default=False,
-        help="List all available variables to plot and exit."
-    )
-
-    operation_modes.add_argument(
-        "--variable", "-v",
-        type=str,
-        default=None,
-        help="Name of variable to plot."
-    )
-
     args = parser.parse_args()
 
     # Initialise post-processing object
@@ -78,12 +62,8 @@ if __name__ == "__main__":
         io_paths=args.io_path,
         save_directory=args.save_directory,
         output_type="output.0d.nc",
-        constraint="none"
+        constraint="both"
     )
 
-    if args.list:
-        post.list_netcdf_variables()
-        exit()
-
     # Call function
-    plot_0d_vs_time(post, variable=args.variable)
+    plot_heatflux_vs_time(post)
