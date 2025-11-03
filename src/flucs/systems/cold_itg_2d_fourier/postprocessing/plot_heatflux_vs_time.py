@@ -52,7 +52,7 @@ if __name__ == "__main__":
     # Setup parser
     parser = argparse.ArgumentParser(
         parents=[FlucsPostProcessing_parser()], 
-        description="Plots any of the variables from 'output.0d.nc' against time.", 
+        description="Plots the heatflux as a function of time.", 
     )
 
     args = parser.parse_args()
