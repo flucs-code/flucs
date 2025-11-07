@@ -1,5 +1,5 @@
 [time]
-dt = 0.01  # integration time step
+max_dt = 0.01  # integration time step
 tfinal =  10  # final time
 
 [setup]

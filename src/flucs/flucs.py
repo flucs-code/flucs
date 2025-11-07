@@ -128,7 +128,7 @@ def main():
         required=False,
         help="Additional arguments to override input-file parameters. Must be "
              "specified in TOML grouping format: e.g., to override the value "
-             "of dt in group time to be 0.01, specify 'time.dt 0.01'."
+             "of max_dt in group time to be 0.01, specify 'time.max_dt 0.01'."
     )
 
     # The script can only do one thing at a time.

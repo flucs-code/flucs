@@ -1,5 +1,5 @@
 [time]
-maxcfl = 0.5  # Maximum allowed CFL number
+max_cfl = 0.5  # Maximum allowed CFL number
 
 [dimensions] 
 # Padded and unpadded resolutions can either be determined automatically

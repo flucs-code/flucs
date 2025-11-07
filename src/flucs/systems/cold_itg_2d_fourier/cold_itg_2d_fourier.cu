@@ -166,7 +166,7 @@ __global__ void zonal_average(const float* __restrict__ input,
 __global__ void find_derivatives(const FLUCS_COMPLEX* fields,
                                  FLUCS_COMPLEX* dft_derivatives,
                                  FLUCS_FLOAT* real_dxphi_zonal,
-                                 FLUCS_FLOAT* max_cfl){
+                                 FLUCS_FLOAT* current_cfl){
     const int padded_index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -177,12 +177,12 @@ __global__ void find_derivatives(const FLUCS_COMPLEX* fields,
     const int padded_ikx = padded_index / HALF_PADDED_NY;
     const int padded_iky = padded_index % HALF_PADDED_NY;
 
-    // Use this kernel to also zero out real_dxphi_zonal and max_cfl
+    // Use this kernel to also zero out real_dxphi_zonal and current_cfl
     if (padded_iky == 0)
         real_dxphi_zonal[padded_ikx] = 0;
 
     if (padded_index == 0)
-        max_cfl[0] = 0;
+        current_cfl[0] = 0;
 
     // Check if mode should be zeroed
     if ((padded_ikx >= HALF_NX && padded_ikx < HALF_NX - NX + PADDED_NX)
@@ -237,7 +237,7 @@ __device__ float atomicMaxFloat(float* addr, float value) {
 __global__ void find_nonlinear_bits(const FLUCS_FLOAT* real_derivatives,
                                     const FLUCS_FLOAT* real_dxphi_zonal,
                                     FLUCS_FLOAT* real_bits,
-                                    FLUCS_FLOAT* max_cfl){
+                                    FLUCS_FLOAT* current_cfl){
     // Shared memory for CFL calculations
     extern __shared__ float cfl_shared[];
 
@@ -264,7 +264,7 @@ __global__ void find_nonlinear_bits(const FLUCS_FLOAT* real_derivatives,
 
     // First thread in block writes to global max via atomic
     if (threadIdx.x == 0) {
-        atomicMaxFloat(max_cfl, cfl_shared[0]); // custom atomic for float
+        atomicMaxFloat(current_cfl, cfl_shared[0]); // custom atomic for float
     }
 
     // index inside the zonal phi array

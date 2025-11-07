@@ -179,7 +179,7 @@ class ColdITG2DFourier(FourierSystem):
             self.real_bits = cp.zeros([5, self.padded_nx, self.padded_ny],
                                       dtype=self.float)
 
-            self.max_cfl = cp.zeros([1], dtype=self.float)
+            self.current_cfl = cp.zeros([1], dtype=self.float)
 
             # The first derivative in real_derivatives is dx phi.
             # We need this for computing the zonal flow.
@@ -297,7 +297,7 @@ class ColdITG2DFourier(FourierSystem):
                                      (self.fields[self.current_step % 2 - 1],
                                       self.dft_derivatives,
                                       self.real_dxphi_zonal,
-                                      self.max_cfl))
+                                      self.current_cfl))
 
         self.plan_c2r.fft(self.dft_derivatives,
                           self.real_derivatives,
@@ -315,7 +315,7 @@ class ColdITG2DFourier(FourierSystem):
             (self.full_padded_cuda_grid_size,),
             (self.cuda_block_size,),
             (self.real_derivatives, self.real_dxphi_zonal,
-             self.real_bits, self.max_cfl),
+             self.real_bits, self.current_cfl),
             shared_mem=self.nonlinear_bits_shared_mem
         )
 

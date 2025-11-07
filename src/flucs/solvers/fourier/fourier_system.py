@@ -36,7 +36,7 @@ class FourierSystem(FlucsSystem):
     invL: cp.ndarray
 
     # CFL coefficient at the current time step
-    max_cfl: cp.ndarray
+    current_cfl: cp.ndarray
 
     # CUDA kernels
     precompute_iteration_matrices_kernel: cp.RawKernel

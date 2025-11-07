@@ -147,7 +147,7 @@ class FlucsSystem(ABC):
         """
 
         self.init_time = 0.0
-        self.init_dt = float(self.input["time.dt"])
+        self.init_dt = float(self.input["time.max_dt"])
         self.final_time = float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestartManager(self)
