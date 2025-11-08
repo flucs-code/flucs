@@ -10,10 +10,6 @@ extern "C" {
 
 // Array for AB3 nonlinear terms
 __constant__ FLUCS_COMPLEX* multistep_nonlinear_terms = NULL;
-// AB3 coefficients
-#define AB0 ((FLUCS_FLOAT)(23.0/12))
-#define AB1 ((FLUCS_FLOAT)(-4.0/3))
-#define AB2 ((FLUCS_FLOAT)(5.0/12))
 
 __device__ void get_linear_matrix(const int index, const FLUCS_FLOAT dt, FLUCS_COMPLEX matrix[2][2]){
 
@@ -293,6 +289,9 @@ __global__ void find_nonlinear_bits(const FLUCS_FLOAT* real_derivatives,
 __device__ void add_nonlinear_terms(const int index,
                                     const FLUCS_FLOAT dt,
                                     const int current_step,
+                                    const FLUCS_FLOAT AB0,
+                                    const FLUCS_FLOAT AB1,
+                                    const FLUCS_FLOAT AB2,
                                     const FLUCS_COMPLEX* dft_bits,
                                     FLUCS_COMPLEX* rhs_fields){
     const int ikx = index / HALF_NY;

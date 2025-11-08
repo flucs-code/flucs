@@ -461,6 +461,9 @@ class FourierSystem(FlucsSystem):
                            (self.cuda_block_size,),
                            (self.float(self.current_dt),
                             self.current_step,
+                            self.ab3_coefficients[0],
+                            self.ab3_coefficients[1],
+                            self.ab3_coefficients[2],
                             self.fields[self.current_step%self.number_of_fields - 1],
                             self.dft_bits,
                             self.fields[self.current_step%self.number_of_fields]))
