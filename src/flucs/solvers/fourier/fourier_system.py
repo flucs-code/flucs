@@ -35,9 +35,14 @@ class FourierSystem(FlucsSystem):
     R: cp.ndarray
     invL: cp.ndarray
 
-    # CFL coefficient at the current time step
+    # CFL condition variables
+    max_cfl: float
     current_cfl: float
     cfl_rate: cp.ndarray
+
+    # AB3 timestep arrays
+    dt_array: np.ndarray
+    ab3_coefficients: np.ndarray
 
     # CUDA kernels
     precompute_iteration_matrices_kernel: cp.RawKernel
@@ -227,7 +232,12 @@ class FourierSystem(FlucsSystem):
         self.current_step = self.int(0)
         self.current_time = self.init_time
         self.current_dt = self.init_dt
+
+        # CFL condition setup
         self.current_cfl = 0.0
+        self.max_cfl = self.input["time.max_cfl"]
+        self.dt_array = np.full(3, self.current_dt, dtype=self.float)
+        self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], dtype=self.float)
 
         # Print message.
         print(f"Starting at time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
@@ -393,6 +403,34 @@ class FourierSystem(FlucsSystem):
             }
         }
 
+    def _update_dt(self) -> None:
+        """
+        Updates the time step based on the CFL condition.
+        """
+        
+        self.current_cfl = float(cp.asnumpy(self.cfl_rate[0])) * self.current_dt
+
+        # Reassign dt values
+        self.dt_array[2] = self.dt_array[1]
+        self.dt_array[1] = self.dt_array[0]
+        self.dt_array[0] = self.current_dt
+        
+
+    def _update_ab3_coefficients(self) -> None:
+        """
+        Updates nonlinear coefficients given changing timestep.
+        """
+
+        # Alias for readability
+        dt0 = self.dt_array[0]
+        dt1 = self.dt_array[1]
+        dt2 = self.dt_array[2]
+
+        # Compute coefficients
+        self.ab3_coefficients[0] = 1 + (dt0/dt1) * ((2.0/6.0)*dt0 +           dt1 + (3.0/6.0)*dt2)/(dt1 + dt2)
+        self.ab3_coefficients[1] =   - (dt0/dt1) * ((2.0/6.0)*dt0 + (3.0/6.0)*dt1 + (3.0/6.0)*dt2)/(      dt2) 
+        self.ab3_coefficients[2] =   + (dt0/dt2) * ((2.0/6.0)*dt0 + (3.0/6.0)*dt1                )/(dt1 + dt2)   
+
     @abstractmethod
     def begin_time_step(self) -> None:
         """Executed in the beginning of the time step. Should be used to
@@ -410,7 +448,8 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        self.current_cfl = float(cp.asnumpy(self.cfl_rate[0])) * self.current_dt
+        self._update_dt()
+        self._update_ab3_coefficients()
 
     @abstractmethod
     def finish_time_step(self) -> None:
