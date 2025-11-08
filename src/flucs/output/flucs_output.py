@@ -129,7 +129,7 @@ class FlucsOutputText(FlucsOutput):
 
     # The first few columns are always the same and contain simple timing data
     timing_data = []
-    timing_data_column_names = ["time", "step", "dt"]
+    timing_data_column_names = ["time", "step", "dt", "cfl"]  #TODO remove cfl from these columns, only included for testing
 
     # Data formatting options
     column_width = 12
@@ -192,7 +192,8 @@ class FlucsOutputText(FlucsOutput):
         self.timing_data.append([
             self.system.current_time,
             self.system.current_step,
-            self.system.current_dt
+            self.system.current_dt,
+            self.system.current_cfl
         ])
 
         super().execute()

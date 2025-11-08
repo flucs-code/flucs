@@ -36,7 +36,8 @@ class FourierSystem(FlucsSystem):
     invL: cp.ndarray
 
     # CFL coefficient at the current time step
-    current_cfl: cp.ndarray
+    current_cfl: float
+    cfl_rate: cp.ndarray
 
     # CUDA kernels
     precompute_iteration_matrices_kernel: cp.RawKernel
@@ -226,6 +227,7 @@ class FourierSystem(FlucsSystem):
         self.current_step = self.int(0)
         self.current_time = self.init_time
         self.current_dt = self.init_dt
+        self.current_cfl = 0.0
 
         # Print message.
         print(f"Starting at time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
@@ -407,7 +409,8 @@ class FourierSystem(FlucsSystem):
         Called in the beginning of a time step.
 
         """
-        pass
+
+        self.current_cfl = float(cp.asnumpy(self.cfl_rate[0])) * self.current_dt
 
     @abstractmethod
     def finish_time_step(self) -> None:
