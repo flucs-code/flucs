@@ -233,7 +233,12 @@ class FourierSystem(FlucsSystem):
         self.current_time = self.init_time
         self.current_dt = self.init_dt
 
-        # CFL condition setup
+        # Timing limits
+        self.tfinal = self.input["time.tfinal"]
+        self.max_dt = self.input["time.max_dt"]
+        self.min_dt = self.input["time.min_dt"]
+
+        # CFL setup
         self.current_cfl = 0.0
         self.max_cfl = self.input["time.max_cfl"]
         self.dt_array = np.full(3, self.current_dt, dtype=self.float)
@@ -403,17 +408,43 @@ class FourierSystem(FlucsSystem):
             }
         }
 
+    def _compute_current_dt(self) -> float:
+        """
+        Computes the current time step based on the CFL condition.
+        Clamps the timestep between min_dt and max_dt.
+        """
+
+        _cfl_rate = self.float(cp.asnumpy(self.cfl_rate[0]))
+        
+        # Compute new dt
+        dt_remaining = self.tfinal - self.current_time
+        dt_ceiling = min(self.max_cfl/_cfl_rate, dt_remaining if dt_remaining > 0 else self.max_dt)
+        dt_proposed = min(1/_cfl_rate, dt_ceiling)
+
+        new_dt = self.float(np.clip(dt_proposed, max(self.current_dt * 0.5, self.min_dt), self.current_dt * 1.5))
+
+        # Handle the case where the timestep becomes lower that min_dt
+        if new_dt < self.min_dt:
+            print(f"Required time step {new_dt:.3e} is below min_dt. Exiting")
+            self.solver.interrupted = True
+
+        return _cfl_rate, new_dt
+        
+
     def _update_dt(self) -> None:
         """
         Updates the time step based on the CFL condition.
         """
-        
-        self.current_cfl = float(cp.asnumpy(self.cfl_rate[0])) * self.current_dt
+
+        _cfl_rate, self.current_dt = self._compute_current_dt()
+        self.current_cfl = _cfl_rate * self.current_dt
 
         # Reassign dt values
         self.dt_array[2] = self.dt_array[1]
         self.dt_array[1] = self.dt_array[0]
         self.dt_array[0] = self.current_dt
+
+        # TODO: add logic here to do with recomputing precomputed matrices?
         
 
     def _update_ab3_coefficients(self) -> None:
@@ -422,9 +453,7 @@ class FourierSystem(FlucsSystem):
         """
 
         # Alias for readability
-        dt0 = self.dt_array[0]
-        dt1 = self.dt_array[1]
-        dt2 = self.dt_array[2]
+        dt0, dt1, dt2 = self.dt_array[:3]
 
         # Compute coefficients
         self.ab3_coefficients[0] = 1 + (dt0/dt1) * ((2.0/6.0)*dt0 +           dt1 + (3.0/6.0)*dt2)/(dt1 + dt2)
