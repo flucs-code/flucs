@@ -113,12 +113,12 @@ class FlucsRestartManager:
 
         with Dataset(self.initial_path, "r") as ds:
             # Set system's time variables to continue from the restart file
-            system.init_time = float(ds.variables["current_time"][...]) if \
+            system.init_time = self.system.float(ds.variables["current_time"][...]) if \
                                     not system.input["restart.reset_time"] else 0.0
-            system.init_dt = float(ds.variables["current_dt"][...])
+            system.init_dt = self.system.float(ds.variables["current_dt"][...])
             system.final_time = (
                 system.init_time
-                + float(system.input["time.tfinal"])
+                + self.system.float(system.input["time.tfinal"])
             )
 
             # Load all the restart data
@@ -265,10 +265,10 @@ class FlucsRestartManager:
 
             # Scalar values
             ds.createVariable("current_time", precision, ())[...] =\
-                float(self.system.current_time)
+                self.system.float(self.system.current_time)
 
             ds.createVariable("current_dt", precision, ())[...] =\
-                float(self.system.current_dt)
+                self.system.float(self.system.current_dt)
 
             # Arrays
             for var_name, var_dict in restart_data.items():
