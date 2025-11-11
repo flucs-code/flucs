@@ -42,7 +42,8 @@ class FourierSystem(FlucsSystem):
     cfl_rate_float: float
 
     # Timestep variables
-    dt_multiplier: float
+    dt_mult_increase: float
+    dt_mult_decrease: float
     dt_array: np.ndarray
     ab3_coefficients: np.ndarray
 
@@ -244,17 +245,20 @@ class FourierSystem(FlucsSystem):
         self.max_cfl = self.input["time.max_cfl"]
 
         # Timestep setup
-        self.dt_multiplier = self.input["time.dt_multiplier"]
+        self.dt_mult_increase = self.input["time.dt_mult_increase"]
+        self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
         self.dt_array = np.full(3, self.current_dt, dtype=self.float)
         self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], dtype=self.float)
         
         if self.input["setup.precompute_linear_matrix"]:
+            self.sub_cfl_steps = self.int(0)
+            self.dt_mult_steps = self.input["time.dt_mult_steps"]
             self._compute_current_dt = self._compute_current_dt_discrete
         else:
             self._compute_current_dt = self._compute_current_dt_continuous
 
         # Print message.
-        print(f"Starting at time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
+        print(f"Starting at time {float(self.current_time):.3e}, dt {float(self.current_dt):.3e}.")
 
         # Copy initial condition
         self.fields[0][:]\
@@ -341,8 +345,10 @@ class FourierSystem(FlucsSystem):
             self.module_options.define_constant("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
-            print("Will precompute the linear matrix!")
+            print("Using discrete time stepping. Linear matrices will be precomputed.")
             self.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX")
+        else:
+            print("Using continuous time stepping.")
 
         super().compile_cupy_module()
 
@@ -428,8 +434,10 @@ class FourierSystem(FlucsSystem):
     def _compute_current_dt_continuous(self) -> float:
         """
         Computes the current time step based on the CFL condition.
-        'dt_mutiplier' should be used to limit the increase in the 
-        timestep at each step.
+        'dt_multiplier' should be used to limit the increase in the 
+        time step at each iteration. 
+
+        Used if 'setup.precompute_linear_matrix' is False.
         """
         
         # Compute new dt
@@ -437,22 +445,59 @@ class FourierSystem(FlucsSystem):
                     min(
                         self.max_cfl/self.cfl_rate_float, 
                         self.max_dt,
-                        self.current_dt * self.dt_multiplier
+                        self.current_dt * self.dt_mult_increase
                     ), 
                 )
 
-        if new_dt < self.min_dt:
-            print(f"Required time step {new_dt:.3e} is below min_dt. Exiting.")
-            self.solver.interrupted = True
-
-        return new_dt
+        # Assign value
+        self.current_dt = new_dt
 
     def _compute_current_dt_discrete(self) -> float:
         """
-        Stuff
+        Computes the current time step based on the CFL condition.
+        'dt_multiplier' should be used to limit the increase in the 
+        time step at each iteration.
+
+        Used if 'setup.precompute_linear_matrix' is True.
         """
 
-        return
+        # If CFL condition is violated
+        if self.cfl_rate_float * self.current_dt > self.max_cfl:
+
+            new_dt = self.current_dt * self.dt_mult_decrease
+            print(
+                f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
+                f"(-, {self.current_step})"
+            )
+
+            self.current_dt = new_dt
+            self.sub_cfl_steps = self.int(0)
+            self.precompute_iteration_matrices()
+
+        # Check to see whether we can increase dt
+        elif self.sub_cfl_steps >= self.dt_mult_steps:
+
+            new_dt = self.float(
+                        min(
+                            self.current_dt * self.dt_mult_increase,
+                            self.max_dt,
+                            self.max_cfl / self.cfl_rate_float
+                        )
+                    )
+
+            if new_dt > self.current_dt:
+                print(
+                    f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
+                    f"(+, {self.current_step})"
+                )
+
+                self.current_dt = new_dt
+                self.sub_cfl_steps = self.int(0)
+                self.precompute_iteration_matrices()
+
+        # Otherwise just continue iterating with same current_dt
+        else:
+            self.sub_cfl_steps += 1
         
 
     def _update_dt(self) -> None:
@@ -462,7 +507,11 @@ class FourierSystem(FlucsSystem):
 
         self.cfl_rate_float = self.float(cp.asnumpy(self.cfl_rate[0]))
 
-        self.current_dt = self._compute_current_dt()
+        self._compute_current_dt()
+        if self.current_dt < self.min_dt:
+            print(f"({self.current_step}) Required time step {self.current_dt:.3e} is below min_dt. Exiting.")
+            self.solver.interrupted = True
+            
         self.current_cfl = self.cfl_rate_float * self.current_dt
 
         # Reassign dt values
@@ -470,8 +519,6 @@ class FourierSystem(FlucsSystem):
         self.dt_array[1] = self.dt_array[0]
         self.dt_array[0] = self.current_dt
 
-        # TODO: add logic here to do with recomputing precomputed matrices?
-        
 
     def _update_ab3_coefficients(self) -> None:
         """
@@ -486,6 +533,7 @@ class FourierSystem(FlucsSystem):
         self.ab3_coefficients[1] =   - (dt0/dt1) * ((2.0/6.0)*dt0 + (3.0/6.0)*dt1 + (3.0/6.0)*dt2)/(      dt2) 
         self.ab3_coefficients[2] =   + (dt0/dt2) * ((2.0/6.0)*dt0 + (3.0/6.0)*dt1                )/(dt1 + dt2)   
 
+
     @abstractmethod
     def begin_time_step(self) -> None:
         """Executed in the beginning of the time step. Should be used to
@@ -493,6 +541,7 @@ class FourierSystem(FlucsSystem):
 
         """
         self.current_step += 1
+        
 
     @abstractmethod
     def calculate_nonlinear_terms(self) -> None:
@@ -505,6 +554,7 @@ class FourierSystem(FlucsSystem):
 
         self._update_dt()
         self._update_ab3_coefficients()
+
 
     @abstractmethod
     def finish_time_step(self) -> None:

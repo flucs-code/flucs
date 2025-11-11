@@ -1,6 +1,8 @@
 [time]
 max_cfl = 0.5  # Maximum allowed CFL number
-dt_multiplier = 1.5 # Factor by which the timestep is allowed to increase
+dt_mult_increase = 1.25 # Factor by which the timestep is allowed to increase
+dt_mult_decrease = 0.75 # Factor by which the timestep is decreased (only used if precomputing)
+dt_mult_steps = 10000  # Number of steps before the timestep can be increased
 
 [dimensions] 
 # Padded and unpadded resolutions can either be determined automatically

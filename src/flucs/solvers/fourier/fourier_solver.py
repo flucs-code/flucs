@@ -36,7 +36,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
               f'which took {time_taken} s.')
 
         if self.system.input["setup.timing"]:
-            print("Only timing so exiting now!")
+            print("Timing completed. Exiting.\n")
             return
 
         # Reset system and actually run it
@@ -45,6 +45,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         time_taken = self._solver_loop()
 
+        print(
+            f"Finished at time {float(self.system.current_time):.3e}, "
+            f"dt {float(self.system.current_dt):.3e}."
+        )
         print(f"flucs given in {time_taken} seconds.\n")
 
     def _not_done(self) -> bool:
