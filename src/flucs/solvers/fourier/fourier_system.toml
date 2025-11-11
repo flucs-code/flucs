@@ -1,5 +1,6 @@
 [time]
 max_cfl = 0.5  # Maximum allowed CFL number
+dt_multiplier = 1.5 # Factor by which the timestep is allowed to increase
 
 [dimensions] 
 # Padded and unpadded resolutions can either be determined automatically

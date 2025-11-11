@@ -39,8 +39,10 @@ class FourierSystem(FlucsSystem):
     max_cfl: float
     current_cfl: float
     cfl_rate: cp.ndarray
+    cfl_rate_float: float
 
-    # AB3 timestep arrays
+    # Timestep variables
+    dt_multiplier: float
     dt_array: np.ndarray
     ab3_coefficients: np.ndarray
 
@@ -233,7 +235,6 @@ class FourierSystem(FlucsSystem):
         self.current_time = self.init_time
         self.current_dt = self.init_dt
 
-        # Timing limits
         self.tfinal = self.input["time.tfinal"]
         self.max_dt = self.input["time.max_dt"]
         self.min_dt = self.input["time.min_dt"]
@@ -241,8 +242,16 @@ class FourierSystem(FlucsSystem):
         # CFL setup
         self.current_cfl = 0.0
         self.max_cfl = self.input["time.max_cfl"]
+
+        # Timestep setup
+        self.dt_multiplier = self.input["time.dt_multiplier"]
         self.dt_array = np.full(3, self.current_dt, dtype=self.float)
         self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], dtype=self.float)
+        
+        if self.input["setup.precompute_linear_matrix"]:
+            self._compute_current_dt = self._compute_current_dt_discrete
+        else:
+            self._compute_current_dt = self._compute_current_dt_continuous
 
         # Print message.
         print(f"Starting at time {float(self.current_time):.3e} with timestep {float(self.current_dt):.3e}.")
@@ -408,27 +417,42 @@ class FourierSystem(FlucsSystem):
             }
         }
 
-    def _compute_current_dt(self) -> float:
+    def _compute_current_dt(self) -> None:
         """
         Computes the current time step based on the CFL condition.
-        Clamps the timestep between min_dt and max_dt.
+        Will be set to either 'compute_current_dt_discrete' or 
+        'compute_current_dt_continuous' at runtime depending on the 
+        value of 'setup.precompute_linear_matrix'.
         """
 
-        _cfl_rate = self.float(cp.asnumpy(self.cfl_rate[0]))
+    def _compute_current_dt_continuous(self) -> float:
+        """
+        Computes the current time step based on the CFL condition.
+        'dt_mutiplier' should be used to limit the increase in the 
+        timestep at each step.
+        """
         
         # Compute new dt
-        dt_remaining = self.tfinal - self.current_time
-        dt_ceiling = min(self.max_cfl/_cfl_rate, dt_remaining if dt_remaining > 0 else self.max_dt)
-        dt_proposed = min(1/_cfl_rate, dt_ceiling)
+        new_dt = self.float(
+                    min(
+                        self.max_cfl/self.cfl_rate_float, 
+                        self.max_dt,
+                        self.current_dt * self.dt_multiplier
+                    ), 
+                )
 
-        new_dt = self.float(np.clip(dt_proposed, max(self.current_dt * 0.5, self.min_dt), self.current_dt * 1.5))
-
-        # Handle the case where the timestep becomes lower that min_dt
         if new_dt < self.min_dt:
-            print(f"Required time step {new_dt:.3e} is below min_dt. Exiting")
+            print(f"Required time step {new_dt:.3e} is below min_dt. Exiting.")
             self.solver.interrupted = True
 
-        return _cfl_rate, new_dt
+        return new_dt
+
+    def _compute_current_dt_discrete(self) -> float:
+        """
+        Stuff
+        """
+
+        return
         
 
     def _update_dt(self) -> None:
@@ -436,8 +460,10 @@ class FourierSystem(FlucsSystem):
         Updates the time step based on the CFL condition.
         """
 
-        _cfl_rate, self.current_dt = self._compute_current_dt()
-        self.current_cfl = _cfl_rate * self.current_dt
+        self.cfl_rate_float = self.float(cp.asnumpy(self.cfl_rate[0]))
+
+        self.current_dt = self._compute_current_dt()
+        self.current_cfl = self.cfl_rate_float * self.current_dt
 
         # Reassign dt values
         self.dt_array[2] = self.dt_array[1]
