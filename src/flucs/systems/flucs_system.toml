@@ -1,6 +1,6 @@
 [time]
-max_dt = 0.01  # integration time step
-min_dt = 1e-8
+dt_max = 0.01  # integration time step
+dt_min = 1e-8
 tfinal =  10  # final time
 
 [setup]

@@ -5,6 +5,7 @@ from abc import abstractmethod
 import numpy as np
 import cupy as cp
 from flucs.systems import FlucsSystem
+from flucs.input import InvalidFlucsInputFileError
 from flucs.utilities.smooth_numbers import next_smooth_number
 from flucs.utilities.cupy import cupy_set_device_pointer
 
@@ -87,6 +88,18 @@ class FourierSystem(FlucsSystem):
 
     def _interpret_input(self):
         """Validates and sets up the number of lattice points."""
+
+        # Check for conflicts in time-stepping input parameters
+        if self.input["time.dt_method"] == "discrete":
+            print("Using discrete time stepping.")
+
+        elif self.input["time.dt_method"] == "continuous":
+            if self.input["setup.precompute_linear_matrix"]:
+                raise InvalidFlucsInputFileError(
+                    "Cannot have setup.precompute_linear_matrix = true if "
+                    "time.dt_method = 'continuous'."
+                )
+            print("Using continuous time stepping.")
 
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
@@ -236,9 +249,8 @@ class FourierSystem(FlucsSystem):
         self.current_time = self.init_time
         self.current_dt = self.init_dt
 
-        self.tfinal = self.input["time.tfinal"]
-        self.max_dt = self.input["time.max_dt"]
-        self.min_dt = self.input["time.min_dt"]
+        self.dt_max = self.input["time.dt_max"]
+        self.dt_min = self.input["time.dt_min"]
 
         # CFL setup
         self.current_cfl = 0.0
@@ -249,12 +261,14 @@ class FourierSystem(FlucsSystem):
         self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
         self.dt_array = np.full(3, self.current_dt, dtype=self.float)
         self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], dtype=self.float)
-        
-        if self.input["setup.precompute_linear_matrix"]:
+
+        # Determine the time stepping method
+        if self.input["time.dt_method"] == "discrete":
             self.sub_cfl_steps = self.int(0)
             self.dt_mult_steps = self.input["time.dt_mult_steps"]
             self._compute_current_dt = self._compute_current_dt_discrete
-        else:
+
+        elif self.input["time.dt_method"] == "continuous":
             self._compute_current_dt = self._compute_current_dt_continuous
 
         # Print message.
@@ -267,7 +281,7 @@ class FourierSystem(FlucsSystem):
         super().ready()
 
         if self.input["setup.precompute_linear_matrix"]:
-            if not hasattr(self, "R"):  # allocate matrices if not done yet
+            if not hasattr(self, "R"): 
                 self.R = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
                                   dtype=self.complex)
                 self.invL = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
@@ -345,10 +359,8 @@ class FourierSystem(FlucsSystem):
             self.module_options.define_constant("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
-            print("Using discrete time stepping. Linear matrices will be precomputed.")
+            print("Linear matrices will be precomputed.")
             self.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX")
-        else:
-            print("Using continuous time stepping.")
 
         super().compile_cupy_module()
 
@@ -444,7 +456,7 @@ class FourierSystem(FlucsSystem):
         new_dt = self.float(
                     min(
                         self.max_cfl/self.cfl_rate_float, 
-                        self.max_dt,
+                        self.dt_max,
                         self.current_dt * self.dt_mult_increase
                     ), 
                 )
@@ -480,7 +492,7 @@ class FourierSystem(FlucsSystem):
             new_dt = self.float(
                         min(
                             self.current_dt * self.dt_mult_increase,
-                            self.max_dt,
+                            self.dt_max,
                             self.max_cfl / self.cfl_rate_float
                         )
                     )
@@ -508,8 +520,8 @@ class FourierSystem(FlucsSystem):
         self.cfl_rate_float = self.float(cp.asnumpy(self.cfl_rate[0]))
 
         self._compute_current_dt()
-        if self.current_dt < self.min_dt:
-            print(f"({self.current_step}) Required time step {self.current_dt:.3e} is below min_dt. Exiting.")
+        if self.current_dt < self.dt_min:
+            print(f"({self.current_step}) Required time step {self.current_dt:.3e} is below dt_min. Exiting.")
             self.solver.interrupted = True
             
         self.current_cfl = self.cfl_rate_float * self.current_dt
