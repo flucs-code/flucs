@@ -17,7 +17,7 @@ class FlucsPostProcessing:
 
     # Postprocessing-specific attributes
     io_paths: list[pl.Path] 
-    output_type: str | None
+    output_file: str | None
     save_directory: pl.Path | None
     _script_paths: dict[str, list[pl.Path]]
 
@@ -131,7 +131,7 @@ class FlucsPostProcessing:
     def _get_all_netcdf_variables(self, ignore=("time", "dt")) -> dict[str, dict[str, list[int]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file 
-        specified by self.output_type, and the groups that they appear in.
+        specified by self.output_file, and the groups that they appear in.
 
         Parameters
         ----------
@@ -144,12 +144,12 @@ class FlucsPostProcessing:
             Mapping io_path (as a string) -> {variable: [group_ids], ... }
         """
 
-        if self.output_type is None:
-            raise ValueError("'output_type' must be set to derive netCDF paths from i/o directories.")
+        if self.output_file is None:
+            raise ValueError("'output_file' must be set to derive netCDF paths from i/o directories.")
 
         result: dict[str, dict[str, list[int]]] = {}
         for io_path in self.io_paths:
-            nc_path = io_path / self.output_type
+            nc_path = io_path / self.output_file
             if not nc_path.exists():
                 result[str(io_path)] = {}
                 continue
@@ -187,7 +187,7 @@ class FlucsPostProcessing:
         missing = []
 
         for io_path, variables in mapping.items():
-            nc_path = pl.Path(io_path) / self.output_type
+            nc_path = pl.Path(io_path) / self.output_file
             if variable in variables and variables[variable]:
                 found.append(nc_path)
             else:
@@ -201,7 +201,7 @@ class FlucsPostProcessing:
         return found
 
 
-    def load_netcdf_variable(self, nc_path: pl.Path, variable: str, fill_value: float = 0.0):
+    def load_netcdf_variable(self, nc_path: pl.Path, variable: str, fill_value: float = np.nan):
         """
         Load a variable across all groups in a netCDF file and concatenate
         along time (zeroth axis). Groups missing the variable are filled with
@@ -368,12 +368,45 @@ class FlucsPostProcessing:
                 plt.close(fig)
 
         return
+
+    @staticmethod
+    def parser() -> argparse.ArgumentParser:
+        """
+        A common parser for postprocessing scripts that use FlucsPostProcessing.
+        """
+
+        parser = argparse.ArgumentParser(add_help=False)
+
+        parser.add_argument(
+            "--io_path", "-io",
+            nargs='+',
+            type=str,
+            default=pl.Path.cwd(),
+            required=False,
+            help="Paths to the i/o directories, which must contain 'input.toml'. "
+                "If no path is specified, will assume the current working directory.",
+        )
+
+        parser.add_argument(
+            "--save_directory", "-s",
+            nargs="?",
+            type=lambda s: pl.Path(s).expanduser().resolve(),
+            const=pl.Path.cwd(),
+            default=None,
+            help=(
+                "Directory to which postprocessing outputs are saved. If omitted, nothing "
+                "is saved. If no path is specified, will assume the current working directory."
+            ),
+        )
+
+        return parser
+
     
     def __init__(self,
             io_paths: pl.Path | Sequence[pl.Path],
             *, 
             save_directory: pl.Path | None = None,
-            output_type: str | None = None,
+            output_file: str | None = None,
             constraint: Literal["none", "solver", "system", "both"] = "none",
         ) -> None:
         
@@ -389,7 +422,7 @@ class FlucsPostProcessing:
         save_directory : pl.Path | None
             Optional path where to save results. If None, nothing will be saved.
 
-        output_type : str | None
+        output_file: str | None
             Type of output being analysed for this instance of post-processing.
             If None, no specific output type is assumed.
 
@@ -412,8 +445,8 @@ class FlucsPostProcessing:
                 )
             self.io_paths.append(pl.Path(path))
 
-        # Set output type and save directory
-        self.output_type = output_type 
+        # Set output file and save directory
+        self.output_file = output_file 
         self.save_directory = pl.Path(save_directory).resolve() if save_directory else None
 
         # Determine solver and system types across all i/o directories
@@ -435,37 +468,5 @@ class FlucsPostProcessing:
         
         print(f"FlucsPostProcessing "
               f"({len(self.io_paths)}, "
-              f"{self.output_type}, "
+              f"{self.output_file}, "
               f"{self.save_directory})")
-
-
-def FlucsPostProcessing_parser() -> argparse.ArgumentParser:
-    """
-    A common parser for postprocessing scripts that use FlucsPostProcessing.
-    """
-
-    parser = argparse.ArgumentParser(add_help=False)
-
-    parser.add_argument(
-        "--io_path", "-io",
-        nargs='+',
-        type=str,
-        default=pl.Path.cwd(),
-        required=False,
-        help="Paths to the i/o directories, which must contain 'input.toml'. "
-             "If no path is specified, will assume the current working directory.",
-    )
-
-    parser.add_argument(
-        "--save_directory", "-s",
-        nargs="?",
-        type=lambda s: pl.Path(s).expanduser().resolve(),
-        const=pl.Path.cwd(),
-        default=None,
-        help=(
-            "Directory to which postprocessing outputs are saved. If omitted, nothing "
-            "is saved. If no path is specified, will assume the current working directory."
-        ),
-    )
-
-    return parser

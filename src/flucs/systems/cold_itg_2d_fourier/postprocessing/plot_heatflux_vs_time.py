@@ -2,8 +2,7 @@ import argparse
 import numpy as np
 import pathlib as pl
 import matplotlib.pyplot as plt
-from netCDF4 import Dataset
-from flucs.postprocessing import FlucsPostProcessing, FlucsPostProcessing_parser
+from flucs.postprocessing import FlucsPostProcessing
 
 
 def plot_heatflux_vs_time(post):
@@ -41,7 +40,7 @@ def plot_heatflux_vs_time(post):
     ax.legend()
 
     # Save figures if required
-    post.save(fig, name=figure_name, suffix="png", save_kwargs={"dpi":300, "close": True})
+    post.save(fig, name=figure_name, suffix="png", save_kwargs={"dpi": 300, "close": True})
 
     plt.show()
 
@@ -51,7 +50,7 @@ if __name__ == "__main__":
 
     # Setup parser
     parser = argparse.ArgumentParser(
-        parents=[FlucsPostProcessing_parser()], 
+        parents=[FlucsPostProcessing.parser()], 
         description="Plots the heatflux as a function of time.", 
     )
 
@@ -61,7 +60,7 @@ if __name__ == "__main__":
     post = FlucsPostProcessing(
         io_paths=args.io_path,
         save_directory=args.save_directory,
-        output_type="output.0d.nc",
+        output_file="output.0d.nc",
         constraint="both"
     )
 
