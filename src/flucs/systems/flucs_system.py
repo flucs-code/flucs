@@ -40,6 +40,7 @@ class FlucsSystem(ABC):
     float: type
     complex: type
     int: type
+    tolerance: float
 
     # Variables to that keep track of time
     current_step: int
@@ -105,6 +106,9 @@ class FlucsSystem(ABC):
         # We always use 32-bit integers
         self.int = np.int32
 
+        # Get float error tolerance
+        self.tolerance = self.float(np.finfo(self.float).eps) * 64.0
+
     def add_output(self, output: FlucsOutput):
         if self.output_heap is None:
             self.output_heap = []
@@ -147,8 +151,8 @@ class FlucsSystem(ABC):
         """
 
         self.init_time = 0.0
-        self.init_dt = float(self.input["time.dt"])
-        self.final_time = float(self.input["time.tfinal"])
+        self.init_dt = self.float(self.input["time.dt_max"])
+        self.final_time = self.float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestartManager(self)
         self._setup_system()

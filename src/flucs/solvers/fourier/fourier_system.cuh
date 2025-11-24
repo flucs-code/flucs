@@ -33,6 +33,9 @@ __device__ void get_linear_matrix(const int index,
 __device__ void add_nonlinear_terms(const int index,
                                     const FLUCS_FLOAT dt,
                                     const int current_step,
+                                    const FLUCS_FLOAT AB0,
+                                    const FLUCS_FLOAT AB1,
+                                    const FLUCS_FLOAT AB2,
                                     const FLUCS_COMPLEX* dft_bits,
                                     FLUCS_COMPLEX* rhs_fields);
 
@@ -124,6 +127,9 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 // terms to find the fields at the current time step.
 __global__ void finish_step(const FLUCS_FLOAT dt,
                             const int current_step,
+                            const FLUCS_FLOAT AB0,
+                            const FLUCS_FLOAT AB1,
+                            const FLUCS_FLOAT AB2,
                             const FLUCS_COMPLEX* previous_fields,
                             const FLUCS_COMPLEX* dft_bits,
                             FLUCS_COMPLEX* current_fields){
@@ -147,14 +153,14 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
     }
 
 #ifdef NONLINEAR
-    add_nonlinear_terms(index, dt, current_step, dft_bits, rhs_fields);
+    add_nonlinear_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, rhs_fields);
 #endif
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        result[index + i*HALFUNPADDEDSIZE] = 0;
+        current_fields[index + i*HALFUNPADDEDSIZE] = 0;
 
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            result[index + i*HALFUNPADDEDSIZE] += invL_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
+            current_fields[index + i*HALFUNPADDEDSIZE] += invL_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
         }
     }
 #else // not PRECOMPUTE_LINEAR_MATRIX
@@ -172,7 +178,7 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
     }
 
 #ifdef NONLINEAR
-    add_nonlinear_terms(index, dt, current_step, dft_bits, rhs_fields);
+    add_nonlinear_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, rhs_fields);
 #endif
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
