@@ -476,7 +476,7 @@ class FourierSystem(FlucsSystem):
         # If CFL condition is violated
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
 
-            new_dt = self.current_dt * self.dt_mult_decrease
+            new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
             print(
                 f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
                 f"(-, {self.current_step})"
