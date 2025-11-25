@@ -21,9 +21,10 @@ import cupy as cp
 from abc import ABC, abstractmethod
 import flucs
 from flucs import FlucsInput
-from flucs.output import FlucsOutput, FlucsDiagnostic
+from flucs.output import FlucsOutput
+from flucs.diagnostic import FlucsDiagnostic
 from flucs.utilities.cupy import ModuleOptions
-from flucs.systems.flucs_restart_manager import FlucsRestartManager
+from flucs.restart import FlucsRestartManager
 
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver

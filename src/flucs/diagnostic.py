@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 if TYPE_CHECKING:
-    from flucs.diagnostics.output import FlucsOutput
+    from flucs.output import FlucsOutput
     from flucs.systems import FlucsSystem
 
 

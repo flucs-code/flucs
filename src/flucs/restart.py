@@ -6,7 +6,7 @@ import pathlib as pl
 import numpy as np
 import cupy as cp
 from netCDF4 import Dataset
-from flucs.input import FlucsInput, InvalidFlucsInputFileError
+from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
 
 if TYPE_CHECKING:

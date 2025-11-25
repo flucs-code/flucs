@@ -14,11 +14,11 @@ from netCDF4 import Dataset, Group
 from flucs.solvers import FlucsSolverState
 
 if TYPE_CHECKING:
-    from flucs.output import FlucsDiagnostic
+    from flucs.diagnostic import FlucsDiagnostic
     from flucs.systems import FlucsSystem
 
 
-_registered_outputs = entry_points().select(group="flucs.outputs")
+_registered_outputs = entry_points().select(group="flucs.output")
 
 def get_output_type(output_type: str):
     """Returns an output type.
