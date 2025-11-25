@@ -1,14 +1,15 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-import datetime
+
 import shutil
-import pathlib as pl
-import numpy as np
+import datetime
 import cupy as cp
+import numpy as np
+import pathlib as pl
 from netCDF4 import Dataset
+from typing import TYPE_CHECKING
+
 from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
-
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
 

@@ -8,6 +8,7 @@ import pathlib as pl
 import importlib.metadata
 from datetime import datetime
 from importlib.metadata import entry_points
+
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler

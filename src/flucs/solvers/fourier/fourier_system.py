@@ -1,9 +1,11 @@
-"""Abstract base class for a system that can be solved by FourierSolver.
+"""
+Abstract base class for a system that can be solved by FourierSolver.
 """
 
-from abc import abstractmethod
-import numpy as np
 import cupy as cp
+import numpy as np
+from abc import abstractmethod
+
 from flucs.systems import FlucsSystem
 from flucs.input import InvalidFlucsInputFileError
 from flucs.utilities.smooth_numbers import next_smooth_number

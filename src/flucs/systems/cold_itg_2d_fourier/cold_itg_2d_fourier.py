@@ -4,17 +4,14 @@ ITG system. The nonlinear term is handled explicitly using the Adams-Bashforth
 
 """
 
-import numpy as np
 import cupy as cp
+import numpy as np
 from cupy.cuda import cufft
-from netCDF4 import Dataset
-from numpy import dtype
-import flucs
+
+from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
 from flucs.utilities.cupy import cupy_set_device_pointer
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.solvers.fourier.fourier_system_diagnostics import LinearSpectrumDiag
-from flucs.output import FlucsOutput
-from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
 
 
 class ColdITG2DFourier(FourierSystem):

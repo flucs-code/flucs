@@ -4,15 +4,16 @@ executed together and output to a file of specified format.
 """
 
 from __future__ import annotations
+
+import datetime
+import numpy as np
+import pathlib as pl
+from netCDF4 import Dataset, Group
 from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
-import datetime
-import pathlib as pl
-import numpy as np
-from netCDF4 import Dataset, Group
-from flucs.solvers import FlucsSolverState
 
+from flucs.solvers import FlucsSolverState
 if TYPE_CHECKING:
     from flucs.diagnostic import FlucsDiagnostic
     from flucs.systems import FlucsSystem

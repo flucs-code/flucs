@@ -7,8 +7,9 @@ abstract methods.
 
 import enum
 import signal
-from typing import TypeVar, Generic
 from abc import ABC, abstractmethod
+from typing import TypeVar, Generic
+
 from flucs import FlucsInput
 
 

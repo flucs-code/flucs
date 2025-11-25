@@ -1,9 +1,11 @@
-"""Defines the base class for diagnostics."""
-
+"""
+Defines the base class for diagnostics.
+"""
 from __future__ import annotations
+
+import numpy as np
 from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
-import numpy as np
 
 if TYPE_CHECKING:
     from flucs.output import FlucsOutput

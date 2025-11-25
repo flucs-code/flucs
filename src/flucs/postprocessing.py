@@ -5,10 +5,10 @@ import argparse
 import numpy as np  
 import pathlib as pl 
 import matplotlib.pyplot as plt
-from typing import Sequence, Literal
 from netCDF4 import Dataset
-from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from typing import Sequence, Literal
 
 class FlucsPostProcessing:
     """
