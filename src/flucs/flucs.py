@@ -205,8 +205,8 @@ def main():
     # Input-file reconstruction
     if args.reconstruct is not None:
         # Import here to avoid circular imports at module load time
-        from flucs.restart import FlucsRestartManager
-        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct,
+        from flucs.restart import FlucsRestart
+        FlucsRestart.reconstruct_input_from_restart(args.reconstruct,
                                                            io_path)
         return
 
