@@ -2,9 +2,9 @@
 Abstract base class for a system that can be solved by FourierSolver.
 """
 
+from abc import abstractmethod
 import cupy as cp
 import numpy as np
-from abc import abstractmethod
 
 from flucs.systems import FlucsSystem
 from flucs.input import InvalidFlucsInputFileError
@@ -43,10 +43,14 @@ class FourierSystem(FlucsSystem):
     current_cfl: float
     cfl_rate: cp.ndarray
     cfl_rate_float: float
+    sub_cfl_steps: float
 
     # Timestep variables
+    dt_max: float
+    dt_min: float
     dt_mult_increase: float
     dt_mult_decrease: float
+    dt_mult_steps: float
     dt_array: np.ndarray
     ab3_coefficients: np.ndarray
 
@@ -55,6 +59,11 @@ class FourierSystem(FlucsSystem):
     finish_step_kernel: cp.RawKernel
     compute_linear_matrix_kernel: cp.RawKernel
     cuda_block_size: int = 512
+
+    # CUDA grids
+    half_unpadded_cuda_grid_size: int
+    half_padded_cuda_grid_size: int
+    full_padded_cuda_grid_size: int
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -210,13 +219,6 @@ class FourierSystem(FlucsSystem):
         self.ky = 2 * np.pi * self.ny * np.fft.rfftfreq(self.ny)\
             / self.input["dimensions.Ly"]
 
-        # self.kx = np.broadcast_to(kx_linear, (self.nz, self.half_ny,
-        #                                       self.nx)).transpose(0, 2, 1)
-        # self.kz = np.broadcast_to(kz_linear, (self.half_ny, self.nx,
-        #                                       self.nz)).transpose(2, 1, 0)
-        #
-        # self.ky = np.broadcast_to(ky_linear, (self.nz, self.nx, self.half_ny))
-
     def get_broadcast_wavenumbers(self):
         """ Returns wavenumber arrays broadcast to (nz, nx, half_ny)
 
@@ -254,6 +256,22 @@ class FourierSystem(FlucsSystem):
         self.dt_max = self.input["time.dt_max"]
         self.dt_min = self.input["time.dt_min"]
 
+        # Setup kernel parameters (grid, block, shared memory)
+        self.half_unpadded_cuda_grid_size = (
+            (self.half_unpadded_size + self.cuda_block_size - 1)
+            // self.cuda_block_size
+        )
+
+        self.half_padded_cuda_grid_size = (
+            (self.half_padded_size + self.cuda_block_size - 1)
+            // self.cuda_block_size
+        )
+
+        self.full_padded_cuda_grid_size = (
+            (self.full_padded_size + self.cuda_block_size - 1)
+            // self.cuda_block_size
+        )
+
         # CFL setup
         self.current_cfl = 0.0
         self.max_cfl = self.input["time.max_cfl"]
@@ -261,8 +279,9 @@ class FourierSystem(FlucsSystem):
         # Timestep setup
         self.dt_mult_increase = self.input["time.dt_mult_increase"]
         self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
-        self.dt_array = np.full(3, self.current_dt, dtype=self.float)
-        self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], dtype=self.float)
+        self.dt_array = np.full(3, 10**10, dtype=self.float)
+        self.ab3_coefficients = np.array([1.0, 0.0, 0.0],
+                                         dtype=self.float)
 
         # Determine the time stepping method
         if self.input["time.dt_method"] == "discrete":
@@ -274,7 +293,8 @@ class FourierSystem(FlucsSystem):
             self._compute_current_dt = self._compute_current_dt_continuous
 
         # Print message.
-        print(f"Starting at time {float(self.current_time):.3e}, dt {float(self.current_dt):.3e}.")
+        print(f"Starting at time {float(self.current_time):.3e}, "
+              f"dt {float(self.current_dt):.3e}.")
 
         # Copy initial condition
         self.fields[0][:]\
@@ -283,7 +303,7 @@ class FourierSystem(FlucsSystem):
         super().ready()
 
         if self.input["setup.precompute_linear_matrix"]:
-            if not hasattr(self, "R"): 
+            if not hasattr(self, "R"):
                 self.R = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
                                   dtype=self.complex)
                 self.invL = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
@@ -304,19 +324,26 @@ class FourierSystem(FlucsSystem):
         if not self.input["setup.precompute_linear_matrix"]:
             return
 
-        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
         self.precompute_iteration_matrices_kernel(
-            (unpadded_kernels_lattice_size,), (self.cuda_block_size,),
+            (self.half_unpadded_cuda_grid_size,), (self.cuda_block_size,),
             (self.float(self.current_dt),))
 
     def compile_cupy_module(self) -> None:
         # Add module options
-        self.module_options.define_constant("TWOPI_OVER_LX",
-                                            2*np.pi / self.input["dimensions.Lx"])
-        self.module_options.define_constant("TWOPI_OVER_LY",
-                                            2*np.pi / self.input["dimensions.Ly"])
-        self.module_options.define_constant("TWOPI_OVER_LZ",
-                                            2*np.pi / self.input["dimensions.Lz"])
+        self.module_options.define_constant(
+            "TWOPI_OVER_LX",
+            2*np.pi / self.input["dimensions.Lx"]
+        )
+
+        self.module_options.define_constant(
+            "TWOPI_OVER_LY",
+            2*np.pi / self.input["dimensions.Ly"]
+        )
+
+        self.module_options.define_constant(
+            "TWOPI_OVER_LZ",
+            2*np.pi / self.input["dimensions.Lz"]
+        )
 
         self.module_options.define_constant("NUMBER_OF_FIELDS",
                                             self.number_of_fields)
@@ -328,8 +355,10 @@ class FourierSystem(FlucsSystem):
         self.module_options.define_constant("PADDEDSIZE",
                                             self.full_padded_size)
 
-        self.module_options.define_constant("DFT_PADDEDSIZE_FACTOR",
-                                            self.float(1.0 / self.full_padded_size))
+        self.module_options.define_constant(
+            "DFT_PADDEDSIZE_FACTOR",
+            self.float(1.0 / self.full_padded_size)
+        )
 
         self.module_options.define_constant("NX", self.nx)
         self.module_options.define_constant("LX", self.input["dimensions.Lx"])
@@ -377,9 +406,8 @@ class FourierSystem(FlucsSystem):
         compute_linear_matrix_kernel\
             = self.cupy_module.get_function("compute_linear_matrix")
 
-        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
         compute_linear_matrix_kernel(
-            (unpadded_kernels_lattice_size,), (self.cuda_block_size,),
+            (self.half_unpadded_cuda_grid_size,), (self.cuda_block_size,),
             (self.current_dt, self.linear_matrix))
 
     def set_initial_conditions(self) -> None:
@@ -397,7 +425,9 @@ class FourierSystem(FlucsSystem):
             # TODO: remove when allowing for changing of sizes
             expected_shape = self.fields[0].shape
             if field_data.shape != expected_shape:
-                raise ValueError(f"Restart data has incorrect shape: {field_data.shape}, expected: {expected_shape}")
+                raise ValueError(f"Restart data has incorrect shape: "
+                                 f"{field_data.shape}, "
+                                 f"expected: {expected_shape}")
 
             # Set initial field data
             self.fields_initial = np.asarray(field_data)
@@ -424,7 +454,7 @@ class FourierSystem(FlucsSystem):
         Get the complex Fourier data for the fields at the current step.
         """
 
-        index = int(self.current_step)%self.number_of_fields
+        index = int(self.current_step) % self.number_of_fields
         current_fields = self.fields[index]
 
         data = cp.asnumpy(current_fields) if isinstance(current_fields, cp.ndarray) \
@@ -440,27 +470,27 @@ class FourierSystem(FlucsSystem):
     def _compute_current_dt(self) -> None:
         """
         Computes the current time step based on the CFL condition.
-        Will be set to either 'compute_current_dt_discrete' or 
-        'compute_current_dt_continuous' at runtime depending on the 
+        Will be set to either 'compute_current_dt_discrete' or
+        'compute_current_dt_continuous' at runtime depending on the
         value of 'setup.precompute_linear_matrix'.
         """
 
     def _compute_current_dt_continuous(self) -> float:
         """
         Computes the current time step based on the CFL condition.
-        'dt_multiplier' should be used to limit the increase in the 
-        time step at each iteration. 
+        'dt_multiplier' should be used to limit the increase in the
+        time step at each iteration.
 
         Used if 'setup.precompute_linear_matrix' is False.
         """
-        
+
         # Compute new dt
         new_dt = self.float(
-                    min(
-                        self.max_cfl/self.cfl_rate_float, 
+                    np.nanmin((
+                        self.max_cfl/self.cfl_rate_float,
                         self.dt_max,
                         self.current_dt * self.dt_mult_increase
-                    ), 
+                    )),
                 )
 
         # Assign value
@@ -469,7 +499,7 @@ class FourierSystem(FlucsSystem):
     def _compute_current_dt_discrete(self) -> float:
         """
         Computes the current time step based on the CFL condition.
-        'dt_multiplier' should be used to limit the increase in the 
+        'dt_multiplier' should be used to limit the increase in the
         time step at each iteration.
 
         Used if 'setup.precompute_linear_matrix' is True.
@@ -512,7 +542,6 @@ class FourierSystem(FlucsSystem):
         # Otherwise just continue iterating with same current_dt
         else:
             self.sub_cfl_steps += 1
-        
 
     def _update_dt(self) -> None:
         """
@@ -523,16 +552,12 @@ class FourierSystem(FlucsSystem):
 
         self._compute_current_dt()
         if self.current_dt < self.dt_min:
-            print(f"({self.current_step}) Required time step {self.current_dt:.3e} is below dt_min. Exiting.")
+            print(f"({self.current_step}) Required time step "
+                  f"{self.current_dt:.3e} is below dt_min. Exiting.")
             self.solver.interrupted = True
-            
+
         self.current_cfl = self.cfl_rate_float * self.current_dt
-
-        # Reassign dt values
-        self.dt_array[2] = self.dt_array[1]
-        self.dt_array[1] = self.dt_array[0]
-        self.dt_array[0] = self.current_dt
-
+        self.dt_array[self.current_step % 3] = self.current_dt
 
     def _update_ab3_coefficients(self) -> None:
         """
@@ -540,13 +565,14 @@ class FourierSystem(FlucsSystem):
         """
 
         # Alias for readability
-        dt0, dt1, dt2 = self.dt_array[:3]
+        dt0 = self.dt_array[self.current_step % 3]
+        dt1 = self.dt_array[self.current_step % 3 - 1]
+        dt2 = self.dt_array[self.current_step % 3 - 2]
 
         # Compute coefficients
         self.ab3_coefficients[0] = 1 + (dt0/dt1) * ((2.0/6.0)*dt0 +           dt1 + (3.0/6.0)*dt2)/(dt1 + dt2)
         self.ab3_coefficients[1] =   - (dt0/dt1) * ((2.0/6.0)*dt0 + (3.0/6.0)*dt1 + (3.0/6.0)*dt2)/(      dt2) 
         self.ab3_coefficients[2] =   + (dt0/dt2) * ((2.0/6.0)*dt0 + (3.0/6.0)*dt1                )/(dt1 + dt2)   
-
 
     @abstractmethod
     def begin_time_step(self) -> None:
@@ -555,7 +581,6 @@ class FourierSystem(FlucsSystem):
 
         """
         self.current_step += 1
-        
 
     @abstractmethod
     def calculate_nonlinear_terms(self) -> None:
@@ -569,22 +594,21 @@ class FourierSystem(FlucsSystem):
         self._update_dt()
         self._update_ab3_coefficients()
 
-
     @abstractmethod
     def finish_time_step(self) -> None:
         """Combines the nonlinear and linear terms in order to finish the time
         step"""
-        unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
-
-        self.finish_step_kernel((unpadded_kernels_lattice_size,),
-                           (self.cuda_block_size,),
-                           (self.float(self.current_dt),
-                            self.current_step,
-                            self.ab3_coefficients[0],
-                            self.ab3_coefficients[1],
-                            self.ab3_coefficients[2],
-                            self.fields[self.current_step%self.number_of_fields - 1],
-                            self.dft_bits,
-                            self.fields[self.current_step%self.number_of_fields]))
+        self.finish_step_kernel((self.half_unpadded_cuda_grid_size,),
+                                (self.cuda_block_size,),
+                                (self.float(self.current_dt),
+                                 self.current_step,
+                                 self.ab3_coefficients[0],
+                                 self.ab3_coefficients[1],
+                                 self.ab3_coefficients[2],
+                                 self.fields[self.current_step
+                                             % self.number_of_fields - 1],
+                                 self.dft_bits,
+                                 self.fields[self.current_step
+                                             % self.number_of_fields]))
 
         self.current_time += self.current_dt

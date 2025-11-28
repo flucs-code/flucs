@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 _registered_outputs = entry_points().select(group="flucs.output")
 
+
 def get_output_type(output_type: str):
     """Returns an output type.
 
@@ -368,7 +369,7 @@ class FlucsOutputNC(FlucsOutput):
             times_to_write = len(self.time_cache)
             first_index = self.group["time"].shape[0]
             last_index = first_index + times_to_write
-            
+
             # Write time data
             self.group["time"][first_index:last_index]\
                 = np.array(self.time_cache)[:]

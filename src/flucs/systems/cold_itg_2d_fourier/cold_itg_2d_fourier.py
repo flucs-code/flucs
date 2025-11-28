@@ -39,12 +39,10 @@ class ColdITG2DFourier(FourierSystem):
     plan_c2r: cufft.PlanNd
 
     # CUDA grids
-    half_unpadded_cuda_grid_size: int
-    half_padded_cuda_grid_size: int
-    full_padded_cuda_grid_size: int
     zonal_average_cuda_block: tuple
     zonal_average_cuda_grid: tuple
     zonal_average_shared_mem: int
+    nonlinear_bits_shared_mem: int
 
     # CUDA FFTs
     fft_c2r_plan_type: int
@@ -73,21 +71,6 @@ class ColdITG2DFourier(FourierSystem):
                                     "multistep_nonlinear_terms",
                                     self.multistep_nonlinear_terms)
         # Setup kernel parameters (grid, block, shared memory)
-        self.half_unpadded_cuda_grid_size = (
-            (self.half_unpadded_size + self.cuda_block_size - 1)
-            // self.cuda_block_size
-        )
-
-        self.half_padded_cuda_grid_size = (
-            (self.half_padded_size + self.cuda_block_size - 1)
-            // self.cuda_block_size
-        )
-
-        self.full_padded_cuda_grid_size = (
-            (self.full_padded_size + self.cuda_block_size - 1)
-            // self.cuda_block_size
-        )
-
         self.zonal_average_cuda_block = (32, 16)
         self.zonal_average_cuda_grid = (
             (self.padded_nx + self.zonal_average_cuda_block[0] - 1)
@@ -126,11 +109,11 @@ class ColdITG2DFourier(FourierSystem):
                                memptr=self.fields[1][0, 0, 0, 0].data),]
 
         self.T = [cp.ndarray((self.nz, self.nx, self.half_ny),
-                               dtype=self.complex,
-                               memptr=self.fields[0][1, 0, 0, 0].data),
-                    cp.ndarray((self.nz, self.nx, self.half_ny),
-                               dtype=self.complex,
-                               memptr=self.fields[1][1, 0, 0, 0].data),]
+                             dtype=self.complex,
+                             memptr=self.fields[0][1, 0, 0, 0].data),
+                  cp.ndarray((self.nz, self.nx, self.half_ny),
+                             dtype=self.complex,
+                             memptr=self.fields[1][1, 0, 0, 0].data),]
 
         # when running linearly, need something to pass to the kernels
         # this is unused
@@ -278,17 +261,6 @@ class ColdITG2DFourier(FourierSystem):
         nonlinear CFL coefficient.
 
         """
-        # unpadded_kernels_lattice_size = (self.half_unpadded_size // self.cuda_block_size) + 1
-        # padded_kernels_lattice_size = (self.half_padded_size // self.cuda_block_size) + 1
-        # real_padded_kernels_lattice_size = (self.full_padded_size // self.cuda_block_size) + 1
-        #
-        # zonal_block = (32, 32)
-        # zonal_grid = ((self.padded_nx + zonal_block[0] - 1) // zonal_block[0],
-        # (self.padded_ny + zonal_block[1] - 1) // zonal_block[1])
-        # shared_mem = zonal_block[0] * zonal_block[1] * self.float().nbytes
-
-        # self.real_dxphi_zonal = cp.random.rand(self.padded_nx, dtype=self.float)
-
         self.find_derivatives_kernel((self.half_padded_cuda_grid_size,),
                                      (self.cuda_block_size,),
                                      (self.fields[self.current_step % 2 - 1],
@@ -327,7 +299,8 @@ class ColdITG2DFourier(FourierSystem):
         super().finish_time_step()
 
     def compute_complex_omega(self):
-        linear_matrix = np.zeros(self.half_unpadded_tuple + (2,2), dtype=self.complex)
+        linear_matrix = np.zeros(self.half_unpadded_tuple + (2, 2),
+                                 dtype=self.complex)
 
         kxs, kys, kzs = self.get_broadcast_wavenumbers()
         kperp2 = kxs**2 + kys**2
