@@ -279,8 +279,8 @@ class FourierSystem(FlucsSystem):
         # Timestep setup
         self.dt_mult_increase = self.input["time.dt_mult_increase"]
         self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
-        self.dt_array = np.full(3, 10**10, dtype=self.float)
-        self.ab3_coefficients = np.array([1.0, 0.0, 0.0],
+        self.dt_array = np.full(3, self.current_dt, dtype=self.float)
+        self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], 
                                          dtype=self.float)
 
         # Determine the time stepping method
@@ -472,7 +472,7 @@ class FourierSystem(FlucsSystem):
         Computes the current time step based on the CFL condition.
         Will be set to either 'compute_current_dt_discrete' or
         'compute_current_dt_continuous' at runtime depending on the
-        value of 'setup.precompute_linear_matrix'.
+        value of 'time.dt_method'.
         """
 
     def _compute_current_dt_continuous(self) -> float:
@@ -481,7 +481,7 @@ class FourierSystem(FlucsSystem):
         'dt_multiplier' should be used to limit the increase in the
         time step at each iteration.
 
-        Used if 'setup.precompute_linear_matrix' is False.
+        Used if 'time.dt_method' is "continuous".
         """
 
         # Compute new dt
@@ -502,7 +502,7 @@ class FourierSystem(FlucsSystem):
         'dt_multiplier' should be used to limit the increase in the
         time step at each iteration.
 
-        Used if 'setup.precompute_linear_matrix' is True.
+        Used if 'time.dt_method' is "discrete".
         """
 
         # If CFL condition is violated
