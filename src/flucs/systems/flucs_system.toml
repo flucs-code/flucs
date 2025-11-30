@@ -32,7 +32,7 @@ write_steps = 50000  # number of time steps between writes to the hard drive
 # Each system can define additional output groups.
 # The diagnostics in this output group are run every save_steps time steps.
 # -1 means that the output group is not active.
-save_steps = -1 
+save_steps = 10000 
 
 # This is a list of strings for the names of the active diagnostics.
 # Each system defines a dict called diags_dict where the names of the

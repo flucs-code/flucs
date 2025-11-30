@@ -35,8 +35,8 @@ class FourierSystem(FlucsSystem):
     linear_matrix: cp.ndarray
 
     # Iteration matrices (used for precomputing)
-    R: cp.ndarray
-    invL: cp.ndarray
+    rhs: cp.ndarray
+    inverse_lhs: cp.ndarray
 
     # CFL condition variables
     max_cfl: float
@@ -303,16 +303,16 @@ class FourierSystem(FlucsSystem):
         super().ready()
 
         if self.input["setup.precompute_linear_matrix"]:
-            if not hasattr(self, "R"):
-                self.R = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
+            if not hasattr(self, "rhs"):
+                self.rhs = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
                                   dtype=self.complex)
-                self.invL = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
+                self.inverse_lhs = cp.zeros((2, 2, self.nz, self.nx, self.half_ny),
                                      dtype=self.complex)
 
             cupy_set_device_pointer(self.cupy_module,
-                                    "invL_precomp", self.invL)
+                                    "inverse_lhs_precomp", self.inverse_lhs)
             cupy_set_device_pointer(self.cupy_module,
-                                    "R_precomp", self.R)
+                                    "rhs_precomp", self.rhs)
 
             self.precompute_iteration_matrices_kernel =\
                 self.cupy_module.get_function("precompute_iteration_matrices")
