@@ -8,22 +8,22 @@ abstract methods.
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-import pathlib as pl
-import os
-import time
+
 import heapq
 import datetime
-from netCDF4 import Dataset
 import importlib
-from typing import Type
-import numpy as np
 import cupy as cp
+import numpy as np
+import pathlib as pl
+from typing import Type
 from abc import ABC, abstractmethod
+
 import flucs
 from flucs import FlucsInput
-from flucs.output import FlucsOutput, FlucsDiagnostic
+from flucs.output import FlucsOutput
+from flucs.diagnostic import FlucsDiagnostic
 from flucs.utilities.cupy import ModuleOptions
-from flucs.systems.flucs_restart_manager import FlucsRestartManager
+from flucs.restart import FlucsRestart
 
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
@@ -52,7 +52,7 @@ class FlucsSystem(ABC):
     init_dt: float
 
     # Restart manager
-    restart_manager: FlucsRestartManager
+    restart_manager: FlucsRestart
 
     # CuPy module for the system
     cupy_module: cp.RawModule
@@ -154,7 +154,7 @@ class FlucsSystem(ABC):
         self.init_dt = self.float(self.input["time.dt_max"])
         self.final_time = self.float(self.input["time.tfinal"])
 
-        self.restart_manager = FlucsRestartManager(self)
+        self.restart_manager = FlucsRestart(self)
         self._setup_system()
 
     @abstractmethod

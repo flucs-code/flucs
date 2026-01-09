@@ -1,18 +1,19 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-import datetime
-import shutil
-import pathlib as pl
-import numpy as np
-import cupy as cp
-from netCDF4 import Dataset
-from flucs.input import FlucsInput, InvalidFlucsInputFileError
-from flucs.solvers import FlucsSolverState
 
+import shutil
+import datetime
+import cupy as cp
+import numpy as np
+import pathlib as pl
+from netCDF4 import Dataset
+from typing import TYPE_CHECKING
+
+from flucs.input import InvalidFlucsInputFileError
+from flucs.solvers import FlucsSolverState
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
 
-class FlucsRestartManager:
+class FlucsRestart:
     """
     Helper class that handles writing and reading restart files.
     """
@@ -164,7 +165,7 @@ class FlucsRestartManager:
                 self.data[name] = {"data": data, "dimension_names": dims}
 
     def _setup_restart_output(self):
-        """ Gets the FlucsRestartManager ready to write restart data. """
+        """ Gets the FlucsRestart ready to write restart data. """
 
         system_input = self.system.input
 

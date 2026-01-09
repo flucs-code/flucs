@@ -8,6 +8,7 @@ import pathlib as pl
 import importlib.metadata
 from datetime import datetime
 from importlib.metadata import entry_points
+
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
@@ -204,8 +205,8 @@ def main():
     # Input-file reconstruction
     if args.reconstruct is not None:
         # Import here to avoid circular imports at module load time
-        from flucs.systems.flucs_restart_manager import FlucsRestartManager
-        FlucsRestartManager.reconstruct_input_from_restart(args.reconstruct,
+        from flucs.restart import FlucsRestart
+        FlucsRestart.reconstruct_input_from_restart(args.reconstruct,
                                                            io_path)
         return
 

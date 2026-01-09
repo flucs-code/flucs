@@ -4,21 +4,23 @@ executed together and output to a file of specified format.
 """
 
 from __future__ import annotations
+
+import datetime
+import numpy as np
+import pathlib as pl
+from netCDF4 import Dataset, Group
 from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
-import datetime
-import pathlib as pl
-import numpy as np
-from netCDF4 import Dataset, Group
-from flucs.solvers import FlucsSolverState
 
+from flucs.solvers import FlucsSolverState
 if TYPE_CHECKING:
-    from flucs.output import FlucsDiagnostic
+    from flucs.diagnostic import FlucsDiagnostic
     from flucs.systems import FlucsSystem
 
 
-_registered_outputs = entry_points().select(group="flucs.outputs")
+_registered_outputs = entry_points().select(group="flucs.output")
+
 
 def get_output_type(output_type: str):
     """Returns an output type.
@@ -367,7 +369,7 @@ class FlucsOutputNC(FlucsOutput):
             times_to_write = len(self.time_cache)
             first_index = self.group["time"].shape[0]
             last_index = first_index + times_to_write
-            
+
             # Write time data
             self.group["time"][first_index:last_index]\
                 = np.array(self.time_cache)[:]

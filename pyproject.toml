@@ -27,9 +27,9 @@ FourierSolver = "flucs.solvers.fourier.fourier_solver:FourierSolver"
 [project.entry-points."flucs.systems"]
 ColdITG2DFourier = "flucs.systems.cold_itg_2d_fourier.cold_itg_2d_fourier:ColdITG2DFourier"
 
-[project.entry-points."flucs.outputs"]
-netcdf4 = "flucs.output.flucs_output:FlucsOutputNC"
-text = "flucs.output.flucs_output:FlucsOutputText"
+[project.entry-points."flucs.output"]
+netcdf4 = "flucs.output:FlucsOutputNC"
+text = "flucs.output:FlucsOutputText"
 
 [project.scripts]
 flucs = "flucs.flucs:main"

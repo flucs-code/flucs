@@ -1,6 +1,7 @@
-import numpy as np
 import cupy as cp
-from flucs.output import FlucsDiagnostic
+import numpy as np
+
+from flucs.diagnostic import FlucsDiagnostic
 from .fourier_system import FourierSystem
 
 

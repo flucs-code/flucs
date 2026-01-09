@@ -4,8 +4,9 @@ that deals with interpreting TOML input files.
 """
 
 import toml
-import flucs
 import pathlib as pl
+
+import flucs
 
 
 class InvalidFlucsInputFileError(ValueError):
