@@ -1,2 +1,0 @@
-from .cold_itg_2d_fourier import ColdITG2DFourier
-from .cold_itg_2d_fourier_diagnostics import HeatfluxDiag
