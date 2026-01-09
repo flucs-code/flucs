@@ -279,9 +279,9 @@ class FourierSystem(FlucsSystem):
         # Timestep setup
         self.dt_mult_increase = self.input["time.dt_mult_increase"]
         self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
-        self.dt_array = np.full(3, self.current_dt, dtype=self.float)
-        self.ab3_coefficients = np.array([23.0/12.0, -4.0/3.0, 5.0/12.0], 
-                                         dtype=self.float)
+        self.dt_array = np.array([self.current_dt, 10**10, 10*10],
+                                 dtype=self.float)
+        self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
 
         # Determine the time stepping method
         if self.input["time.dt_method"] == "discrete":
