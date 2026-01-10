@@ -40,7 +40,8 @@ systems = entry_points().select(group="flucs.systems")
 
 
 def get_solver_type(solver_name: str):
-    """Returns a solver type.
+    """
+    Returns a solver type.
 
     Parameters
     ----------
@@ -53,11 +54,21 @@ def get_solver_type(solver_name: str):
     Appropriate FlucsSolver type.
 
     """
-    return solvers[solver_name].load()
+
+    try:
+        s = solvers[solver_name]
+    except KeyError as e:
+        raise KeyError(
+            f"Solver '{solver_name}' not found. "
+            "Use 'flucs --list' to see installed solvers."
+        ) from e
+
+    return s.load()
 
 
 def get_system_type(system_name: str):
-    """Returns a system type.
+    """
+    Returns a system type.
 
     Parameters
     ----------
@@ -70,11 +81,42 @@ def get_system_type(system_name: str):
     Appropriate FlucsSystem type.
 
     """
-    return systems[system_name].load()
+
+    try:
+        s = systems[system_name]
+    except KeyError as e:
+        raise KeyError(
+            f"System '{system_name}' not found. "
+            "Use 'flucs --list' to see installed systems."
+        ) from e
+
+    return s.load()
+
+
+def list_solvers_and_systems():
+    """
+    Prints the available solvers and systems to stdout.
+    """
+
+    _indent = 3 * " "
+
+    print("Installed solvers:")
+    for s in sorted(solvers, key=lambda e: e.name.lower()):
+        print(f"{_indent}{s.name}")
+
+    print("Installed systems:")
+    if not systems:
+        print(f"{_indent}None")
+    else:
+        for s in sorted(systems, key=lambda e: e.name.lower()):
+            print(f"{_indent}{s.name:20} ({s.dist.name})")
+
+    print("For more information, see https://github.com/flucs-code")
 
 
 def run_flucs(input_path: pl.Path, override: list = None):
-    """Construct FlucsInput then call the appropriate solver.
+    """
+    Construct FlucsInput then call the appropriate solver.
 
     Parameters
     ----------
@@ -103,7 +145,8 @@ def run_flucs(input_path: pl.Path, override: list = None):
 
 
 def main():
-    """Main starting point for flucs.
+    """
+    Main starting point for flucs.
 
     This function interprets command-line arguments and decides what to do
     next.
@@ -144,6 +187,14 @@ def main():
         help="Runs the appropriate solver using input.toml from --io_path."
     )
 
+    operation_modes.add_argument(
+        "--list", "-l",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Lists the solvers and systems that can be run in the current installation."
+    )
+
     operation_modes.add_argument(#TODO
         "--test", "-t",
         action="store_true",
@@ -182,7 +233,16 @@ def main():
     io_path = pl.Path(args.io_path).resolve()
 
     # If nothing is specified, assume --run
-    if not any((args.run, args.clean, args.reconstruct, args.test, args.postprocess)):
+    if not any(
+        (
+        args.run,
+        args.list,
+        args.test,
+        args.clean,
+        args.reconstruct,
+        args.postprocess
+        )
+    ):
         args.run = True
 
     # Actually solve something
@@ -195,6 +255,11 @@ def main():
             )
 
         run_flucs(input_path, args.override)
+        return
+    
+    # List installed solvers and systems
+    if args.list:
+        list_solvers_and_systems()
         return
 
     # Cleanup
