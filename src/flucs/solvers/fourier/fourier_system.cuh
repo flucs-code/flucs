@@ -6,15 +6,23 @@
 #ifdef DOUBLE_PRECISION
     #define FLUCS_FLOAT double
     #define flucs_fabs(x) fabs(x)
+    #define FLUCS_COMPLEX_FLOAT_EQUIV double2
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
+    #define FLUCS_COMPLEX_FLOAT_EQUIV float2
 #endif
 
 #define FLUCS_COMPLEX complex<FLUCS_FLOAT>
 
+#define FLOAT_ONE ((FLUCS_FLOAT)1.0)
+#define COMPLEX_ONE FLUCS_COMPLEX(FLOAT_ONE, 0)
+
+#include "flucs/solvers/fourier/fourier_system_indexing.cuh"
+#include "flucs/solvers/fourier/fourier_system_reductions.cuh"
 
 extern "C" {
+
 
 // rhs and inverse_lhs when using precomputed matrices.
 __constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
