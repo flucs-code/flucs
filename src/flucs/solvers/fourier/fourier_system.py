@@ -207,6 +207,8 @@ class FourierSystem(FlucsSystem):
 
         """
         self.set_initial_conditions()
+        # Check if the initial conditions respect the reality conditions
+        self._check_initial_condition_reality()
 
     def _precompute_wavenumbers(self):
         self.kx = 2 * np.pi * self.nx * np.fft.fftfreq(self.nx)\
@@ -441,13 +443,55 @@ class FourierSystem(FlucsSystem):
                 np.random.seed(self.input["init.rand_seed"])
                 self.fields_initial =\
                     self.input["init.amplitude"]\
-                    * np.random.random(self.number_of_fields
-                                       * self.half_unpadded_size)
+                    * np.random.random((self.number_of_fields,)
+                                       + self.half_unpadded_tuple)
+
+                # Make sure we respect reality
+                data_ky0 = self.fields_initial[:, :, :, 0]
+
+                # Easier to work with shifted arrays
+                data_ky0 = np.fft.fftshift(data_ky0, axes=(1, 2))
+
+                # Hacky, but it works!
+                data_ky0_mirror = np.conj(data_ky0[:, ::-1, ::-1])
+
+                data_ky0 = (data_ky0 + data_ky0_mirror) / 2
+
+                self.fields_initial[:, :, :, 0] = np.fft.ifftshift(data_ky0,
+                                                                   axes=(1, 2))
 
             case _:
                 # Exotic initialisation types should be handled by each solver
                 # separately.
                 pass
+
+
+    def _check_initial_condition_reality(self) -> None:
+        """
+        Makes sure that the initial conditions satisfy the reality condition
+        field[-ikz, -ikx, 0] = conj(field[ikz, ikx, 0]) for all ikx and ikz.
+        """
+
+        fields_initial = self.fields_initial.reshape((self.number_of_fields,
+                                                      self.nz,
+                                                      self.nx,
+                                                      self.half_ny))
+
+        # It's the ky=0 bits that are annoying
+        fields_initial_ky0 = fields_initial[:, :, :, 0]
+
+        # To make this easier, shift the frequencies so that they are ordered
+        # ..., -2, -1, 0, 1, 2, ...
+
+        fields_initial_ky0 = np.fft.fftshift(fields_initial_ky0, axes=(1, 2))
+
+        error = np.nanmax(np.abs(
+            fields_initial_ky0
+            - np.conj(fields_initial_ky0[:, ::-1, ::-1])
+        ))
+
+        print(f"Max error in reality: {error}")
+
 
     def get_restart_data(self) -> dict[str, np.ndarray]:
         """

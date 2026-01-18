@@ -18,6 +18,7 @@
 #define FLOAT_ONE ((FLUCS_FLOAT)1.0)
 #define COMPLEX_ONE FLUCS_COMPLEX(FLOAT_ONE, 0)
 
+#include "flucs/solvers/fourier/fourier_system_utilities.cuh"
 #include "flucs/solvers/fourier/fourier_system_indexing.cuh"
 #include "flucs/solvers/fourier/fourier_system_reductions.cuh"
 
