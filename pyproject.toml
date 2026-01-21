@@ -7,8 +7,19 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "netCDF4",
+    "toml",  # Should use built-in tomllib when Python 3.11 is the minimum
+]
 dynamic = ["version"]
+
+# Must install with one of these
+[project.optional-dependencies]
+cuda11 = ["cupy-cuda11x"]
+cuda12 = ["cupy-cuda12x"]
+cuda13 = ["cupy-cuda13x"]
 
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
@@ -33,3 +44,4 @@ text = "flucs.output:FlucsOutputText"
 
 [project.scripts]
 flucs = "flucs.flucs:main"
+
