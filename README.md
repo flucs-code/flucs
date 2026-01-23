@@ -70,6 +70,10 @@ $ git clone https://github.com/flucs-code/flucs_fluid_itg
 $ cd flucs_fluid_itg
 $ pip install -e .
 ```
+
+If using `uv`, the steps are identical except that `uv pip install` should be
+used instead.
+
 After installing a plugin, verify it was registered correctly:
 
 ```console
@@ -77,3 +81,30 @@ $ flucs --list
 ```
 
 This will display all installed `solvers` and `systems`. 
+
+## Developer Info
+
+To install all developer tools, the project should be installed using the `dev`
+dependency group:
+
+```console
+$ pip install --upgrade pip  # You may need a later version of pip
+$ pip install -e .[cuda13] --group dev
+```
+
+The `dev` group will be installed automatically when installing with `uv sync`.
+
+The project is linted and formatted using [Ruff](https://docs.astral.sh/ruff/).
+To format the project, use:
+
+```console
+ruff format src
+```
+
+To lint the project:
+
+```console
+ruff check src [--fix]
+```
+
+The `--fix` flag is optional, and will automatically correct many issues.
