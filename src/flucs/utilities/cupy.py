@@ -1,8 +1,9 @@
 """A selection of useful functions and classes for dealing with CuPy"""
 
 from typing import Any
-import numpy as np
+
 import cupy as cp
+import numpy as np
 
 
 def cupy_set_device_pointer(
@@ -77,9 +78,9 @@ class ModuleOptions:
             np.float32,
             np.float64,
         ):
-            value_to_add = f"((FLUCS_FLOAT)({str(value)}))"
+            value_to_add = f"((FLUCS_FLOAT)({value!s}))"
         else:
-            value_to_add = f"({str(value)})"
+            value_to_add = f"({value!s})"
 
         self._defs[name] = value_to_add
 

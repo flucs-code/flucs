@@ -1,7 +1,7 @@
 import sys
 import traceback
-from io import TextIOBase
 from contextlib import AbstractContextManager
+from io import TextIOBase
 
 
 class FlucsLogHandler(TextIOBase, AbstractContextManager):

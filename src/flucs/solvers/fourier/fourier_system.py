@@ -3,13 +3,14 @@ Abstract base class for a system that can be solved by FourierSolver.
 """
 
 from abc import abstractmethod
+
 import cupy as cp
 import numpy as np
 
-from flucs.systems import FlucsSystem
 from flucs.input import InvalidFlucsInputFileError
-from flucs.utilities.smooth_numbers import next_smooth_number
+from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
+from flucs.utilities.smooth_numbers import next_smooth_number
 
 
 class FourierSystem(FlucsSystem):
@@ -150,7 +151,8 @@ class FourierSystem(FlucsSystem):
                     half_padded_n = padded_n // 2 + 1
 
                     print(
-                        f"Found padded_n{dim} = {padded_n} for n{{dim}} = {{n}}."
+                        f"Found padded_n{dim} = {padded_n} "
+                        f"for n{{dim}} = {{n}}."
                     )
 
                 case (False, True):
@@ -171,7 +173,8 @@ class FourierSystem(FlucsSystem):
 
                 case (False, False):
                     raise ValueError(
-                        f"At least one of n{dim} and padded_n{dim} must be positive!"
+                        f"At least one of n{dim} and "
+                        f"padded_n{dim} must be positive!"
                     )
 
                 # This is added only to make pyright happy.
@@ -480,7 +483,7 @@ class FourierSystem(FlucsSystem):
                 self.fields_initial = self.input[
                     "init.amplitude"
                 ] * np.random.random(
-                    (self.number_of_fields,) + self.half_unpadded_tuple
+                    (self.number_of_fields, *self.half_unpadded_tuple)
                 )
 
             case _:
@@ -595,7 +598,8 @@ class FourierSystem(FlucsSystem):
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
             print(
-                f"dt: {self.current_dt:.3e} -> {new_dt:.3e} (-, {self.current_step})"
+                f"dt: {self.current_dt:.3e} -> "
+                f"{new_dt:.3e} (-, {self.current_step})"
             )
 
             self.current_dt = new_dt

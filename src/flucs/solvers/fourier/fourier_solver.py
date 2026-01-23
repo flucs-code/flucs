@@ -6,6 +6,7 @@ pseudospectral Fourier methods.
 """
 
 import time
+
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
 

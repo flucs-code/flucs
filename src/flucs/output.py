@@ -6,12 +6,13 @@ executed together and output to a file of specified format.
 from __future__ import annotations
 
 import datetime
-import numpy as np
 import pathlib as pl
-from netCDF4 import Dataset, Group
-from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING
+
+import numpy as np
+from netCDF4 import Dataset, Group
 
 from flucs.solvers import FlucsSolverState
 
@@ -300,7 +301,7 @@ class FlucsOutputNC(FlucsOutput):
                 datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
             group.setncattr("location", str(self.filepath.parent))
-            group.setncattr("type", str("flucs_output"))
+            group.setncattr("type", "flucs_output")
 
             # Store input file as a string
             _input_file = group.createVariable("input_file", str)
@@ -341,14 +342,14 @@ class FlucsOutputNC(FlucsOutput):
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
                         diagnostic_group.createVariable(
-                            f"{var.name}_real", "f4", ("time",) + var.shape
+                            f"{var.name}_real", "f4", ("time", *var.shape)
                         )
                         diagnostic_group.createVariable(
-                            f"{var.name}_imag", "f4", ("time",) + var.shape
+                            f"{var.name}_imag", "f4", ("time", *var.shape)
                         )
                     else:
                         diagnostic_group.createVariable(
-                            var.name, "f4", ("time",) + var.shape
+                            var.name, "f4", ("time", *var.shape)
                         )
 
     def write(self):

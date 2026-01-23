@@ -8,9 +8,10 @@ abstract methods.
 import enum
 import signal
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic
+from typing import Generic, TypeVar
 
 from flucs import FlucsInput
+from flucs.systems import FlucsSystem
 
 
 class FlucsSolverState(enum.Enum):

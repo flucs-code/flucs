@@ -1,7 +1,9 @@
 import argparse
-import numpy as np
 import pathlib as pl
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 from flucs.postprocessing import FlucsPostProcessing
 
 
@@ -61,7 +63,9 @@ if __name__ == "__main__":
     # Setup parser
     parser = argparse.ArgumentParser(
         parents=[FlucsPostProcessing.parser()],
-        description="Plots any of the variables from 'output.0d.nc' against time.",
+        description=(
+            "Plots any of the variables from 'output.0d.nc' against time."
+        ),
     )
 
     operation_modes = parser.add_mutually_exclusive_group(required=True)

@@ -4,10 +4,11 @@ Defines the base class for diagnostics.
 
 from __future__ import annotations
 
-import numpy as np
-from typing import TYPE_CHECKING, List
-from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+import numpy as np
 
 if TYPE_CHECKING:
     from flucs.output import FlucsOutput

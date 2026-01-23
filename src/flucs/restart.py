@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import shutil
 import datetime
+import pathlib as pl
+import shutil
+from typing import TYPE_CHECKING
+
 import cupy as cp
 import numpy as np
-import pathlib as pl
 from netCDF4 import Dataset
-from typing import TYPE_CHECKING
 
 from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
@@ -84,7 +85,8 @@ class FlucsRestart:
 
             if not self.initial_path.exists():
                 raise InvalidFlucsInputFileError(
-                    f"The restart_from file {self.initial_path} cannot be found."
+                    f"The restart_from file {self.initial_path} "
+                    "cannot be found."
                 )
 
         print(f"Restarting from file: {self.initial_path}")
@@ -189,8 +191,9 @@ class FlucsRestart:
             and not system_input["restart.restart_if_exists"]
         ):
             raise InvalidFlucsInputFileError(
-                "You must remove existing 'restart.nc' manually if write_restart_file "
-                "is 'True' but restart_if_exists is 'False'."
+                "You must remove existing 'restart.nc' manually if "
+                "write_restart_file is 'True' but restart_if_exists "
+                "is 'False'."
             )
 
     def write_restart(self, force: bool = False) -> None:
@@ -264,7 +267,7 @@ class FlucsRestart:
                 datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
             ds.setncattr("location", str(self.write_path.parent))
-            ds.setncattr("type", str("flucs_restart"))
+            ds.setncattr("type", "flucs_restart")
 
             # Add input file as a string
             ds.setncattr("input_file", str(self.system.input))

@@ -2,6 +2,7 @@ import cupy as cp
 import numpy as np
 
 from flucs.diagnostic import FlucsDiagnostic
+
 from .fourier_system import FourierSystem
 
 
