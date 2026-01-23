@@ -68,3 +68,17 @@ text = "flucs.output:FlucsOutputText"
 [project.scripts]
 flucs = "flucs.flucs:main"
 
+[tool.ruff.lint]
+select = [
+  "F",    # pyflakes / flake8
+  "E",    # pycodestyle error
+  "W",    # pycodestyle warning
+  "I",    # isort (import sorting)
+  "N",    # pep8-naming
+  "UP",   # pyupgrade (modernisation)
+  "FURB", # refurb (modernisation)
+  "RUF",  # Ruff-specific
+]
+exclude = [
+  "**/_version.py", # Auto-generated file
+]
