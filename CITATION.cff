@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+
+title: flucs
+type: software
+license: MIT
+
+message: >-
+  If you use any part of the flucs codebase in your work,
+  please cite it using the metadata contained in this file.
+
+authors:
+  - given-names: Toby
+    family-names: Adkins
+    email: tadkins@pppl.gov
+    affiliation: Princeton Plasma Physics Laboratory
+    orcid: 'https://orcid.org/0000-0001-5028-8047'
+
+  - given-names: Plamen
+    family-names: Ivanov
+    email: plamen.ivanov@physics.ox.ac.uk
+    affiliation: 'UKAEA, University of Oxford'
+    orcid: 'https://orcid.org/0000-0001-9720-4357'
+
+  - given-names: Liam
+    family-names: Pattinson
+    email: liam.pattinson@york.ac.uk
+    affiliation: University of York
+    orcid: 'https://orcid.org/0000-0001-8604-6904'
+
