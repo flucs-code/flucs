@@ -92,7 +92,7 @@ class FlucsRestart:
         """
         Load restart array data from self.initial_path and stores a dict in
         self.data that is identical to that returned by
-        FlucsSystem._get_restart_data().
+        FlucsSystem.get_restart_data().
 
         The structure of the data dict is as follows:
         {

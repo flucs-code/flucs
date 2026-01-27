@@ -1,11 +1,59 @@
 # flucs
-flucs is a framework for solving simple system of fluid PDEs.
+$\texttt{flucs}$ is a general GPU-native framework for solving systems of partial 
+differential equations. This base $\texttt{flucs}$ repository contains 
+the `solvers` that can be used to evolve the available `systems` that are housed 
+in separate repositories within the [flucs-code](https://github.com/flucs-code)
+organisation. These repositories must be installed separately; see the relevant
+`README.md` for further instructions.
 
-# Installation
-Clone the repo and do
+## Installation
 
+The following dependencies must be installed prior to installing $\texttt{flucs}$:
+
+- Python (version 3.10, or higher)
+- [CUDA toolkit](https://developer.nvidia.com/cuda-downloads) (version 11, or
+  higher)
+
+$\texttt{flucs}$ is currently not available on PyPI, and so must be installed
+from the source code. This will install both the Python library
+and the `flucs` command line tool.
+
+To begin, clone the GitHub repository and enter the directory:
+
+```console
+$ git clone https://github.com/flucs-code/flucs
+$ cd flucs
 ```
-pip install -e .
+
+It is recommended to install $\texttt{flucs}$ to a fresh virtual environment:
+
+```console
+$ python -m venv venv
+$ source venv/bin/activate
 ```
 
-in the top-level repo folder. This will also install the flucs command in your shell.
+$\texttt{flucs}$ may then be installed using `pip`:
+
+```console
+$ pip install -e .[cuda13]
+```
+
+Including `[cuda13]` in the above command will install [`cupy`](https://cupy.dev/) 
+for CUDA version 13. This may instead be replaced with `[cuda12]` or `[cuda11]` for 
+those using older CUDA toolkits. It is strongly recommended to include one of these 
+to get the most out of the library.
+
+When you are finished, the virtual environment can be deactivated using:
+
+```console
+$ deactivate
+```
+
+For users of `uv`, the equivalent recommended steps are:
+
+```console
+$ uv venv
+$ source .venv/bin/activate
+$ uv sync --extra cuda13  # Or cuda12, or cuda11
+$ deactivate  # When done
+```
