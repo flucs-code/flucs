@@ -179,7 +179,6 @@ class FlucsOutputText(FlucsOutput):
 
         for diag in self.diagnostics:
             for var in diag.vars.values():
-                print(var)
                 if len(var.shape) != 0:
                     raise ValueError(
                         f"Cannot add diagnostic {diag.name} with variable "

@@ -13,7 +13,7 @@ def plot_0d_vs_time(post, variable=None):
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout='constrained')
 
-    figure_name = f"{variable}_vs_time"
+    figure_name = f"{str(variable).split('/', 1)[-1]}_vs_time"
     fig.canvas.manager.set_window_title(figure_name)
 
     # Iterate over output files

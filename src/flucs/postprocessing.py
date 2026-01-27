@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from typing import Sequence, Literal
+from typing import Sequence, Literal, Any
 
 class FlucsPostProcessing:
     """
@@ -115,16 +115,27 @@ class FlucsPostProcessing:
 
         netcdf_variables: dict[str, list[int]] = {}
 
+        # Helper function to add variable and group number
+        def _add(name: str, grp_number: int) -> None:
+            if name in ignore:
+                return
+            netcdf_variables.setdefault(name, [])
+            if grp_number not in netcdf_variables[name]:
+                netcdf_variables[name].append(grp_number)
+
+        # Iterate over groups in netCDF file
         with Dataset(pl.Path(nc_path), "r", format="NETCDF4") as ds:
             for grp_name, grp in ds.groups.items():
                 grp_number = int(grp_name)
-                for var in grp.variables.keys():
-                    if var in ignore:
-                        continue
-                    if var not in netcdf_variables:
-                        netcdf_variables[var] = []
-                    if grp_number not in netcdf_variables[var]:
-                        netcdf_variables[var].append(grp_number)
+
+                # Group variables
+                for var_name in grp.variables.keys():
+                    _add(var_name, grp_number)
+
+                # Diagnostic variables
+                for diag_name, diag_grp in grp.groups.items():
+                    for var_name in diag_grp.variables.keys():
+                        _add(f"{diag_name}/{var_name}", grp_number)
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
@@ -226,6 +237,22 @@ class FlucsPostProcessing:
               between groups in the concatenated time axis
         """
 
+        # Helper function to get variable from group
+        def _get_var(grp, name: str) -> Any | None:
+
+            # Group variables
+            if "/" not in name:
+                if name in grp.variables:
+                    return grp.variables[name]
+                return None
+
+            # Diagnostic variables
+            diag, var = name.split("/", 1)
+            if diag in grp.groups and var in grp.groups[diag].variables:
+                return grp.groups[diag].variables[var]
+            return None
+
+        # Read data from netCDF file
         with Dataset(str(nc_path), "r", format="NETCDF4") as ds:
 
             # Get output groups sorted by group id
@@ -237,7 +264,11 @@ class FlucsPostProcessing:
                 raise ValueError("Output groups are not in order; check netCDF file.")
 
             # Determine residual shape and dtype of output variable
-            var_iter = ((grp_number, grp.variables[variable]) for grp_number, grp in groups if variable in grp.variables)
+            var_iter = (
+                (grp_number, var_obj)
+                for grp_number, grp in groups
+                if (var_obj := _get_var(grp, variable)) is not None
+            )
             try:
                 grp_number, var = next(var_iter)
             except StopIteration:
@@ -253,8 +284,9 @@ class FlucsPostProcessing:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
 
-                if variable in grp.variables:
-                    arr = np.asarray(grp.variables[variable][:])
+                var_obj = _get_var(grp, variable)
+                if var_obj is not None:
+                    arr = np.asarray(var_obj[:])
                     if arr.shape[0] != time_length:
                         raise ValueError(
                             f"Time dimension mistmatch for variable '{variable}' in group "
