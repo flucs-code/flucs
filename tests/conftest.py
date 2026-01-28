@@ -1,0 +1,19 @@
+"""Setup shared by all test files."""
+
+import pytest
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "fluid_itg: mark test as requiring flucs_fluid_itg plugin."
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    try:
+        import flucs_fluid_itg  # noqa: F401
+    except ImportError:
+        skip_fluid_itg = pytest.mark.skip(reason="need flucs_fluid_itg plugin to run")
+        for item in items:
+            if "fluid_itg" in item.keywords:
+                item.add_marker(skip_fluid_itg)

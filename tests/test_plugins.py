@@ -15,6 +15,7 @@ def test_unknown_solver_type():
     assert "Solver 'FooBar' not found." in str(excinfo.value)
 
 
+@pytest.mark.fluid_itg
 def test_get_system_type():
     assert get_system_type("ColdITG2DFourier")
 
@@ -25,6 +26,7 @@ def test_unknown_system_type():
     assert "System 'FooBar' not found." in str(excinfo.value)
 
 
+@pytest.mark.fluid_itg
 def test_list_plugins(capfd):
     # Function writes to stdout
     list_solvers_and_systems()
