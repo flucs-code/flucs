@@ -295,6 +295,10 @@ class FlucsOutputNC(FlucsOutput):
             group.setncattr("location", str(self.filepath.parent))
             group.setncattr("type", str("flucs_output"))
 
+            # Store input file as a string
+            _input_file      = group.createVariable("input_file", str)
+            _input_file[...] = str(self.system.input)
+
         self.group = dataset.groups[self.group_name]
 
     def _setup_output_file(self):
