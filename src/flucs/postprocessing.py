@@ -91,11 +91,11 @@ class FlucsPostProcessing:
             print(f"{self._indent}{type_name}:")
             for path in paths:
                 print(f"{2*self._indent}{path}")
-        print("For information on a specific script, run '<script path> --help'.")
+        print("For information on a specific script, run 'python <script path> --help'.")
 
 
     @staticmethod
-    def get_netcdf_variables(nc_path: pl.Path, ignore=("time", "dt")) -> dict[str, list[int]]:
+    def get_netcdf_variables(nc_path: pl.Path, ignore=None) -> dict[str, list[int]]:
         """
         Given a netCDF filepath, returns a mapping of variable names to the
         list of groups that they appear in.
@@ -104,8 +104,8 @@ class FlucsPostProcessing:
         ----------
         nc_path : pl.Path
             Path to the NetCDF file.
-        ignore : Iterable[str]
-            Variable names to ignore. Defaults to ('time', 'dt').
+        ignore : Iterable[str] | None
+            Variable names to ignore.
 
         Returns
         -------
@@ -117,7 +117,7 @@ class FlucsPostProcessing:
 
         # Helper function to add variable and group number
         def _add(name: str, grp_number: int) -> None:
-            if name in ignore:
+            if ignore is not None and name in ignore:
                 return
             netcdf_variables.setdefault(name, [])
             if grp_number not in netcdf_variables[name]:
@@ -139,15 +139,15 @@ class FlucsPostProcessing:
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
-    def _get_all_netcdf_variables(self, ignore=("time", "dt")) -> dict[str, dict[str, list[int]]]:
+    def _get_all_netcdf_variables(self, ignore=None) -> dict[str, dict[str, list[int]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file 
         specified by self.output_file, and the groups that they appear in.
 
         Parameters
         ----------
-        ignore : Iterable[str]
-            Variable names to ignore. Defaults to ('time', 'dt').
+        ignore : Iterable[str] | None
+            Variable names to ignore.
 
         Returns
         -------
@@ -169,7 +169,7 @@ class FlucsPostProcessing:
         return result
     
 
-    def list_netcdf_variables(self, ignore=("time", "dt")) -> None:
+    def list_netcdf_variables(self, ignore=("time", "dt", "input_file")) -> None:
         """
         Prints the available netCDF variables to the standard output for each 
         of the provided i/o directories given a specific output type.
