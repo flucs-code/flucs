@@ -183,7 +183,7 @@ class FlucsRestart:
         if (self.write_path.exists()
                 and not system_input["restart.restart_if_exists"]):
             raise InvalidFlucsInputFileError(
-                "You must remove existing 'restart.nc' manually if write_restart_file"
+                "You must remove existing 'restart.nc' manually if write_restart_file "
                 "is 'True' but restart_if_exists is 'False'."
             )
 
