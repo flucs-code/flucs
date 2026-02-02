@@ -82,7 +82,7 @@ $ flucs --list
 
 This will display all installed `solvers` and `systems`. 
 
-## Developer Info
+## Developer tools
 
 To install all developer tools, the project should be installed using the `dev`
 dependency group:
@@ -94,17 +94,22 @@ $ pip install -e .[cuda13] --group dev
 
 The `dev` group will be installed automatically when installing with `uv sync`.
 
-The project is linted and formatted using [Ruff](https://docs.astral.sh/ruff/).
-To format the project, use:
+The project is formatted and linted using [Ruff](https://docs.astral.sh/ruff/). 
+It is recommended that developers make use of these tools, as any pull-requests 
+failing these checks will be blocked from merging.
+
+To format a specific file:
 
 ```console
-ruff format src
+$ ruff format <path to file>
 ```
 
-To lint the project:
+To lint the a specific file:
 
 ```console
-ruff check src [--fix]
+$ ruff check <path to file> [--fix]
 ```
 
-The `--fix` flag is optional, and will automatically correct many issues.
+The `--fix` flag is optional, and will automatically correct many issues. Note that 
+both the `format` and `check` commands will also apply recursively if run on a directory 
+(such as `flucs/src`). 
