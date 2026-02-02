@@ -249,7 +249,9 @@ class FlucsSystem(ABC):
 
         # Initialise dictionary
         device_info = {
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat(),
             "number_of_devices": n_devices,
         }
 
@@ -286,9 +288,7 @@ class FlucsSystem(ABC):
                     name = properties.get("name")
                     if isinstance(name, (bytes, bytearray)):
                         name = name.decode()
-                    compute_capability = (
-                        f"{properties.get('major', '?')}.{properties.get('minor', '?')}"
-                    )
+                    compute_capability = f"{properties.get('major', '?')}.{properties.get('minor', '?')}"
                     multiprocessors = properties.get("multiProcessorCount")
                 except Exception:
                     pass

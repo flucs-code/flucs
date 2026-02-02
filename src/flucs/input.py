@@ -109,7 +109,9 @@ class FlucsInput:
         to the set of parameters outlined in _default_input_dict.
         """
         if default:
-            FlucsInput._update_dict(self._default_input_dict, _dict, allow_new=True)
+            FlucsInput._update_dict(
+                self._default_input_dict, _dict, allow_new=True
+            )
             FlucsInput._update_dict(self._input_dict, _dict, allow_new=True)
         else:
             FlucsInput._update_dict(self._input_dict, _dict)
@@ -179,10 +181,14 @@ class FlucsInput:
         input_file_dict = toml.load(filepath)
 
         # Loads the solver
-        self._solver_type = flucs.get_solver_type(input_file_dict["setup"]["solver"])
+        self._solver_type = flucs.get_solver_type(
+            input_file_dict["setup"]["solver"]
+        )
 
         # Loads the system
-        self._system_type = flucs.get_system_type(input_file_dict["setup"]["system"])
+        self._system_type = flucs.get_system_type(
+            input_file_dict["setup"]["system"]
+        )
         self._system_type.load_defaults(self)
 
         # Load from the input file

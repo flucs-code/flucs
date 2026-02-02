@@ -22,7 +22,9 @@ def cupy_set_device_pointer(
     """
 
     ptr_to_ptr = module.get_global(ptr_name)
-    cp.ndarray((1,), dtype=cp.uint64, memptr=ptr_to_ptr)[0] = data_array.data.ptr
+    cp.ndarray((1,), dtype=cp.uint64, memptr=ptr_to_ptr)[0] = (
+        data_array.data.ptr
+    )
 
 
 class ModuleOptions:
@@ -47,7 +49,9 @@ class ModuleOptions:
         """Adds a compiler option."""
         self.string_options += (str(option),)
 
-    def define_constant(self, name: str, value: Any = "", float_convert: bool = False):
+    def define_constant(
+        self, name: str, value: Any = "", float_convert: bool = False
+    ):
         """Adds a definition to the compiler flags.
         Effectively, this is equivalent to adding
 
@@ -67,7 +71,12 @@ class ModuleOptions:
 
         """
 
-        if float_convert or type(value) in (float, np.float16, np.float32, np.float64):
+        if float_convert or type(value) in (
+            float,
+            np.float16,
+            np.float32,
+            np.float64,
+        ):
             value_to_add = f"((FLUCS_FLOAT)({str(value)}))"
         else:
             value_to_add = f"({str(value)})"

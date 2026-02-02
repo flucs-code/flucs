@@ -95,7 +95,9 @@ class FlucsPostProcessing:
         )
 
     @staticmethod
-    def get_netcdf_variables(nc_path: pl.Path, ignore=None) -> dict[str, list[int]]:
+    def get_netcdf_variables(
+        nc_path: pl.Path, ignore=None
+    ) -> dict[str, list[int]]:
         """
         Given a netCDF filepath, returns a mapping of variable names to the
         list of groups that they appear in.
@@ -139,7 +141,9 @@ class FlucsPostProcessing:
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
-    def _get_all_netcdf_variables(self, ignore=None) -> dict[str, dict[str, list[int]]]:
+    def _get_all_netcdf_variables(
+        self, ignore=None
+    ) -> dict[str, dict[str, list[int]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file
         specified by self.output_file, and the groups that they appear in.
@@ -172,7 +176,9 @@ class FlucsPostProcessing:
 
         return result
 
-    def list_netcdf_variables(self, ignore=("time", "dt", "input_file")) -> None:
+    def list_netcdf_variables(
+        self, ignore=("time", "dt", "input_file")
+    ) -> None:
         """
         Prints the available netCDF variables to the standard output for each
         of the provided i/o directories given a specific output type.
@@ -262,7 +268,9 @@ class FlucsPostProcessing:
             # Check whether the groups are in the correct order
             grp_numbers = [grp_number for grp_number, _ in groups]
             if grp_numbers != sorted(grp_numbers):
-                raise ValueError("Output groups are not in order; check netCDF file.")
+                raise ValueError(
+                    "Output groups are not in order; check netCDF file."
+                )
 
             # Determine residual shape and dtype of output variable
             var_iter = (
@@ -299,7 +307,11 @@ class FlucsPostProcessing:
                 else:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
-                        np.full((time_length, *res_shape), fill_value, dtype=var_dtype)
+                        np.full(
+                            (time_length, *res_shape),
+                            fill_value,
+                            dtype=var_dtype,
+                        )
                     )
 
         # Concatenate along time (zeroth axis)

@@ -78,7 +78,9 @@ class FlucsRestart:
 
             # Deal with relative paths
             if not self.initial_path.is_absolute():
-                self.initial_path = (self.system.input.io_path / restart_from).resolve()
+                self.initial_path = (
+                    self.system.input.io_path / restart_from
+                ).resolve()
 
             if not self.initial_path.exists():
                 raise InvalidFlucsInputFileError(
@@ -147,13 +149,19 @@ class FlucsRestart:
                         imag = np.asarray(v_i[...])
                         data = real + 1j * imag
                         dims = tuple(v_r.dimensions)
-                        self.data[base_name] = {"data": data, "dimension_names": dims}
+                        self.data[base_name] = {
+                            "data": data,
+                            "dimension_names": dims,
+                        }
                     else:
                         # No matching imag: treat as a regular real-valued
                         # variable with its own name
                         data = np.asarray(v_r[...])
                         dims = tuple(v_r.dimensions)
-                        self.data[name] = {"data": data, "dimension_names": dims}
+                        self.data[name] = {
+                            "data": data,
+                            "dimension_names": dims,
+                        }
                     continue
 
                 # Regular real-valued array
@@ -176,7 +184,10 @@ class FlucsRestart:
         self.write_path = system_input.io_path / "restart.nc"
         self.backup_path = system_input.io_path / "restart.backup.nc"
 
-        if self.write_path.exists() and not system_input["restart.restart_if_exists"]:
+        if (
+            self.write_path.exists()
+            and not system_input["restart.restart_if_exists"]
+        ):
             raise InvalidFlucsInputFileError(
                 "You must remove existing 'restart.nc' manually if write_restart_file "
                 "is 'True' but restart_if_exists is 'False'."
@@ -249,7 +260,8 @@ class FlucsRestart:
         with Dataset(self.write_path, "w", format="NETCDF4") as ds:
             # Set file attributes
             ds.setncattr(
-                "created", datetime.datetime.now(datetime.timezone.utc).isoformat()
+                "created",
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
             ds.setncattr("location", str(self.write_path.parent))
             ds.setncattr("type", str("flucs_restart"))
@@ -258,12 +270,12 @@ class FlucsRestart:
             ds.setncattr("input_file", str(self.system.input))
 
             # Scalar values
-            ds.createVariable("current_time", precision, ())[...] = self.system.float(
-                self.system.current_time
+            ds.createVariable("current_time", precision, ())[...] = (
+                self.system.float(self.system.current_time)
             )
 
-            ds.createVariable("current_dt", precision, ())[...] = self.system.float(
-                self.system.current_dt
+            ds.createVariable("current_dt", precision, ())[...] = (
+                self.system.float(self.system.current_dt)
             )
 
             # Arrays
@@ -323,12 +335,16 @@ class FlucsRestart:
         restart_file_path = pl.Path(restart_file_path).expanduser().resolve()
 
         if not restart_file_path.exists():
-            raise FileNotFoundError(f"Restart file not found: {restart_file_path}")
+            raise FileNotFoundError(
+                f"Restart file not found: {restart_file_path}"
+            )
 
         # Get input file from restart file
         with Dataset(restart_file_path, "r") as ds:
             if getattr(ds, "type", None) != "flucs_restart":
-                raise ValueError(f"File {restart_file_path} is not a restart file.")
+                raise ValueError(
+                    f"File {restart_file_path} is not a restart file."
+                )
             try:
                 input_file = ds.getncattr("input_file")
             except Exception as e:
@@ -340,7 +356,9 @@ class FlucsRestart:
         # Check whether an input file of the same name already exists
         input_file_path = pl.Path(io_path) / "input.toml"
         if input_file_path.exists():
-            raise FileExistsError(f"Input file already exists: {input_file_path}")
+            raise FileExistsError(
+                f"Input file already exists: {input_file_path}"
+            )
 
         input_file_path.write_text(input_file)
         print(f"Reconstructed input file: {input_file_path}")

@@ -63,7 +63,9 @@ class FlucsDiagnostic(ABC):
 
     def add_var(self, var: FlucsDiagnosticVariable) -> None:
         if var.name in self.vars:
-            raise KeyError(f"Diagnostic {self.name} already has a variable {var.name}.")
+            raise KeyError(
+                f"Diagnostic {self.name} already has a variable {var.name}."
+            )
 
         self.vars[var.name] = var
 

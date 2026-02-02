@@ -236,7 +236,14 @@ def main():
 
     # If nothing is specified, assume --run
     if not any(
-        (args.run, args.list, args.test, args.clean, args.reconstruct, args.postprocess)
+        (
+            args.run,
+            args.list,
+            args.test,
+            args.clean,
+            args.reconstruct,
+            args.postprocess,
+        )
     ):
         args.run = True
 

@@ -110,7 +110,9 @@ class FlucsOutput(ABC):
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
-        self.filepath = self.system.input.io_path / f"output.{name}.{self.extension}"
+        self.filepath = (
+            self.system.input.io_path / f"output.{name}.{self.extension}"
+        )
 
         self.diagnostics: list[FlucsDiagnostic] = []
         self.time_cache = []
@@ -163,9 +165,9 @@ class FlucsOutputText(FlucsOutput):
 
         file_existed = self.filepath.exists()
         columns_n = len(self.timing_data_column_names) + len(self.diagnostics)
-        total_data_width = columns_n * self.column_width + (columns_n - 1) * len(
-            self.column_pad
-        )
+        total_data_width = columns_n * self.column_width + (
+            columns_n - 1
+        ) * len(self.column_pad)
 
         with open(self.filepath, "a", encoding="utf-8") as file:
             if file_existed:
@@ -228,7 +230,9 @@ class FlucsOutputText(FlucsOutput):
         if isinstance(data, (complex, np.complexfloating)):
             return f"{data:>{self.column_width}.{self.complex_format}}"
 
-        raise ValueError(f"Data type {type(data)}is not supported by FlucsOutputText.")
+        raise ValueError(
+            f"Data type {type(data)}is not supported by FlucsOutputText."
+        )
 
     def write(self):
         """Writes formatted rows to the text output file."""
@@ -279,7 +283,9 @@ class FlucsOutputNC(FlucsOutput):
             # We are yet to initialise the group
             # Go through the file and pick group_name to be an integer that is
             # equal to the largest one found + 1
-            group_number = max([-1] + [int(name) for name in dataset.groups.keys()])
+            group_number = max(
+                [-1] + [int(name) for name in dataset.groups.keys()]
+            )
             group_number += 1
 
             self.group_name = str(group_number)
@@ -290,7 +296,8 @@ class FlucsOutputNC(FlucsOutput):
 
             # Set attributes
             group.setncattr(
-                "created", datetime.datetime.now(datetime.timezone.utc).isoformat()
+                "created",
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
             group.setncattr("location", str(self.filepath.parent))
             group.setncattr("type", str("flucs_output"))
@@ -323,7 +330,9 @@ class FlucsOutputNC(FlucsOutput):
                         dim_size = len(dim_data)
 
                         diagnostic_group.createDimension(dim_name, dim_size)
-                        dim_var = self.group.createVariable(dim_name, "f4", (dim_name,))
+                        dim_var = self.group.createVariable(
+                            dim_name, "f4", (dim_name,)
+                        )
                         dim_var[:] = dim_data[:]
 
                     # Create variable
@@ -362,8 +371,12 @@ class FlucsOutputNC(FlucsOutput):
             last_index = first_index + times_to_write
 
             # Write time data
-            self.group["time"][first_index:last_index] = np.array(self.time_cache)[:]
-            self.group["dt"][first_index:last_index] = np.array(self.dt_cache)[:]
+            self.group["time"][first_index:last_index] = np.array(
+                self.time_cache
+            )[:]
+            self.group["dt"][first_index:last_index] = np.array(self.dt_cache)[
+                :
+            ]
 
             self.time_cache.clear()
             self.dt_cache.clear()
@@ -383,9 +396,9 @@ class FlucsOutputNC(FlucsOutput):
                                 first_index:last_index
                             ] = np.array(var.data_cache).imag
                         else:
-                            diagnostic_group[var.name][first_index:last_index] = (
-                                np.array(var.data_cache)
-                            )
+                            diagnostic_group[var.name][
+                                first_index:last_index
+                            ] = np.array(var.data_cache)
                     else:
                         # TODO: Rewrite with np.array
                         if var.is_complex:
@@ -398,8 +411,8 @@ class FlucsOutputNC(FlucsOutput):
                                 ] = var.data_cache[i][:].imag
                         else:
                             for i in range(times_to_write):
-                                diagnostic_group[var.name][first_index + i, :] = (
-                                    var.data_cache[i][:]
-                                )
+                                diagnostic_group[var.name][
+                                    first_index + i, :
+                                ] = var.data_cache[i][:]
 
                 diag.clear()

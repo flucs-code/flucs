@@ -46,7 +46,10 @@ def plot_0d_vs_time(post, variable=None):
 
     # Save figures if required
     post.save(
-        fig, name=figure_name, suffix="png", save_kwargs={"dpi": 300, "close": True}
+        fig,
+        name=figure_name,
+        suffix="png",
+        save_kwargs={"dpi": 300, "close": True},
     )
 
     plt.show()
@@ -72,7 +75,11 @@ if __name__ == "__main__":
     )
 
     operation_modes.add_argument(
-        "--variable", "-v", type=str, default=None, help="Name of variable to plot."
+        "--variable",
+        "-v",
+        type=str,
+        default=None,
+        help="Name of variable to plot.",
     )
 
     args = parser.parse_args()
