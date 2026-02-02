@@ -206,7 +206,8 @@ class FourierSystem(FlucsSystem):
         super().setup() in anything that inherits FourierSystem.
 
         """
-        self.set_initial_conditions()
+        self._set_initial_conditions()
+        self._check_initial_conditions()
 
     def _precompute_wavenumbers(self):
         self.kx = 2 * np.pi * self.nx * np.fft.fftfreq(self.nx)\
@@ -410,7 +411,7 @@ class FourierSystem(FlucsSystem):
             (self.half_unpadded_cuda_grid_size,), (self.cuda_block_size,),
             (self.current_dt, self.linear_matrix))
 
-    def set_initial_conditions(self) -> None:
+    def _set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
 
         # Use restart data if it was read
@@ -441,13 +442,54 @@ class FourierSystem(FlucsSystem):
                 np.random.seed(self.input["init.rand_seed"])
                 self.fields_initial =\
                     self.input["init.amplitude"]\
-                    * np.random.random(self.number_of_fields
-                                       * self.half_unpadded_size)
+                    * np.random.random((self.number_of_fields,)
+                                       + self.half_unpadded_tuple)
 
             case _:
                 # Exotic initialisation types should be handled by each solver
                 # separately.
                 pass
+
+
+    def _check_initial_conditions(self) -> None:
+        """
+        Ensures that the initial conditions satisfy the reality condition
+        field[-ikz, -ikx, 0] = conj(field[ikz, ikx, 0]) for all ikx and ikz.
+        """
+
+        fields_initial = self.fields_initial.reshape((self.number_of_fields,
+                                                  self.nz,
+                                                  self.nx,
+                                                  self.half_ny))
+
+        # The ky=0 modes are the ones that need to be checked
+        fields_initial_ky0 = fields_initial[:, :, :, 0]
+
+        # To make this easier, shift the frequencies so that they are ordered
+        # ..., -2, -1, 0, 1, 2, ...
+        fields_initial_ky0 = np.fft.fftshift(fields_initial_ky0, axes=(1, 2))
+
+        # If not restarting, enforce the reality condition
+        if self.restart_manager.data is None:
+
+            # Enforce conjugate symmetry 
+            fields_initial_ky0[:] = 0.5 * (
+                fields_initial_ky0 + np.conj(fields_initial_ky0[:, ::-1, ::-1])
+                )
+
+            # Shift back to original frequency ordering
+            fields_initial[:, :, :, 0] = np.fft.ifftshift(fields_initial_ky0, axes=(1, 2))
+            
+            # Update the stored initial conditions
+            self.fields_initial = fields_initial.reshape(self.fields_initial.shape)
+        
+        # Calculate and report error
+        error = np.nanmax(np.abs(
+            fields_initial_ky0
+            - np.conj(fields_initial_ky0[:, ::-1, ::-1])
+        ))
+        print(f"Init. condition reality error: {error:.3e}")
+       
 
     def get_restart_data(self) -> dict[str, np.ndarray]:
         """
