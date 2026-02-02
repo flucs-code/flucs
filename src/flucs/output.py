@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
 
 from flucs.solvers import FlucsSolverState
+
 if TYPE_CHECKING:
     from flucs.diagnostic import FlucsDiagnostic
     from flucs.systems import FlucsSystem
@@ -37,6 +38,7 @@ def get_output_type(output_type: str):
 
     """
     return _registered_outputs[output_type].load()
+
 
 class FlucsOutput(ABC):
     """Deals with a single output file. A FlucsSystem typically has several
@@ -78,9 +80,9 @@ class FlucsOutput(ABC):
     def _add_diagnostics_from_input(self):
         """Adds all diagnostics from the input of the associated FlucsSystem"""
         for diag_name in self.system.input[f"output.{self.name}.diags"]:
-            diag_to_add =\
-                self.system.diags_dict[diag_name](system=self.system,
-                                                  output=self)
+            diag_to_add = self.system.diags_dict[diag_name](
+                system=self.system, output=self
+            )
             diag_to_add.output = self
             self.diagnostics.append(diag_to_add)
 
@@ -108,9 +110,7 @@ class FlucsOutput(ABC):
     def __init__(self, name: str, system: FlucsSystem) -> None:
         self.name = name
         self.system = system
-        self.filepath = (
-            self.system.input.io_path / f"output.{name}.{self.extension}"
-        )
+        self.filepath = self.system.input.io_path / f"output.{name}.{self.extension}"
 
         self.diagnostics: list[FlucsDiagnostic] = []
         self.time_cache = []
@@ -124,18 +124,25 @@ class FlucsOutput(ABC):
 
     def __lt__(self, other):
         if not isinstance(other, FlucsOutput):
-            raise TypeError("Makes no sense to compare a FlucsOutput "
-                            f"with a {type(other)}")
+            raise TypeError(
+                f"Makes no sense to compare a FlucsOutput with a {type(other)}"
+            )
         return self.next_save < other.next_save
 
 
 class FlucsOutputText(FlucsOutput):
-    """ Space-separated text output"""
+    """Space-separated text output"""
+
     extension = "txt"
 
     # The first few columns are always the same and contain simple timing data
     timing_data = []
-    timing_data_column_names = ["time", "step", "dt", "cfl"]  #TODO remove cfl from these columns, only included for testing
+    timing_data_column_names = [
+        "time",
+        "step",
+        "dt",
+        "cfl",
+    ]  # TODO remove cfl from these columns, only included for testing
 
     # Data formatting options
     column_width = 12
@@ -148,33 +155,27 @@ class FlucsOutputText(FlucsOutput):
 
         # Add timing data (first few columns)
         for timing_column_name in self.timing_data_column_names:
-            column_names.append(
-                f"{timing_column_name:>{self.column_width}}"
-            )
+            column_names.append(f"{timing_column_name:>{self.column_width}}")
 
         for diag in self.diagnostics:
             for var in diag.vars.values():
-                column_names.append(
-                    f"{var.name:>{self.column_width}}"
-                )
+                column_names.append(f"{var.name:>{self.column_width}}")
 
         file_existed = self.filepath.exists()
-        columns_n = (len(self.timing_data_column_names)
-                     + len(self.diagnostics))
-        total_data_width = (
-            columns_n * self.column_width
-            + (columns_n - 1) * len(self.column_pad)
+        columns_n = len(self.timing_data_column_names) + len(self.diagnostics)
+        total_data_width = columns_n * self.column_width + (columns_n - 1) * len(
+            self.column_pad
         )
 
         with open(self.filepath, "a", encoding="utf-8") as file:
             if file_existed:
                 file.write("-" * total_data_width)
-                file.write('\n')
+                file.write("\n")
             file.write(self.column_pad.join(column_names))
-            file.write('\n')
+            file.write("\n")
 
     def _add_diagnostics_from_input(self):
-        """ Add additional check for scalar diagnostics. """
+        """Add additional check for scalar diagnostics."""
         super()._add_diagnostics_from_input()
 
         for diag in self.diagnostics:
@@ -197,17 +198,19 @@ class FlucsOutputText(FlucsOutput):
 
     def execute(self):
         """Saves timing data in addition to the individual diagnostics."""
-        self.timing_data.append([
-            self.system.current_time,
-            self.system.current_step,
-            self.system.current_dt,
-            self.system.current_cfl
-        ])
+        self.timing_data.append(
+            [
+                self.system.current_time,
+                self.system.current_step,
+                self.system.current_dt,
+                self.system.current_cfl,
+            ]
+        )
 
         super().execute()
 
     def format_data(self, data):
-        """ Returns an appropriately formatted representation of given data as
+        """Returns an appropriately formatted representation of given data as
         a string of fixed width equal to FlucsOutputText.column_width.
 
         Parameters
@@ -225,11 +228,10 @@ class FlucsOutputText(FlucsOutput):
         if isinstance(data, (complex, np.complexfloating)):
             return f"{data:>{self.column_width}.{self.complex_format}}"
 
-        raise ValueError(f"Data type {type(data)}"
-                         "is not supported by FlucsOutputText.")
+        raise ValueError(f"Data type {type(data)}is not supported by FlucsOutputText.")
 
     def write(self):
-        """ Writes formatted rows to the text output file. """
+        """Writes formatted rows to the text output file."""
         if self.system.solver.state != FlucsSolverState.RUNNING:
             return
 
@@ -250,7 +252,7 @@ class FlucsOutputText(FlucsOutput):
                         )
 
                 file.write(self.column_pad.join(row_to_write))
-                file.write('\n')
+                file.write("\n")
 
         # Clear caches
         for diag in self.diagnostics:
@@ -261,7 +263,7 @@ class FlucsOutputText(FlucsOutput):
 
 
 class FlucsOutputNC(FlucsOutput):
-    """ netCDF4 output """
+    """netCDF4 output"""
 
     extension = "nc"
     # Dataset for the netCDF4 file
@@ -277,8 +279,7 @@ class FlucsOutputNC(FlucsOutput):
             # We are yet to initialise the group
             # Go through the file and pick group_name to be an integer that is
             # equal to the largest one found + 1
-            group_number = max([-1] +
-                               [int(name) for name in dataset.groups.keys()])
+            group_number = max([-1] + [int(name) for name in dataset.groups.keys()])
             group_number += 1
 
             self.group_name = str(group_number)
@@ -289,14 +290,13 @@ class FlucsOutputNC(FlucsOutput):
 
             # Set attributes
             group.setncattr(
-                "created",
-                datetime.datetime.now(datetime.timezone.utc).isoformat()
+                "created", datetime.datetime.now(datetime.timezone.utc).isoformat()
             )
             group.setncattr("location", str(self.filepath.parent))
             group.setncattr("type", str("flucs_output"))
 
             # Store input file as a string
-            _input_file      = group.createVariable("input_file", str)
+            _input_file = group.createVariable("input_file", str)
             _input_file[...] = str(self.system.input)
 
         self.group = dataset.groups[self.group_name]
@@ -315,19 +315,15 @@ class FlucsOutputNC(FlucsOutput):
             # Check if we already have all necessary dimensions
             # for every diagnostic
             for diagnostic in self.diagnostics:
-
                 self.group.createGroup(diagnostic.name)
                 diagnostic_group = self.group[diagnostic.name]
 
                 for var in diagnostic.vars.values():
-
                     for dim_name, dim_data in var.dimensions:
                         dim_size = len(dim_data)
 
                         diagnostic_group.createDimension(dim_name, dim_size)
-                        dim_var = self.group.createVariable(dim_name,
-                                                            "f4",
-                                                            (dim_name,))
+                        dim_var = self.group.createVariable(dim_name, "f4", (dim_name,))
                         dim_var[:] = dim_data[:]
 
                     # Create variable
@@ -335,13 +331,16 @@ class FlucsOutputNC(FlucsOutput):
                         # Complex variables are stored as two separate netCDF4
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
-                        diagnostic_group.createVariable(f"{var.name}_real", "f4",
-                                                  ("time", ) + var.shape)
-                        diagnostic_group.createVariable(f"{var.name}_imag", "f4",
-                                                  ("time", ) + var.shape)
+                        diagnostic_group.createVariable(
+                            f"{var.name}_real", "f4", ("time",) + var.shape
+                        )
+                        diagnostic_group.createVariable(
+                            f"{var.name}_imag", "f4", ("time",) + var.shape
+                        )
                     else:
-                        diagnostic_group.createVariable(var.name, "f4",
-                                                  ("time", ) + var.shape)
+                        diagnostic_group.createVariable(
+                            var.name, "f4", ("time",) + var.shape
+                        )
 
     def write(self):
         """Saves any cached diagnostic data to disk and clears the cache.
@@ -363,10 +362,8 @@ class FlucsOutputNC(FlucsOutput):
             last_index = first_index + times_to_write
 
             # Write time data
-            self.group["time"][first_index:last_index]\
-                = np.array(self.time_cache)[:]
-            self.group["dt"][first_index:last_index]\
-                = np.array(self.dt_cache)[:]
+            self.group["time"][first_index:last_index] = np.array(self.time_cache)[:]
+            self.group["dt"][first_index:last_index] = np.array(self.dt_cache)[:]
 
             self.time_cache.clear()
             self.dt_cache.clear()
@@ -379,24 +376,30 @@ class FlucsOutputNC(FlucsOutput):
                     # If scalar diagnostic, this is much easier
                     if len(var.shape) == 0:
                         if var.is_complex:
-                            diagnostic_group[f"{var.name}_real"][first_index:last_index]\
-                                = np.array(var.data_cache).real
-                            diagnostic_group[f"{var.name}_imag"][first_index:last_index]\
-                                = np.array(var.data_cache).imag
+                            diagnostic_group[f"{var.name}_real"][
+                                first_index:last_index
+                            ] = np.array(var.data_cache).real
+                            diagnostic_group[f"{var.name}_imag"][
+                                first_index:last_index
+                            ] = np.array(var.data_cache).imag
                         else:
-                            diagnostic_group[var.name][first_index:last_index]\
-                                = np.array(var.data_cache)
+                            diagnostic_group[var.name][first_index:last_index] = (
+                                np.array(var.data_cache)
+                            )
                     else:
                         # TODO: Rewrite with np.array
                         if var.is_complex:
                             for i in range(times_to_write):
-                                diagnostic_group[f"{var.name}_real"][first_index + i, :]\
-                                    = var.data_cache[i][:].real
-                                diagnostic_group[f"{var.name}_imag"][first_index + i, :]\
-                                    = var.data_cache[i][:].imag
+                                diagnostic_group[f"{var.name}_real"][
+                                    first_index + i, :
+                                ] = var.data_cache[i][:].real
+                                diagnostic_group[f"{var.name}_imag"][
+                                    first_index + i, :
+                                ] = var.data_cache[i][:].imag
                         else:
                             for i in range(times_to_write):
-                                diagnostic_group[var.name][first_index + i, :]\
-                                    = var.data_cache[i][:]
+                                diagnostic_group[var.name][first_index + i, :] = (
+                                    var.data_cache[i][:]
+                                )
 
                 diag.clear()

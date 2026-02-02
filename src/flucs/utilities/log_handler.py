@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 
 
 class FlucsLogHandler(TextIOBase, AbstractContextManager):
-    """ Redirects stdout and stderr to a specified set of streams.
+    """Redirects stdout and stderr to a specified set of streams.
     Used primarily to redirect print() statements to an additional log file.
 
     Attributes
@@ -13,6 +13,7 @@ class FlucsLogHandler(TextIOBase, AbstractContextManager):
     streams : Streams where data is written.
 
     """
+
     # List of streams to which we write data
     streams: list
 
@@ -25,7 +26,7 @@ class FlucsLogHandler(TextIOBase, AbstractContextManager):
     errors = "strict"
 
     def isatty(self):
-        """Hard-coded to NOT be a tty. """
+        """Hard-coded to NOT be a tty."""
         return False
 
     def __init__(self, *streams, keep_stdout=True):
@@ -62,8 +63,7 @@ class FlucsLogHandler(TextIOBase, AbstractContextManager):
             # Print only to non-stdout
             for s in self.streams:
                 if s is not self._old_stdout:
-                    traceback.print_exception(exc_type, exc_val,
-                                              exc_tb, file=s)
+                    traceback.print_exception(exc_type, exc_val, exc_tb, file=s)
 
         sys.stdout = self._old_stdout
         sys.stderr = self._old_stderr

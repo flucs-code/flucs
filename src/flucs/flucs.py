@@ -14,8 +14,7 @@ from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
 
 
-FLUCS_HEADER = (
-rf"""
+FLUCS_HEADER = rf"""
 ***************************************************
 
        ██████  ████
@@ -30,9 +29,8 @@ rf"""
 ***************************************************
 
 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-Version: {importlib.metadata.version('flucs')}
+Version: {importlib.metadata.version("flucs")}
 """
-)
 
 # Load lists of registered solvers and systems
 solvers = entry_points().select(group="flucs.solvers")
@@ -134,7 +132,6 @@ def run_flucs(input_path: pl.Path, override: list = None):
 
     with open(log_path, "a", encoding="utf-8") as log_file:
         with FlucsLogHandler(log_file, keep_stdout=True):
-
             print(f"{FLUCS_HEADER}")
 
             flucs_input = FlucsInput(input_path, override)
@@ -153,26 +150,26 @@ def main():
 
     """
 
-    parser = argparse.ArgumentParser(
-        description="flucs = fluid cuda solver."
-    )
+    parser = argparse.ArgumentParser(description="flucs = fluid cuda solver.")
 
     parser.add_argument(
-        "--io_path", "-io",
+        "--io_path",
+        "-io",
         type=str,
         default=pl.Path.cwd(),
         required=False,
         help="Path to the i/o directory, which must contain 'input.toml'. "
-             "If no path is specified, will assume the current working directory."
+        "If no path is specified, will assume the current working directory.",
     )
 
     parser.add_argument(
-        "--override", "-o",
+        "--override",
+        "-o",
         nargs="+",
         required=False,
         help="Additional arguments to override input-file parameters. Must be "
-             "specified in TOML grouping format: e.g., to override the value "
-             "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'."
+        "specified in TOML grouping format: e.g., to override the value "
+        "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'.",
     )
 
     # The script can only do one thing at a time.
@@ -184,49 +181,54 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Runs the appropriate solver using input.toml from --io_path."
+        help="Runs the appropriate solver using input.toml from --io_path.",
     )
 
     operation_modes.add_argument(
-        "--list", "-l",
+        "--list",
+        "-l",
         action="store_true",
         default=False,
         required=False,
-        help="Lists the solvers and systems that can be run in the current installation."
+        help="Lists the solvers and systems that can be run in the current installation.",
     )
 
-    operation_modes.add_argument(#TODO
-        "--test", "-t",
+    operation_modes.add_argument(  # TODO
+        "--test",
+        "-t",
         action="store_true",
         default=False,
         required=False,
-        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit"
+        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit",
     )
 
     operation_modes.add_argument(
-        "--clean", "-c",
+        "--clean",
+        "-c",
         action="store_true",
         default=False,
         required=False,
         help="Remove 'output.*' and 'restart.*' files in the current directory "
-             "and exit."
+        "and exit.",
     )
 
     operation_modes.add_argument(
-        "--postprocess", "-p",
+        "--postprocess",
+        "-p",
         action="store_true",
         default=False,
         required=False,
         help="Provides information about post-processing options for a given "
-             "i/o directory (specified via '--io_path') and exit."
+        "i/o directory (specified via '--io_path') and exit.",
     )
 
     operation_modes.add_argument(
-        "--reconstruct", "-r",
+        "--reconstruct",
+        "-r",
         type=str,
         required=False,
         help="Reconstruct the input file from the specified restart file. "
-             "Note that --override is ignored."
+        "Note that --override is ignored.",
     )
 
     args = parser.parse_args()
@@ -234,14 +236,7 @@ def main():
 
     # If nothing is specified, assume --run
     if not any(
-        (
-        args.run,
-        args.list,
-        args.test,
-        args.clean,
-        args.reconstruct,
-        args.postprocess
-        )
+        (args.run, args.list, args.test, args.clean, args.reconstruct, args.postprocess)
     ):
         args.run = True
 
@@ -250,13 +245,11 @@ def main():
         input_path = io_path / "input.toml"
 
         if not input_path.exists():
-            raise FileNotFoundError(
-                f"Input file not found in {io_path} "
-            )
+            raise FileNotFoundError(f"Input file not found in {io_path} ")
 
         run_flucs(input_path, args.override)
         return
-    
+
     # List installed solvers and systems
     if args.list:
         list_solvers_and_systems()
@@ -271,12 +264,13 @@ def main():
     if args.reconstruct is not None:
         # Import here to avoid circular imports at module load time
         from flucs.restart import FlucsRestart
-        FlucsRestart.reconstruct_input_from_restart(args.reconstruct,
-                                                           io_path)
+
+        FlucsRestart.reconstruct_input_from_restart(args.reconstruct, io_path)
         return
 
     # Post-processing
     if args.postprocess:
         from flucs.postprocessing import FlucsPostProcessing
+
         FlucsPostProcessing(io_path).list_script_paths()
         return

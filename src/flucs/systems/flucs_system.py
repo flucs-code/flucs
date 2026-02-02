@@ -5,7 +5,6 @@ abstract methods.
 
 """
 
-
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
 
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""
+
     input: FlucsInput = None
 
     # Solver running the system
@@ -85,7 +85,7 @@ class FlucsSystem(ABC):
                 continue
 
             p = pl.Path(importlib.import_module(parent_cls.__module__).__file__)
-            defaults_path = p.with_name(f'{p.stem}.toml')
+            defaults_path = p.with_name(f"{p.stem}.toml")
             print(f"Loading SOLVER defaults for {defaults_path}")
             with defaults_path.open("r") as f:
                 contents = f.read()
@@ -189,7 +189,7 @@ class FlucsSystem(ABC):
             self.add_output(FlucsOutput(name=output_name, system=self))
 
     def compile_cupy_module(self) -> None:
-        """ Compiles the CuPy CUDA module associated with the system
+        """Compiles the CuPy CUDA module associated with the system
 
         Custom CUDA setup should be done by overriding this method. Do not
         forget to call super().compile_cupy_module()!
@@ -211,8 +211,9 @@ class FlucsSystem(ABC):
         # Add the current date at the end of the source to force recompilation
         cuda_module += f"\n// {datetime.datetime.now()}"
 
-        self.cupy_module = cp.RawModule(code=cuda_module,
-                                        options=self.module_options.get_options())
+        self.cupy_module = cp.RawModule(
+            code=cuda_module, options=self.module_options.get_options()
+        )
 
         self.cupy_module.compile()
 
@@ -257,7 +258,6 @@ class FlucsSystem(ABC):
 
         for index in devices:
             with cp.cuda.Device(int(index)) as device:
-
                 # Setup dict
                 key = f"device_{device.id:03d}"
                 device_info[key] = {}
@@ -286,7 +286,9 @@ class FlucsSystem(ABC):
                     name = properties.get("name")
                     if isinstance(name, (bytes, bytearray)):
                         name = name.decode()
-                    compute_capability = f"{properties.get('major', '?')}.{properties.get('minor', '?')}"
+                    compute_capability = (
+                        f"{properties.get('major', '?')}.{properties.get('minor', '?')}"
+                    )
                     multiprocessors = properties.get("multiProcessorCount")
                 except Exception:
                     pass
@@ -306,7 +308,7 @@ class FlucsSystem(ABC):
                         "total": int(pool_total),
                         "used": int(pool_used),
                         "free": int(pool_free),
-                    }
+                    },
                 }
 
         # Ensure return to original context
@@ -320,15 +322,17 @@ class FlucsSystem(ABC):
             if not key.startswith("device_"):
                 continue
 
-            global_used_gb = info['global']['used'] / bytes_to_gb
-            global_total_gb = info['global']['total'] / bytes_to_gb
-            cupy_total_gb = info['cupy']['total'] / bytes_to_gb
+            global_used_gb = info["global"]["used"] / bytes_to_gb
+            global_total_gb = info["global"]["total"] / bytes_to_gb
+            cupy_total_gb = info["cupy"]["total"] / bytes_to_gb
 
-            print(f"({info['id']}) {info['name']}: {global_used_gb:.3f} / "
-                  f"{global_total_gb:.3f} GB "
-                  f"({global_used_gb / global_total_gb * 100:.2f}%), "
-                  f"CuPy usage: {cupy_total_gb:.3f} GB "
-                  f"({cupy_total_gb / global_total_gb * 100:.2f}%).")
+            print(
+                f"({info['id']}) {info['name']}: {global_used_gb:.3f} / "
+                f"{global_total_gb:.3f} GB "
+                f"({global_used_gb / global_total_gb * 100:.2f}%), "
+                f"CuPy usage: {cupy_total_gb:.3f} GB "
+                f"({cupy_total_gb / global_total_gb * 100:.2f}%)."
+            )
 
         return device_info
 
@@ -366,9 +370,11 @@ class FlucsSystem(ABC):
         }
         """
 
-    def __init__(self, input : FlucsInput) -> None:
+    def __init__(self, input: FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        self.module_options.add_string_option(f"-I{pl.Path(flucs.__file__).parent.parent}")
+        self.module_options.add_string_option(
+            f"-I{pl.Path(flucs.__file__).parent.parent}"
+        )
         self._interpret_input()
         self._set_precision()

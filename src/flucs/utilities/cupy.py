@@ -1,9 +1,13 @@
 """A selection of useful functions and classes for dealing with CuPy"""
+
 from typing import Any
 import numpy as np
 import cupy as cp
 
-def cupy_set_device_pointer(module: cp.RawModule, ptr_name: str, data_array: cp.ndarray):
+
+def cupy_set_device_pointer(
+    module: cp.RawModule, ptr_name: str, data_array: cp.ndarray
+):
     """Assigns a device memory pointer to point to a given device array.
 
     Parameters
@@ -32,6 +36,7 @@ class ModuleOptions:
         compiler. By default, this is
         ("--ptxas-options=-O3", "--use_fast_math").
     """
+
     _defs: dict
     string_options = ("--ptxas-options=-O3", "--use_fast_math")
 
@@ -40,10 +45,9 @@ class ModuleOptions:
 
     def add_string_option(self, option: str) -> None:
         """Adds a compiler option."""
-        self.string_options += (str(option), )
+        self.string_options += (str(option),)
 
-    def define_constant(self, name: str, value: Any = "",
-                        float_convert: bool = False):
+    def define_constant(self, name: str, value: Any = "", float_convert: bool = False):
         """Adds a definition to the compiler flags.
         Effectively, this is equivalent to adding
 
@@ -63,8 +67,7 @@ class ModuleOptions:
 
         """
 
-        if float_convert or type(value) in (float, np.float16,
-                                            np.float32, np.float64):
+        if float_convert or type(value) in (float, np.float16, np.float32, np.float64):
             value_to_add = f"((FLUCS_FLOAT)({str(value)}))"
         else:
             value_to_add = f"({str(value)})"
@@ -72,9 +75,7 @@ class ModuleOptions:
         self._defs[name] = value_to_add
 
     def get_options(self) -> tuple:
-        """Returns the tuple of options to be passed to CuPy's RawModule/
-
-        """
+        """Returns the tuple of options to be passed to CuPy's RawModule/"""
 
         ret = ()
         ret += self.string_options

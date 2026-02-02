@@ -14,7 +14,8 @@ def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
         key=lambda p: p.name,
     )
     format_text = (
-        " or ".join(patterns) if len(patterns) <= 2
+        " or ".join(patterns)
+        if len(patterns) <= 2
         else ", ".join(patterns[:-1]) + f", or {patterns[-1]}"
     )
     if not candidates:
