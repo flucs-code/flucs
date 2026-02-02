@@ -41,6 +41,9 @@ docs = [
     "sphinx-rtd-theme",
 ]
 
+[tool.ruff]
+line-length = 80
+
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
