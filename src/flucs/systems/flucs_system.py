@@ -333,7 +333,7 @@ class FlucsSystem(ABC):
                 f"{global_total_gb:.3f} GB "
                 f"({global_used_gb / global_total_gb * 100:.2f}%), "
                 f"CuPy usage: {cupy_total_gb:.3f} GB "
-                f"({cupy_total_gb / global_total_gb * 100:.2f}%)."
+                f"({cupy_total_gb / global_total_gb * 100:.2f}%)"
             )
 
         return device_info

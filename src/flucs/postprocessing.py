@@ -96,7 +96,7 @@ class FlucsPostProcessing:
                 print(f"{2 * self._indent}{path}")
         print(
             "For information on a specific script, run "
-            "'python <script path> --help'."
+            "'python <script path> --help'"
         )
 
     @staticmethod
@@ -167,7 +167,7 @@ class FlucsPostProcessing:
         if self.output_file is None:
             raise ValueError(
                 "'output_file' must be set to derive netCDF paths from "
-                "i/o directories."
+                "i/o directories"
             )
 
         result: dict[str, dict[str, list[int]]] = {}
@@ -275,7 +275,7 @@ class FlucsPostProcessing:
             grp_numbers = [grp_number for grp_number, _ in groups]
             if grp_numbers != sorted(grp_numbers):
                 raise ValueError(
-                    "Output groups are not in order; check netCDF file."
+                    "Output groups are not in order; check netCDF file"
                 )
 
             # Determine residual shape and dtype of output variable
@@ -308,7 +308,7 @@ class FlucsPostProcessing:
                         raise ValueError(
                             "Time dimension mistmatch for variable "
                             f"'{variable}' in group {grp_number} "
-                            f"(has {arr.shape} but expected {time_length})."
+                            f"(has {arr.shape} but expected {time_length})"
                         )
                     group_data.append(arr.astype(var_dtype, copy=False))
                 else:
@@ -359,7 +359,7 @@ class FlucsPostProcessing:
 
         # Validate conflict strategy
         if conflict_strategy not in ("overwrite", "error"):
-            raise ValueError("Invalid value for 'conflict_strategy'.")
+            raise ValueError("Invalid value for 'conflict_strategy'")
 
         # Ensure directory exists
         directory = self.save_directory
@@ -388,7 +388,7 @@ class FlucsPostProcessing:
         else:
             name = type(obj).__name__
             raise NotImplementedError(
-                f"Saving objects of type '{name}' is not yet implemented."
+                f"Saving objects of type '{name}' is not yet implemented"
             )
 
         return
@@ -405,7 +405,7 @@ class FlucsPostProcessing:
         # Get all figures to save
         fignums = plt.get_fignums()
         if not fignums:
-            raise RuntimeError("No Matplotlib figures available to save.")
+            raise RuntimeError("No Matplotlib figures available to save")
 
         # Parse kwargs
         kwargs = dict(save_kwargs or {})
@@ -501,7 +501,7 @@ class FlucsPostProcessing:
         for path in io_paths:
             input_file = pl.Path(path) / "input.toml"
             if not input_file.exists():
-                raise ValueError(f"Path {path} is not a valid i/o directory.")
+                raise ValueError(f"Path {path} is not a valid i/o directory")
             self.io_paths.append(pl.Path(path))
 
         # Set output file and save directory
@@ -515,7 +515,7 @@ class FlucsPostProcessing:
 
         # Enforce constraint across provided inputs
         if constraint not in ("none", "solver", "system", "both"):
-            raise ValueError("Invalid value for 'constraint'.")
+            raise ValueError("Invalid value for 'constraint'")
 
         solver_types = set(self._solver_types.values())
         system_types = set(self._system_types.values())
@@ -523,12 +523,12 @@ class FlucsPostProcessing:
         if constraint in ("solver", "both") and len(solver_types) > 1:
             raise ValueError(
                 "All i/o directories must contain output from the same "
-                "solver when 'constraint' is 'solver' or 'both'."
+                "solver when 'constraint' is 'solver' or 'both'"
             )
         if constraint in ("system", "both") and len(system_types) > 1:
             raise ValueError(
                 "All i/o directories must contain output from the same "
-                "system when 'constraint' is 'system' or 'both'."
+                "system when 'constraint' is 'system' or 'both'"
             )
 
         print(

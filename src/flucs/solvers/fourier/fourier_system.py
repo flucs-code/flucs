@@ -103,15 +103,15 @@ class FourierSystem(FlucsSystem):
 
         # Check for conflicts in time-stepping input parameters
         if self.input["time.dt_method"] == "discrete":
-            print("Using discrete time stepping.")
+            print("Using discrete time stepping")
 
         elif self.input["time.dt_method"] == "continuous":
             if self.input["setup.precompute_linear_matrix"]:
                 raise InvalidFlucsInputFileError(
                     "Cannot have setup.precompute_linear_matrix = true if "
-                    "time.dt_method = 'continuous'."
+                    "time.dt_method = 'continuous'"
                 )
-            print("Using continuous time stepping.")
+            print("Using continuous time stepping")
 
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
@@ -152,7 +152,7 @@ class FourierSystem(FlucsSystem):
 
                     print(
                         f"Found padded_n{dim} = {padded_n} "
-                        f"for n{{dim}} = {{n}}."
+                        f"for n{{dim}} = {{n}}"
                     )
 
                 case (False, True):
@@ -169,7 +169,7 @@ class FourierSystem(FlucsSystem):
                     half_n = _x + 1
                     n = 2 * _x + 1
 
-                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}.")
+                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}")
 
                 case (False, False):
                     raise ValueError(
@@ -325,7 +325,7 @@ class FourierSystem(FlucsSystem):
         # Print message.
         print(
             f"Starting at time {float(self.current_time):.3e}, "
-            f"dt {float(self.current_dt):.3e}."
+            f"dt {float(self.current_dt):.3e}"
         )
 
         # Copy initial condition
@@ -426,7 +426,7 @@ class FourierSystem(FlucsSystem):
             self.module_options.define_constant("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
-            print("Linear matrices will be precomputed.")
+            print("Linear matrices will be precomputed")
             self.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX")
 
         super().compile_cupy_module()
@@ -458,7 +458,7 @@ class FourierSystem(FlucsSystem):
             restart_data = self.restart_manager.data
 
             if "fields" not in restart_data:
-                raise ValueError("Restart data does not contain 'fields'.")
+                raise ValueError("Restart data does not contain 'fields'")
 
             field_data = restart_data["fields"]["data"]
 
@@ -641,7 +641,7 @@ class FourierSystem(FlucsSystem):
         if self.current_dt < self.dt_min:
             print(
                 f"({self.current_step}) Required time step "
-                f"{self.current_dt:.3e} is below dt_min. Exiting."
+                f"{self.current_dt:.3e} is below dt_min. Exiting"
             )
             self.solver.interrupted = True
 

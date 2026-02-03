@@ -47,7 +47,7 @@ class FlucsSolver(Generic[T_System], ABC):
 
         # Handle signals in order to exit cleanly
         def signal_handler(signum, frame):
-            print(f"\nCaught signal {signum}. Exiting cleanly.")
+            print(f"\nCaught signal {signum}. Exiting cleanly")
             self.interrupted = True
 
         signal.signal(signal.SIGINT, signal_handler)
