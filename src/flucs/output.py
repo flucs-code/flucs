@@ -186,7 +186,7 @@ class FlucsOutputText(FlucsOutput):
                     raise ValueError(
                         f"Cannot add diagnostic {diag.name} with variable "
                         f"{var.name} to text output {self.name} because "
-                        f"text output supports only scalar variables"
+                        f"text output supports only scalar variables."
                     )
 
     def ready(self):
@@ -231,7 +231,7 @@ class FlucsOutputText(FlucsOutput):
             return f"{data:>{self.column_width}.{self.complex_format}}"
 
         raise ValueError(
-            f"Data type {type(data)} is not supported by FlucsOutputText"
+            f"Data type {type(data)} is not supported by the FlucsOutputText class."
         )
 
     def write(self):

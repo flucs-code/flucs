@@ -62,7 +62,7 @@ class FlucsRestart:
         if restart_if_exists and is_restart_from_specified:
             raise InvalidFlucsInputFileError(
                 "'restart_from' and 'restart_if_exists' cannot be specified"
-                " simultaneously"
+                " simultaneously."
             )
 
         # Restart from default restart file
@@ -85,7 +85,7 @@ class FlucsRestart:
 
             if not self.initial_path.exists():
                 raise InvalidFlucsInputFileError(
-                    f"The restart_from file {self.initial_path} cannot be found"
+                    f"The restart_from file {self.initial_path} cannot be found."
                 )
 
         print(f"Restarting from file: {self.initial_path}")
@@ -192,7 +192,7 @@ class FlucsRestart:
             raise InvalidFlucsInputFileError(
                 "You must remove existing 'restart.nc' manually if "
                 "write_restart_file is 'True' but restart_if_exists "
-                "is 'False'"
+                "is 'False'."
             )
 
     def write_restart(self, force: bool = False) -> None:
@@ -345,14 +345,14 @@ class FlucsRestart:
         with Dataset(restart_file_path, "r") as ds:
             if getattr(ds, "type", None) != "flucs_restart":
                 raise ValueError(
-                    f"File {restart_file_path} is not a restart file"
+                    f"File {restart_file_path} is not a restart file."
                 )
             try:
                 input_file = ds.getncattr("input_file")
             except Exception as e:
                 raise ValueError(
                     f"Restart file {restart_file_path} does not contain"
-                    " an input file stored as a string"
+                    " an input file stored as a string."
                 ) from e
 
         # Check whether an input file of the same name already exists

@@ -6,7 +6,7 @@ def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
     Cleans up files matching given patterns in the specified directory.
     """
 
-    abort_msg = "Cleaning aborted"
+    abort_msg = "Cleaning aborted."
 
     # Collect unique files matching patterns
     candidates = sorted(
@@ -19,7 +19,7 @@ def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
         else ", ".join(patterns[:-1]) + f", or {patterns[-1]}"
     )
     if not candidates:
-        print(f"No {format_text} files found")
+        print(f"No {format_text} files found.")
         return
 
     # Print candidates and confirm
@@ -39,6 +39,6 @@ def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
                 p.unlink(missing_ok=True)
             except (IsADirectoryError, PermissionError, OSError) as e:
                 print(f"Could not delete {p.name}:\n{e}")
-        print("Cleanup complete")
+        print("Cleanup complete.")
     else:
         print(abort_msg)

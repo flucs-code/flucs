@@ -57,7 +57,7 @@ def get_solver_type(solver_name: str):
     except KeyError as e:
         raise KeyError(
             f"Solver '{solver_name}' not found. "
-            "Use 'flucs --list' to see installed solvers"
+            "Use 'flucs --list' to see installed solvers."
         ) from e
 
     return s.load()
@@ -84,7 +84,7 @@ def get_system_type(system_name: str):
     except KeyError as e:
         raise KeyError(
             f"System '{system_name}' not found. "
-            "Use 'flucs --list' to see installed systems"
+            "Use 'flucs --list' to see installed systems."
         ) from e
 
     return s.load()
