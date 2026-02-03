@@ -231,7 +231,8 @@ class FlucsOutputText(FlucsOutput):
             return f"{data:>{self.column_width}.{self.complex_format}}"
 
         raise ValueError(
-            f"Data type {type(data)} is not supported by the FlucsOutputText class."
+            f"Data type {type(data)} is not supported "
+             "by the FlucsOutputText class."
         )
 
     def write(self):
