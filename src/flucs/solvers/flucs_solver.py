@@ -8,10 +8,12 @@ abstract methods.
 import enum
 import signal
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from flucs import FlucsInput
-from flucs.systems import FlucsSystem
+
+if TYPE_CHECKING:
+    from flucs.systems import FlucsSystem
 
 
 class FlucsSolverState(enum.Enum):
