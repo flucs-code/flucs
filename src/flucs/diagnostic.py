@@ -1,6 +1,7 @@
 """
 Defines the base class for diagnostics.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -18,6 +19,7 @@ class FlucsDiagnosticVariable:
     """Data and dimensions for a single output variable.
     A FlucsDiagnostic has a set of FlucsDiagnosticVariable.
     """
+
     # Name of the data variable
     name: str
 
@@ -35,7 +37,8 @@ class FlucsDiagnosticVariable:
 
 
 class FlucsDiagnostic(ABC):
-    """ Prepares data to be written by a FlucsOutput. """
+    """Prepares data to be written by a FlucsOutput."""
+
     # Name of the diagnostic
     name: str
 
@@ -60,8 +63,9 @@ class FlucsDiagnostic(ABC):
 
     def add_var(self, var: FlucsDiagnosticVariable) -> None:
         if var.name in self.vars:
-            raise KeyError(f"Diagnostic {self.name} already "
-                           f"has a variable {var.name}.")
+            raise KeyError(
+                f"Diagnostic {self.name} already has a variable {var.name}."
+            )
 
         self.vars[var.name] = var
 

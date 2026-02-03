@@ -32,8 +32,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.ready()
 
         time_taken = self._solver_loop()
-        print(f'Timed {self.system.input["setup.timing_steps"]:.3e} steps, '
-              f'taking  {time_taken:.3e} seconds.')
+        print(
+            f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
+            f"taking  {time_taken:.3e} seconds."
+        )
 
         if self.system.input["setup.timing"]:
             print("Timing completed. Exiting.\n")
@@ -56,8 +58,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             return False
 
         if self.state == FlucsSolverState.TIMING:
-            return self.system.current_step\
-                   < self.system.input["setup.timing_steps"]
+            return (
+                self.system.current_step
+                < self.system.input["setup.timing_steps"]
+            )
 
         return self.system.current_time < self.system.final_time
 
@@ -70,7 +74,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.execute_diagnostics()
 
         start_time = time.time()
-        self.system.steps_until_next_write = self.system.input["output.write_steps"]
+        self.system.steps_until_next_write = self.system.input[
+            "output.write_steps"
+        ]
 
         while self._not_done():
             self.system.begin_time_step()

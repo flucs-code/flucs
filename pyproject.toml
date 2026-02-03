@@ -21,6 +21,29 @@ cuda11 = ["cupy-cuda11x"]
 cuda12 = ["cupy-cuda12x"]
 cuda13 = ["cupy-cuda13x"]
 
+# Developer dependencies
+# Install with `pip install . --group dev`
+[dependency-groups]
+dev = [
+    { include-group = "lint" },
+    { include-group = "test" },
+    { include-group = "docs" },
+]
+lint = [
+    "ruff",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+[tool.ruff]
+line-length = 80
+
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"

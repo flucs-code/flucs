@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING
 
 from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
+
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
+
 
 class FlucsRestart:
     """
@@ -82,8 +84,7 @@ class FlucsRestart:
 
             if not self.initial_path.exists():
                 raise InvalidFlucsInputFileError(
-                    f"The restart_from file {self.initial_path}"
-                    " cannot be found."
+                    f"The restart_from file {self.initial_path} cannot be found."
                 )
 
         print(f"Restarting from file: {self.initial_path}")
@@ -114,17 +115,20 @@ class FlucsRestart:
 
         with Dataset(self.initial_path, "r") as ds:
             # Set system's time variables to continue from the restart file
-            system.init_time = self.system.float(ds.variables["current_time"][...]) if \
-                                    not system.input["restart.reset_time"] else 0.0
+            system.init_time = (
+                self.system.float(ds.variables["current_time"][...])
+                if not system.input["restart.reset_time"]
+                else 0.0
+            )
             system.init_dt = self.system.float(ds.variables["current_dt"][...])
-            system.final_time = (
-                system.init_time
-                + self.system.float(system.input["time.tfinal"])
+            system.final_time = system.init_time + self.system.float(
+                system.input["time.tfinal"]
             )
 
             # Load all the restart data
             var_names = [
-                v for v in ds.variables.keys()
+                v
+                for v in ds.variables.keys()
                 if v not in {"current_time", "current_dt"}
             ]
 
@@ -146,7 +150,8 @@ class FlucsRestart:
                         data = real + 1j * imag
                         dims = tuple(v_r.dimensions)
                         self.data[base_name] = {
-                            "data": data, "dimension_names": dims
+                            "data": data,
+                            "dimension_names": dims,
                         }
                     else:
                         # No matching imag: treat as a regular real-valued
@@ -154,7 +159,8 @@ class FlucsRestart:
                         data = np.asarray(v_r[...])
                         dims = tuple(v_r.dimensions)
                         self.data[name] = {
-                            "data": data, "dimension_names": dims
+                            "data": data,
+                            "dimension_names": dims,
                         }
                     continue
 
@@ -165,7 +171,7 @@ class FlucsRestart:
                 self.data[name] = {"data": data, "dimension_names": dims}
 
     def _setup_restart_output(self):
-        """ Gets the FlucsRestart ready to write restart data. """
+        """Gets the FlucsRestart ready to write restart data."""
 
         system_input = self.system.input
 
@@ -176,12 +182,12 @@ class FlucsRestart:
             return
 
         self.write_path = system_input.io_path / "restart.nc"
-        self.backup_path = (
-            system_input.io_path / "restart.backup.nc"
-        )
+        self.backup_path = system_input.io_path / "restart.backup.nc"
 
-        if (self.write_path.exists()
-                and not system_input["restart.restart_if_exists"]):
+        if (
+            self.write_path.exists()
+            and not system_input["restart.restart_if_exists"]
+        ):
             raise InvalidFlucsInputFileError(
                 "You must remove existing 'restart.nc' manually if write_restart_file "
                 "is 'True' but restart_if_exists is 'False'."
@@ -252,11 +258,10 @@ class FlucsRestart:
 
         # Write to temporary file
         with Dataset(self.write_path, "w", format="NETCDF4") as ds:
-
             # Set file attributes
             ds.setncattr(
                 "created",
-                datetime.datetime.now(datetime.timezone.utc).isoformat()
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
             ds.setncattr("location", str(self.write_path.parent))
             ds.setncattr("type", str("flucs_restart"))
@@ -265,11 +270,13 @@ class FlucsRestart:
             ds.setncattr("input_file", str(self.system.input))
 
             # Scalar values
-            ds.createVariable("current_time", precision, ())[...] =\
+            ds.createVariable("current_time", precision, ())[...] = (
                 self.system.float(self.system.current_time)
+            )
 
-            ds.createVariable("current_dt", precision, ())[...] =\
+            ds.createVariable("current_dt", precision, ())[...] = (
                 self.system.float(self.system.current_dt)
+            )
 
             # Arrays
             for var_name, var_dict in restart_data.items():
@@ -283,14 +290,20 @@ class FlucsRestart:
                         if dname not in ds.dimensions:
                             ds.createDimension(dname, int(dsize))
                 else:
-                    dim_names = tuple(f"{var_name}_dim{i}" for i in range(var_data.ndim))
+                    dim_names = tuple(
+                        f"{var_name}_dim{i}" for i in range(var_data.ndim)
+                    )
                     for dname, dsize in zip(dim_names, var_data.shape):
                         if dname not in ds.dimensions:
                             ds.createDimension(dname, int(dsize))
 
                 if np.iscomplexobj(var_data):
-                    v_r = ds.createVariable(f"{var_name}_real", precision, tuple(dim_names))
-                    v_i = ds.createVariable(f"{var_name}_imag", precision, tuple(dim_names))
+                    v_r = ds.createVariable(
+                        f"{var_name}_real", precision, tuple(dim_names)
+                    )
+                    v_i = ds.createVariable(
+                        f"{var_name}_imag", precision, tuple(dim_names)
+                    )
                     v_r[:] = var_data.real
                     v_i[:] = var_data.imag
                 else:
@@ -302,8 +315,9 @@ class FlucsRestart:
             self.backup_path.unlink()
 
     @staticmethod
-    def reconstruct_input_from_restart(restart_file_path: str | pl.Path,
-                                       io_path: str | pl.Path) -> None:
+    def reconstruct_input_from_restart(
+        restart_file_path: str | pl.Path, io_path: str | pl.Path
+    ) -> None:
         """
         Reconstructs an input file from a restart file.
 

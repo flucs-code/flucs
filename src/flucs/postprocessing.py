@@ -2,13 +2,14 @@ import toml
 import flucs
 import inspect
 import argparse
-import numpy as np  
-import pathlib as pl 
+import numpy as np
+import pathlib as pl
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from typing import Sequence, Literal, Any
+
 
 class FlucsPostProcessing:
     """
@@ -16,7 +17,7 @@ class FlucsPostProcessing:
     """
 
     # Postprocessing-specific attributes
-    io_paths: list[pl.Path] 
+    io_paths: list[pl.Path]
     output_file: str | None
     save_directory: pl.Path | None
     _script_paths: dict[str, list[pl.Path]]
@@ -53,7 +54,6 @@ class FlucsPostProcessing:
             self._solver_types[io_path] = flucs.get_solver_type(solver_name)
             self._system_types[io_path] = flucs.get_system_type(system_name)
 
-
     def _get_script_paths(self) -> None:
         """
         Gathers the paths to the relevant postprocessing scripts for each
@@ -77,7 +77,6 @@ class FlucsPostProcessing:
                 for script in scripts_dir.glob("*.py"):
                     self._script_paths[name].append(pl.Path(script))
 
-
     def list_script_paths(self) -> None:
         """
         Prints information about the postprocessing scripts to the standard output
@@ -90,12 +89,15 @@ class FlucsPostProcessing:
         for type_name, paths in self._script_paths.items():
             print(f"{self._indent}{type_name}:")
             for path in paths:
-                print(f"{2*self._indent}{path}")
-        print("For information on a specific script, run 'python <script path> --help'.")
-
+                print(f"{2 * self._indent}{path}")
+        print(
+            "For information on a specific script, run 'python <script path> --help'."
+        )
 
     @staticmethod
-    def get_netcdf_variables(nc_path: pl.Path, ignore=None) -> dict[str, list[int]]:
+    def get_netcdf_variables(
+        nc_path: pl.Path, ignore=None
+    ) -> dict[str, list[int]]:
         """
         Given a netCDF filepath, returns a mapping of variable names to the
         list of groups that they appear in.
@@ -139,9 +141,11 @@ class FlucsPostProcessing:
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
-    def _get_all_netcdf_variables(self, ignore=None) -> dict[str, dict[str, list[int]]]:
+    def _get_all_netcdf_variables(
+        self, ignore=None
+    ) -> dict[str, dict[str, list[int]]]:
         """
-        For each i/o directory, collect the variables present in the netCDF file 
+        For each i/o directory, collect the variables present in the netCDF file
         specified by self.output_file, and the groups that they appear in.
 
         Parameters
@@ -156,7 +160,9 @@ class FlucsPostProcessing:
         """
 
         if self.output_file is None:
-            raise ValueError("'output_file' must be set to derive netCDF paths from i/o directories.")
+            raise ValueError(
+                "'output_file' must be set to derive netCDF paths from i/o directories."
+            )
 
         result: dict[str, dict[str, list[int]]] = {}
         for io_path in self.io_paths:
@@ -164,14 +170,17 @@ class FlucsPostProcessing:
             if not nc_path.exists():
                 result[str(io_path)] = {}
                 continue
-            result[str(io_path)] = FlucsPostProcessing.get_netcdf_variables(nc_path, ignore=ignore)
+            result[str(io_path)] = FlucsPostProcessing.get_netcdf_variables(
+                nc_path, ignore=ignore
+            )
 
         return result
-    
 
-    def list_netcdf_variables(self, ignore=("time", "dt", "input_file")) -> None:
+    def list_netcdf_variables(
+        self, ignore=("time", "dt", "input_file")
+    ) -> None:
         """
-        Prints the available netCDF variables to the standard output for each 
+        Prints the available netCDF variables to the standard output for each
         of the provided i/o directories given a specific output type.
         """
 
@@ -179,7 +188,6 @@ class FlucsPostProcessing:
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
         for io_path, variables_dict in netcdf_variables.items():
             print(rf"{self._indent}{io_path}: {sorted(variables_dict.keys())}")
-
 
     def get_valid_files(self, variable: str) -> list[pl.Path]:
         """
@@ -211,8 +219,9 @@ class FlucsPostProcessing:
 
         return found
 
-
-    def load_netcdf_variable(self, nc_path: pl.Path, variable: str, fill_value: float = np.nan):
+    def load_netcdf_variable(
+        self, nc_path: pl.Path, variable: str, fill_value: float = np.nan
+    ):
         """
         Load a variable across all groups in a netCDF file and concatenate
         along time (zeroth axis). Groups missing the variable are filled with
@@ -239,7 +248,6 @@ class FlucsPostProcessing:
 
         # Helper function to get variable from group
         def _get_var(grp, name: str) -> Any | None:
-
             # Group variables
             if "/" not in name:
                 if name in grp.variables:
@@ -254,14 +262,15 @@ class FlucsPostProcessing:
 
         # Read data from netCDF file
         with Dataset(str(nc_path), "r", format="NETCDF4") as ds:
-
             # Get output groups sorted by group id
             groups = [(int(name), grp) for name, grp in ds.groups.items()]
 
             # Check whether the groups are in the correct order
             grp_numbers = [grp_number for grp_number, _ in groups]
             if grp_numbers != sorted(grp_numbers):
-                raise ValueError("Output groups are not in order; check netCDF file.")
+                raise ValueError(
+                    "Output groups are not in order; check netCDF file."
+                )
 
             # Determine residual shape and dtype of output variable
             var_iter = (
@@ -272,8 +281,10 @@ class FlucsPostProcessing:
             try:
                 grp_number, var = next(var_iter)
             except StopIteration:
-                raise ValueError(f"Variable '{variable}' not found in any group of {nc_path}")
-            
+                raise ValueError(
+                    f"Variable '{variable}' not found in any group of {nc_path}"
+                )
+
             res_shape = var.shape[1:]
             var_dtype = var.dtype
 
@@ -295,14 +306,19 @@ class FlucsPostProcessing:
                     group_data.append(arr.astype(var_dtype, copy=False))
                 else:
                     # Fill missing group segment with zeros of appropriate shape
-                    group_data.append(np.full((time_length, *res_shape), fill_value, dtype=var_dtype))
+                    group_data.append(
+                        np.full(
+                            (time_length, *res_shape),
+                            fill_value,
+                            dtype=var_dtype,
+                        )
+                    )
 
         # Concatenate along time (zeroth axis)
         values = np.concatenate(group_data, axis=0)
         boundary_indices = list(np.cumsum(boundaries)[:-1])
 
         return values, boundary_indices
-
 
     def save(
         self,
@@ -333,7 +349,7 @@ class FlucsPostProcessing:
         # Do nothing is there is no save directory
         if self.save_directory is None:
             return None
-        
+
         # Validate conflict strategy
         if conflict_strategy not in ("overwrite", "error"):
             raise ValueError("Invalid value for 'conflict_strategy'.")
@@ -354,7 +370,7 @@ class FlucsPostProcessing:
                 raise OSError(
                     f"Conflicting files matching '{pattern}' already exist: {directory}"
                 )
-        
+
         # Call type-specific save function
         if isinstance(obj, (Figure, Axes)):
             self._save_matplotlib_figures(
@@ -367,7 +383,7 @@ class FlucsPostProcessing:
             )
 
         return
-    
+
     def _save_matplotlib_figures(
         self,
         base_save_filepath: pl.Path,
@@ -389,7 +405,6 @@ class FlucsPostProcessing:
         # Save each figure
         f = base_save_filepath
         for fignum in fignums:
-
             fig = plt.figure(fignum)
             number = f"_{int(fig.number):03d}" if len(fignums) > 1 else ""
             filename = f"{f.with_suffix('').name}{number}{f.suffix}"
@@ -410,17 +425,19 @@ class FlucsPostProcessing:
         parser = argparse.ArgumentParser(add_help=False)
 
         parser.add_argument(
-            "--io_path", "-io",
-            nargs='+',
+            "--io_path",
+            "-io",
+            nargs="+",
             type=str,
             default=pl.Path.cwd(),
             required=False,
             help="Paths to the i/o directories, which must contain 'input.toml'. "
-                "If no path is specified, will assume the current working directory.",
+            "If no path is specified, will assume the current working directory.",
         )
 
         parser.add_argument(
-            "--save_directory", "-s",
+            "--save_directory",
+            "-s",
             nargs="?",
             type=lambda s: pl.Path(s).expanduser().resolve(),
             const=pl.Path.cwd(),
@@ -433,15 +450,14 @@ class FlucsPostProcessing:
 
         return parser
 
-    
-    def __init__(self,
-            io_paths: pl.Path | Sequence[pl.Path],
-            *, 
-            save_directory: pl.Path | None = None,
-            output_file: str | None = None,
-            constraint: Literal["none", "solver", "system", "both"] = "none",
-        ) -> None:
-        
+    def __init__(
+        self,
+        io_paths: pl.Path | Sequence[pl.Path],
+        *,
+        save_directory: pl.Path | None = None,
+        output_file: str | None = None,
+        constraint: Literal["none", "solver", "system", "both"] = "none",
+    ) -> None:
         """
         Given one or more i/o directories, sets up the relevant paths, and resolves
         the solver and system types referenced by their input files.
@@ -459,7 +475,7 @@ class FlucsPostProcessing:
             If None, no specific output type is assumed.
 
         constraint : {"none", "solver", "system", "both"}
-            Constraint on mixing solvers/systems across provided i/o directories. 
+            Constraint on mixing solvers/systems across provided i/o directories.
             If "solver", all solvers must match. If "system", all systems must
             match. If "both", both solvers and systems must match.
         """
@@ -472,14 +488,14 @@ class FlucsPostProcessing:
         for path in io_paths:
             input_file = pl.Path(path) / "input.toml"
             if not input_file.exists():
-                raise ValueError(
-                    f"Path {path} is not a valid i/o directory."
-                )
+                raise ValueError(f"Path {path} is not a valid i/o directory.")
             self.io_paths.append(pl.Path(path))
 
         # Set output file and save directory
-        self.output_file = output_file 
-        self.save_directory = pl.Path(save_directory).resolve() if save_directory else None
+        self.output_file = output_file
+        self.save_directory = (
+            pl.Path(save_directory).resolve() if save_directory else None
+        )
 
         # Determine solver and system types across all i/o directories
         self._get_solver_and_system_types()
@@ -492,13 +508,19 @@ class FlucsPostProcessing:
         system_types = set(self._system_types.values())
 
         if constraint in ("solver", "both") and len(solver_types) > 1:
-            raise ValueError("All i/o directories must contain output from the same "
-                             "solver when 'constraint' is 'solver' or 'both'.")
+            raise ValueError(
+                "All i/o directories must contain output from the same "
+                "solver when 'constraint' is 'solver' or 'both'."
+            )
         if constraint in ("system", "both") and len(system_types) > 1:
-            raise ValueError("All i/o directories must contain output from the same "
-                             "system when 'constraint' is 'system' or 'both'.")
-        
-        print(f"FlucsPostProcessing "
-              f"({len(self.io_paths)}, "
-              f"{self.output_file}, "
-              f"{self.save_directory})")
+            raise ValueError(
+                "All i/o directories must contain output from the same "
+                "system when 'constraint' is 'system' or 'both'."
+            )
+
+        print(
+            f"FlucsPostProcessing "
+            f"({len(self.io_paths)}, "
+            f"{self.output_file}, "
+            f"{self.save_directory})"
+        )

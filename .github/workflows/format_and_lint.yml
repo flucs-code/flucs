@@ -1,0 +1,22 @@
+name: format_and_lint
+
+on:
+  push:
+    paths:
+      - '**.py'
+  pull_request:
+    paths:
+      - '**.py'
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Ruff format
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: "format --check --diff src"
