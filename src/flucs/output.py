@@ -6,12 +6,13 @@ executed together and output to a file of specified format.
 from __future__ import annotations
 
 import datetime
-import numpy as np
 import pathlib as pl
-from netCDF4 import Dataset, Group
-from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING, ClassVar
+
+import numpy as np
+from netCDF4 import Dataset, Group
 
 from flucs.solvers import FlucsSolverState
 
@@ -138,13 +139,12 @@ class FlucsOutputText(FlucsOutput):
     extension = "txt"
 
     # The first few columns are always the same and contain simple timing data
-    timing_data = []
-    timing_data_column_names = [
+    timing_data_column_names: ClassVar[list[str]] = [
         "time",
         "step",
         "dt",
         "cfl",
-    ]  # TODO remove cfl from these columns, only included for testing
+    ]
 
     # Data formatting options
     column_width = 12
@@ -231,7 +231,8 @@ class FlucsOutputText(FlucsOutput):
             return f"{data:>{self.column_width}.{self.complex_format}}"
 
         raise ValueError(
-            f"Data type {type(data)}is not supported by FlucsOutputText."
+            f"Data type {type(data)} is not supported "
+            "by the FlucsOutputText class."
         )
 
     def write(self):
@@ -264,6 +265,10 @@ class FlucsOutputText(FlucsOutput):
         self.time_cache.clear()
         self.dt_cache.clear()
         self.timing_data.clear()
+
+    def __init__(self, name: str, system: FlucsSystem) -> None:
+        super().__init__(name, system)
+        self.timing_data = []
 
 
 class FlucsOutputNC(FlucsOutput):
@@ -300,11 +305,11 @@ class FlucsOutputNC(FlucsOutput):
                 datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
             group.setncattr("location", str(self.filepath.parent))
-            group.setncattr("type", str("flucs_output"))
+            group.setncattr("type", "flucs_output")
 
             # Store input file as a string
-            _input_file = group.createVariable("input_file", str)
-            _input_file[...] = str(self.system.input)
+            input_file_var = group.createVariable("input_file", str)
+            input_file_var[...] = str(self.system.input)
 
         self.group = dataset.groups[self.group_name]
 
@@ -341,14 +346,14 @@ class FlucsOutputNC(FlucsOutput):
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
                         diagnostic_group.createVariable(
-                            f"{var.name}_real", "f4", ("time",) + var.shape
+                            f"{var.name}_real", "f4", ("time", *var.shape)
                         )
                         diagnostic_group.createVariable(
-                            f"{var.name}_imag", "f4", ("time",) + var.shape
+                            f"{var.name}_imag", "f4", ("time", *var.shape)
                         )
                     else:
                         diagnostic_group.createVariable(
-                            var.name, "f4", ("time",) + var.shape
+                            var.name, "f4", ("time", *var.shape)
                         )
 
     def write(self):

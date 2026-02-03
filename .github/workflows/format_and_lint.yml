@@ -20,3 +20,14 @@ jobs:
         uses: astral-sh/ruff-action@v3
         with:
           args: "format --check --diff src"
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Ruff check
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./src"

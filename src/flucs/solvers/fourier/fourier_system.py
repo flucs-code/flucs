@@ -3,13 +3,14 @@ Abstract base class for a system that can be solved by FourierSolver.
 """
 
 from abc import abstractmethod
+
 import cupy as cp
 import numpy as np
 
-from flucs.systems import FlucsSystem
 from flucs.input import InvalidFlucsInputFileError
-from flucs.utilities.smooth_numbers import next_smooth_number
+from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
+from flucs.utilities.smooth_numbers import next_smooth_number
 
 
 class FourierSystem(FlucsSystem):
@@ -149,9 +150,7 @@ class FourierSystem(FlucsSystem):
 
                     half_padded_n = padded_n // 2 + 1
 
-                    print(
-                        f"Found padded_n{dim} = {padded_n} for n{{dim}} = {{n}}."
-                    )
+                    print(f"Found padded_n{dim} = {padded_n} for n{dim} = {n}")
 
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
@@ -167,11 +166,12 @@ class FourierSystem(FlucsSystem):
                     half_n = _x + 1
                     n = 2 * _x + 1
 
-                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}.")
+                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}")
 
                 case (False, False):
                     raise ValueError(
-                        f"At least one of n{dim} and padded_n{dim} must be positive!"
+                        f"At least one of n{dim} and "
+                        f"padded_n{dim} must be positive!"
                     )
 
                 # This is added only to make pyright happy.
@@ -322,7 +322,7 @@ class FourierSystem(FlucsSystem):
         # Print message.
         print(
             f"Starting at time {float(self.current_time):.3e}, "
-            f"dt {float(self.current_dt):.3e}."
+            f"dt {float(self.current_dt):.3e}"
         )
 
         # Copy initial condition
@@ -480,7 +480,7 @@ class FourierSystem(FlucsSystem):
                 self.fields_initial = self.input[
                     "init.amplitude"
                 ] * np.random.random(
-                    (self.number_of_fields,) + self.half_unpadded_tuple
+                    (self.number_of_fields, *self.half_unpadded_tuple)
                 )
 
             case _:
@@ -595,7 +595,8 @@ class FourierSystem(FlucsSystem):
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
             print(
-                f"dt: {self.current_dt:.3e} -> {new_dt:.3e} (-, {self.current_step})"
+                f"dt: {self.current_dt:.3e} -> "
+                f"{new_dt:.3e} (-, {self.current_step})"
             )
 
             self.current_dt = new_dt
@@ -664,7 +665,7 @@ class FourierSystem(FlucsSystem):
             / (dt2)
         )
         self.ab3_coefficients[2] = (
-            +(dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
+            (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
         )
 
     @abstractmethod

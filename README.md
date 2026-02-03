@@ -54,8 +54,8 @@ For users of `uv`, the equivalent recommended steps are:
 ```console
 $ uv venv
 $ source .venv/bin/activate
-$ uv sync --extra cuda13  # Or cuda12, or cuda11
-$ deactivate  # When done
+$ uv sync --extra cuda13    # Or cuda12, cuda11
+$ deactivate
 ```
 
 ## Installation for `systems`
@@ -88,7 +88,7 @@ To install all developer tools, the project should be installed using the `dev`
 dependency group:
 
 ```console
-$ pip install --upgrade pip  # You may need a later version of pip
+$ pip install --upgrade pip            # You may need a later version of pip
 $ pip install -e .[cuda13] --group dev
 ```
 

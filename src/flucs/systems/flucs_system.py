@@ -6,23 +6,23 @@ abstract methods.
 """
 
 from __future__ import annotations
+
+import datetime
+import heapq
+import importlib
+import pathlib as pl
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-import heapq
-import datetime
-import importlib
 import cupy as cp
 import numpy as np
-import pathlib as pl
-from typing import Type
-from abc import ABC, abstractmethod
 
 import flucs
 from flucs import FlucsInput
-from flucs.output import FlucsOutput
 from flucs.diagnostic import FlucsDiagnostic
-from flucs.utilities.cupy import ModuleOptions
+from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
+from flucs.utilities.cupy import ModuleOptions
 
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
@@ -65,7 +65,7 @@ class FlucsSystem(ABC):
     steps_until_next_write: int
 
     # A dict of supported diagnostics
-    diags_dict: dict[str, Type[FlucsDiagnostic]]
+    diags_dict: dict[str, type[FlucsDiagnostic]]
 
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):
@@ -288,7 +288,9 @@ class FlucsSystem(ABC):
                     name = properties.get("name")
                     if isinstance(name, (bytes, bytearray)):
                         name = name.decode()
-                    compute_capability = f"{properties.get('major', '?')}.{properties.get('minor', '?')}"
+                    major = properties.get("major", "?")
+                    minor = properties.get("minor", "?")
+                    compute_capability = f"{major}.{minor}"
                     multiprocessors = properties.get("multiProcessorCount")
                 except Exception:
                     pass
@@ -331,7 +333,7 @@ class FlucsSystem(ABC):
                 f"{global_total_gb:.3f} GB "
                 f"({global_used_gb / global_total_gb * 100:.2f}%), "
                 f"CuPy usage: {cupy_total_gb:.3f} GB "
-                f"({cupy_total_gb / global_total_gb * 100:.2f}%)."
+                f"({cupy_total_gb / global_total_gb * 100:.2f}%)"
             )
 
         return device_info
@@ -364,7 +366,7 @@ class FlucsSystem(ABC):
         {
             "<var_name>": {
             "data": <ndarray (NumPy or CuPy)>,
-            "dimension_names": (<dim1>, <dim2>, ...)  # optional, tuple/list of str
+            "dimension_names": (<dim1>, <dim2>, ...)  # optional, tuple of str
             },
             ...
         }

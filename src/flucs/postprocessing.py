@@ -1,14 +1,17 @@
-import toml
-import flucs
-import inspect
 import argparse
-import numpy as np
+import inspect
 import pathlib as pl
+from collections.abc import Sequence
+from typing import Any, Literal
+
 import matplotlib.pyplot as plt
-from netCDF4 import Dataset
+import numpy as np
+import toml
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from typing import Sequence, Literal, Any
+from netCDF4 import Dataset
+
+import flucs
 
 
 class FlucsPostProcessing:
@@ -79,8 +82,9 @@ class FlucsPostProcessing:
 
     def list_script_paths(self) -> None:
         """
-        Prints information about the postprocessing scripts to the standard output
-        for all solver/system types referenced by the provided i/o directories.
+        Prints information about the postprocessing scripts to the
+        standard output for all solver/system types referenced by the
+        provided i/o directories.
         """
 
         self._get_script_paths()
@@ -91,7 +95,8 @@ class FlucsPostProcessing:
             for path in paths:
                 print(f"{2 * self._indent}{path}")
         print(
-            "For information on a specific script, run 'python <script path> --help'."
+            "For information on a specific script, run: "
+            "'python <script path> --help'"
         )
 
     @staticmethod
@@ -161,7 +166,8 @@ class FlucsPostProcessing:
 
         if self.output_file is None:
             raise ValueError(
-                "'output_file' must be set to derive netCDF paths from i/o directories."
+                "'output_file' must be set to derive netCDF paths from "
+                "i/o directories."
             )
 
         result: dict[str, dict[str, list[int]]] = {}
@@ -184,7 +190,7 @@ class FlucsPostProcessing:
         of the provided i/o directories given a specific output type.
         """
 
-        print(f"Available netCDF variables:")
+        print("Available netCDF variables:")
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
         for io_path, variables_dict in netcdf_variables.items():
             print(rf"{self._indent}{io_path}: {sorted(variables_dict.keys())}")
@@ -207,7 +213,7 @@ class FlucsPostProcessing:
 
         for io_path, variables in mapping.items():
             nc_path = pl.Path(io_path) / self.output_file
-            if variable in variables and variables[variable]:
+            if variables.get(variable):
                 found.append(nc_path)
             else:
                 missing.append(nc_path)
@@ -240,10 +246,10 @@ class FlucsPostProcessing:
         -------
         tuple
             (values, boundary_indices) where
-            - values is an np.ndarray with shape (sum(time_lengths), ...) after
-              concatenation across groups
-            - boundary_indices is a list of integer indices marking the boundaries
-              between groups in the concatenated time axis
+            - values is an np.ndarray with shape (sum(time_lengths), ...)
+              after concatenation across groups
+            - boundary_indices is a list of integer indices marking the
+              boundaries between groups in the concatenated time axis
         """
 
         # Helper function to get variable from group
@@ -269,7 +275,7 @@ class FlucsPostProcessing:
             grp_numbers = [grp_number for grp_number, _ in groups]
             if grp_numbers != sorted(grp_numbers):
                 raise ValueError(
-                    "Output groups are not in order; check netCDF file."
+                    "Output groups are not in order; check netCDF file"
                 )
 
             # Determine residual shape and dtype of output variable
@@ -300,8 +306,9 @@ class FlucsPostProcessing:
                     arr = np.asarray(var_obj[:])
                     if arr.shape[0] != time_length:
                         raise ValueError(
-                            f"Time dimension mistmatch for variable '{variable}' in group "
-                            f"{grp_number} (has {arr.shape} but expected {time_length}). "
+                            "Time dimension mistmatch for variable "
+                            f"'{variable}' in group {grp_number} "
+                            f"(has {arr.shape} but expected {time_length})"
                         )
                     group_data.append(arr.astype(var_dtype, copy=False))
                 else:
@@ -368,7 +375,8 @@ class FlucsPostProcessing:
             pattern = f"{name}_*{ext}"
             if any(directory.glob(pattern)):
                 raise OSError(
-                    f"Conflicting files matching '{pattern}' already exist: {directory}"
+                    f"Conflicting files matching '{pattern}' already "
+                    f"exist: {directory}"
                 )
 
         # Call type-specific save function
@@ -378,8 +386,9 @@ class FlucsPostProcessing:
                 save_kwargs=save_kwargs,
             )
         else:
+            name = type(obj).__name__
             raise NotImplementedError(
-                f"Saving objects of type '{type(obj).__name__}' is not yet implemented."
+                f"Saving objects of type '{name}' is not yet implemented."
             )
 
         return
@@ -431,8 +440,11 @@ class FlucsPostProcessing:
             type=str,
             default=pl.Path.cwd(),
             required=False,
-            help="Paths to the i/o directories, which must contain 'input.toml'. "
-            "If no path is specified, will assume the current working directory.",
+            help=(
+                "Paths to the i/o directories, which must contain "
+                "'input.toml'. If no path is specified, will assume the "
+                "current working directory.",
+            ),
         )
 
         parser.add_argument(
@@ -443,8 +455,9 @@ class FlucsPostProcessing:
             const=pl.Path.cwd(),
             default=None,
             help=(
-                "Directory to which postprocessing outputs are saved. If omitted, nothing "
-                "is saved. If no path is specified, will assume the current working directory."
+                "Directory to which postprocessing outputs are saved. If "
+                "omitted, nothing is saved. If no path is specified, will "
+                "assume the current working directory."
             ),
         )
 
@@ -459,8 +472,8 @@ class FlucsPostProcessing:
         constraint: Literal["none", "solver", "system", "both"] = "none",
     ) -> None:
         """
-        Given one or more i/o directories, sets up the relevant paths, and resolves
-        the solver and system types referenced by their input files.
+        Given one or more i/o directories, sets up the relevant paths, and
+        resolves the solver and system types referenced by their input files.
 
         Parameters
         ----------
@@ -475,9 +488,9 @@ class FlucsPostProcessing:
             If None, no specific output type is assumed.
 
         constraint : {"none", "solver", "system", "both"}
-            Constraint on mixing solvers/systems across provided i/o directories.
-            If "solver", all solvers must match. If "system", all systems must
-            match. If "both", both solvers and systems must match.
+            Constraint on mixing solvers/systems across provided i/o
+            directories. If "solver", all solvers must match. If "system", all
+            systems must match. If "both", both solvers and systems must match.
         """
 
         # Parse io_paths input

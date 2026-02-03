@@ -6,6 +6,7 @@ pseudospectral Fourier methods.
 """
 
 import time
+
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
 
@@ -49,7 +50,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         print(
             f"Finished at time {float(self.system.current_time):.3e}, "
-            f"dt {float(self.system.current_dt):.3e}."
+            f"dt {float(self.system.current_dt):.3e}"
         )
         print(f"flucs given in {time_taken} seconds.\n")
 

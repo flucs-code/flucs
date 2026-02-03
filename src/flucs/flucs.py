@@ -4,15 +4,14 @@ Used to run simulations.
 """
 
 import argparse
-import pathlib as pl
 import importlib.metadata
+import pathlib as pl
 from datetime import datetime
 from importlib.metadata import entry_points
 
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
-
 
 FLUCS_HEADER = rf"""
 ***************************************************
@@ -112,7 +111,7 @@ def list_solvers_and_systems():
     print("For more information, see https://github.com/flucs-code")
 
 
-def run_flucs(input_path: pl.Path, override: list = None):
+def run_flucs(input_path: pl.Path, override: list | None = None):
     """
     Construct FlucsInput then call the appropriate solver.
 
@@ -190,7 +189,8 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Lists the solvers and systems that can be run in the current installation.",
+        help="Lists the solvers and systems that can be run in the "
+        "current installation.",
     )
 
     operation_modes.add_argument(  # TODO
@@ -199,7 +199,7 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit",
+        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit.",
     )
 
     operation_modes.add_argument(
