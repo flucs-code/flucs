@@ -4,6 +4,7 @@ that deals with interpreting TOML input files.
 """
 
 import pathlib as pl
+from typing import Any, ClassVar
 
 import toml
 
@@ -26,11 +27,12 @@ class FlucsInput:
     with added functionality.
     """
 
-    input_path: pl.Path  # Path to the input file.
-    io_path: pl.Path  # Input/output directory.
-    _input_dict = {}  # Dict that holds all the input parameters.
-    _input_str: str  # Represents the input file
-    _default_input_dict = {}  # Holds all the defaults
+    input_path: pl.Path  # Path to the input file
+    io_path: pl.Path  # Input/output directory
+
+    _input_dict: ClassVar[dict[str, Any]]  # Holds all the input parameters
+    _default_input_dict: ClassVar[dict[str, Any]]  # Holds all the defaults
+
     _solver_type: type  # Solver type for this input
     _system_type: type  # System type for this input
     _initialised: bool = False  # if True, __setitem__ throws an exception
@@ -111,12 +113,10 @@ class FlucsInput:
         to the set of parameters outlined in _default_input_dict.
         """
         if default:
-            FlucsInput._update_dict(
-                self._default_input_dict, _dict, allow_new=True
-            )
-            FlucsInput._update_dict(self._input_dict, _dict, allow_new=True)
+            self._update_dict(self._default_input_dict, _dict, allow_new=True)
+            self._update_dict(self._input_dict, _dict, allow_new=True)
         else:
-            FlucsInput._update_dict(self._input_dict, _dict)
+            self._update_dict(self._input_dict, _dict)
 
     @staticmethod
     def _update_dict(_dict: dict, _updates: dict, allow_new=False):
@@ -172,6 +172,11 @@ class FlucsInput:
         """
         Initialises defaults and loads from file.
         """
+
+        # Initialise initial state
+        self._input_dict = {}
+        self._default_input_dict = {}
+        self._initialised = False
 
         # Store input filepath
         self.input_path = pl.Path(filepath)

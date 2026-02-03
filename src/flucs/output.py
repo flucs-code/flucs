@@ -9,7 +9,7 @@ import datetime
 import pathlib as pl
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from netCDF4 import Dataset, Group
@@ -139,13 +139,12 @@ class FlucsOutputText(FlucsOutput):
     extension = "txt"
 
     # The first few columns are always the same and contain simple timing data
-    timing_data = []
-    timing_data_column_names = [
+    timing_data_column_names: ClassVar[list[str]] = [
         "time",
         "step",
         "dt",
         "cfl",
-    ]  # TODO remove cfl from these columns, only included for testing
+    ]
 
     # Data formatting options
     column_width = 12
@@ -265,6 +264,10 @@ class FlucsOutputText(FlucsOutput):
         self.time_cache.clear()
         self.dt_cache.clear()
         self.timing_data.clear()
+
+    def __init__(self, name: str, system: FlucsSystem) -> None:
+        super().__init__(name, system)
+        self.timing_data = []
 
 
 class FlucsOutputNC(FlucsOutput):
