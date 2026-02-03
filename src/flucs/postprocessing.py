@@ -83,8 +83,8 @@ class FlucsPostProcessing:
     def list_script_paths(self) -> None:
         """
         Prints information about the postprocessing scripts to the
-        standard output for all solver/system types referenced by the provided
-        i/o directories.
+        standard output for all solver/system types referenced by the
+        provided i/o directories.
         """
 
         self._get_script_paths()
@@ -246,8 +246,8 @@ class FlucsPostProcessing:
         -------
         tuple
             (values, boundary_indices) where
-            - values is an np.ndarray with shape (sum(time_lengths), ...) after
-              concatenation across groups
+            - values is an np.ndarray with shape (sum(time_lengths), ...)
+              after concatenation across groups
             - boundary_indices is a list of integer indices marking the
               boundaries between groups in the concatenated time axis
         """

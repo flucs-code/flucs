@@ -4,7 +4,7 @@ that deals with interpreting TOML input files.
 """
 
 import pathlib as pl
-from typing import Any, ClassVar
+from typing import Any
 
 import toml
 
@@ -30,8 +30,8 @@ class FlucsInput:
     input_path: pl.Path  # Path to the input file
     io_path: pl.Path  # Input/output directory
 
-    _input_dict: ClassVar[dict[str, Any]]  # Holds all the input parameters
-    _default_input_dict: ClassVar[dict[str, Any]]  # Holds all the defaults
+    _input_dict: dict[str, Any]  # Holds all the input parameters
+    _default_input_dict: dict[str, Any]  # Holds all the defaults
 
     _solver_type: type  # Solver type for this input
     _system_type: type  # System type for this input

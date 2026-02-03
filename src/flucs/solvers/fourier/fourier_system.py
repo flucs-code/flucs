@@ -150,9 +150,7 @@ class FourierSystem(FlucsSystem):
 
                     half_padded_n = padded_n // 2 + 1
 
-                    print(
-                        f"Found padded_n{dim} = {padded_n} for n{{dim}} = {{n}}"
-                    )
+                    print(f"Found padded_n{dim} = {padded_n} for n{dim} = {n}")
 
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
@@ -667,7 +665,7 @@ class FourierSystem(FlucsSystem):
             / (dt2)
         )
         self.ab3_coefficients[2] = (
-            +(dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
+            (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
         )
 
     @abstractmethod
