@@ -232,7 +232,7 @@ class FlucsOutputText(FlucsOutput):
 
         raise ValueError(
             f"Data type {type(data)} is not supported "
-             "by the FlucsOutputText class."
+            "by the FlucsOutputText class."
         )
 
     def write(self):
