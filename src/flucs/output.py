@@ -307,8 +307,8 @@ class FlucsOutputNC(FlucsOutput):
             group.setncattr("type", "flucs_output")
 
             # Store input file as a string
-            _input_file = group.createVariable("input_file", str)
-            _input_file[...] = str(self.system.input)
+            input_file_var = group.createVariable("input_file", str)
+            input_file_var[...] = str(self.system.input)
 
         self.group = dataset.groups[self.group_name]
 

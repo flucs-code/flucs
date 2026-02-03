@@ -269,7 +269,8 @@ class FlucsRestart:
             ds.setncattr("type", "flucs_restart")
 
             # Add input file as a string
-            ds.setncattr("input_file", str(self.system.input))
+            input_file_var = ds.createVariable("input_file", str)
+            input_file_var[...] = str(self.system.input)
 
             # Scalar values
             ds.createVariable("current_time", precision, ())[...] = (
@@ -348,7 +349,7 @@ class FlucsRestart:
                     f"File {restart_file_path} is not a restart file."
                 )
             try:
-                input_file = ds.getncattr("input_file")
+                input_file = ds.variables["input_file"][...]
             except Exception as e:
                 raise ValueError(
                     f"Restart file {restart_file_path} does not contain"
