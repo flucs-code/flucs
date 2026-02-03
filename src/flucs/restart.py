@@ -85,8 +85,7 @@ class FlucsRestart:
 
             if not self.initial_path.exists():
                 raise InvalidFlucsInputFileError(
-                    f"The restart_from file {self.initial_path} "
-                    "cannot be found"
+                    f"The restart_from file {self.initial_path} cannot be found"
                 )
 
         print(f"Restarting from file: {self.initial_path}")

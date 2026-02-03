@@ -151,8 +151,7 @@ class FourierSystem(FlucsSystem):
                     half_padded_n = padded_n // 2 + 1
 
                     print(
-                        f"Found padded_n{dim} = {padded_n} "
-                        f"for n{{dim}} = {{n}}"
+                        f"Found padded_n{dim} = {padded_n} for n{{dim}} = {{n}}"
                     )
 
                 case (False, True):
