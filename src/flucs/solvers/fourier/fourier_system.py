@@ -34,6 +34,7 @@ class FourierSystem(FlucsSystem):
 
     # Iteration matrices (used for precomputing)
     rhs: cp.ndarray
+    lhs: cp.ndarray
     inverse_lhs: cp.ndarray
 
     # CFL condition variables
@@ -329,19 +330,56 @@ class FourierSystem(FlucsSystem):
 
         super().ready()
 
+        # Allocate precomputation arrays
         if self.input["setup.precompute_linear_matrix"]:
             if not hasattr(self, "rhs"):
                 self.rhs = cp.zeros(
-                    (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
-                )
-                self.inverse_lhs = cp.zeros(
-                    (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+                    (
+                        self.number_of_fields,
+                        self.number_of_fields,
+                        self.nz,
+                        self.nx,
+                        self.half_ny,
+                    ),
+                    dtype=self.complex,
                 )
 
-            cupy_set_device_pointer(
-                self.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
-            )
+                # For small matrices, it is faster to precompute the inverse
+                # directly given it can be hard-coded. For larger ones, we
+                # precompute the lhs matrix itself and invert at each step.
+                if self.number_of_fields <= 3:
+                    self.inverse_lhs = cp.zeros(
+                        (
+                            self.number_of_fields,
+                            self.number_of_fields,
+                            self.nz,
+                            self.nx,
+                            self.half_ny,
+                        ),
+                        dtype=self.complex,
+                    )
+                else:
+                    self.lhs = cp.zeros(
+                        (
+                            self.number_of_fields,
+                            self.number_of_fields,
+                            self.nz,
+                            self.nx,
+                            self.half_ny,
+                        ),
+                        dtype=self.complex,
+                    )
+
             cupy_set_device_pointer(self.cupy_module, "rhs_precomp", self.rhs)
+
+            if self.number_of_fields <= 3:
+                cupy_set_device_pointer(
+                    self.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
+                )
+            else:
+                cupy_set_device_pointer(
+                    self.cupy_module, "lhs_precomp", self.lhs
+                )
 
             self.precompute_iteration_matrices_kernel = (
                 self.cupy_module.get_function("precompute_iteration_matrices")
@@ -652,7 +690,8 @@ class FourierSystem(FlucsSystem):
         dt1 = self.dt_array[self.current_step % 3 - 1]
         dt2 = self.dt_array[self.current_step % 3 - 2]
 
-        # Compute coefficients. Disabling formatting and linting for readability.
+        # Compute coefficients.
+        # Disabling formatting and linting for readability.
         # fmt: off
         self.ab3_coefficients[0] = 1 + (dt0 / dt1) * ((2.0 / 6.0) * dt0 +               dt1 + (3.0 / 6.0) * dt2) / (dt1 + dt2) # noqa: E501
         self.ab3_coefficients[1] =   - (dt0 / dt1) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2) / (      dt2) # noqa: E501

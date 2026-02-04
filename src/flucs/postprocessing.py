@@ -443,7 +443,7 @@ class FlucsPostProcessing:
             help=(
                 "Paths to the i/o directories, which must contain "
                 "'input.toml'. If no path is specified, will assume the "
-                "current working directory.",
+                "current working directory."
             ),
         )
 
