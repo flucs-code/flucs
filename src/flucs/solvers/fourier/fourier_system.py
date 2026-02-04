@@ -20,9 +20,6 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
-    # Number of fields to be DFT'ed for the pseudospectral nonlinearity
-    # number_of_dfts: int
-
     # This will hold all the fields. Should be a list of CuPy arrays.
     # It's a list in order to store fields at previous time steps, as required
     # by the algorithm.
@@ -655,18 +652,12 @@ class FourierSystem(FlucsSystem):
         dt1 = self.dt_array[self.current_step % 3 - 1]
         dt2 = self.dt_array[self.current_step % 3 - 2]
 
-        # Compute coefficients
-        self.ab3_coefficients[0] = 1 + (dt0 / dt1) * (
-            (2.0 / 6.0) * dt0 + dt1 + (3.0 / 6.0) * dt2
-        ) / (dt1 + dt2)
-        self.ab3_coefficients[1] = (
-            -(dt0 / dt1)
-            * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2)
-            / (dt2)
-        )
-        self.ab3_coefficients[2] = (
-            (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
-        )
+        # Compute coefficients. Disabling formatting and linting for readability.
+        # fmt: off
+        self.ab3_coefficients[0] = 1 + (dt0 / dt1) * ((2.0 / 6.0) * dt0 +               dt1 + (3.0 / 6.0) * dt2) / (dt1 + dt2) # noqa: E501
+        self.ab3_coefficients[1] =   - (dt0 / dt1) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2) / (      dt2) # noqa: E501
+        self.ab3_coefficients[2] =   + (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1                    ) / (dt1 + dt2) # noqa: E501
+        # fmt: on
 
     @abstractmethod
     def begin_time_step(self) -> None:
