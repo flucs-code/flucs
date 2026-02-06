@@ -80,9 +80,20 @@ class FlucsOutput(ABC):
 
     def _add_diagnostics_from_input(self):
         """Adds all diagnostics from the input of the associated FlucsSystem"""
-        for diag_name in self.system.input[f"output.{self.name}.diags"]:
+        for diag_entry in self.system.input[f"output.{self.name}.diags"]:
+            if isinstance(diag_entry, str):
+                diag_name = diag_entry
+                diag_opts = {}
+            elif isinstance(diag_entry, dict):
+                diag_name = diag_entry["name"]
+                diag_opts = diag_entry.get("options", {})
+            else:
+                raise TypeError(
+                    "Each diagnostic must be specified as a string or "
+                    "with {name=..., options={...}}."
+                )
             diag_to_add = self.system.diags_dict[diag_name](
-                system=self.system, output=self
+                system=self.system, output=self, options=diag_opts
             )
             diag_to_add.output = self
             self.diagnostics.append(diag_to_add)
