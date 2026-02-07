@@ -570,7 +570,7 @@ class FourierSystem(FlucsSystem):
 
         # Compute new dt
         new_dt = self.float(
-            np.nanmin(
+            min(
                 (
                     self.max_cfl / self.cfl_rate_float,
                     self.dt_max,
