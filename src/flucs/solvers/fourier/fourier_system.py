@@ -332,13 +332,28 @@ class FourierSystem(FlucsSystem):
 
         super().ready()
 
+        # Allocate precomputation matrices
         if self.input["setup.precompute_linear_matrix"]:
             if not hasattr(self, "rhs"):
                 self.rhs = cp.zeros(
-                    (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+                    (
+                        self.number_of_fields,
+                        self.number_of_fields,
+                        self.nz,
+                        self.nx,
+                        self.half_ny,
+                    ),
+                    dtype=self.complex,
                 )
                 self.inverse_lhs = cp.zeros(
-                    (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+                    (
+                        self.number_of_fields,
+                        self.number_of_fields,
+                        self.nz,
+                        self.nx,
+                        self.half_ny,
+                    ),
+                    dtype=self.complex,
                 )
 
             cupy_set_device_pointer(
@@ -434,7 +449,14 @@ class FourierSystem(FlucsSystem):
         """Computes the linear matrix using the CuPy module and stores the
         result in self.linear_matrix"""
         self.linear_matrix = cp.zeros(
-            (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+            (
+                self.number_of_fields,
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            ),
+            dtype=self.complex,
         )
 
         compute_linear_matrix_kernel = self.cupy_module.get_function(
