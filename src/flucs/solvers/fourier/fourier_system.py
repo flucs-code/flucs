@@ -332,13 +332,28 @@ class FourierSystem(FlucsSystem):
 
         super().ready()
 
+        # Allocate precomputation matrices
         if self.input["setup.precompute_linear_matrix"]:
             if not hasattr(self, "rhs"):
                 self.rhs = cp.zeros(
-                    (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+                    (
+                        self.number_of_fields,
+                        self.number_of_fields,
+                        self.nz,
+                        self.nx,
+                        self.half_ny,
+                    ),
+                    dtype=self.complex,
                 )
                 self.inverse_lhs = cp.zeros(
-                    (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+                    (
+                        self.number_of_fields,
+                        self.number_of_fields,
+                        self.nz,
+                        self.nx,
+                        self.half_ny,
+                    ),
+                    dtype=self.complex,
                 )
 
             cupy_set_device_pointer(
@@ -434,7 +449,14 @@ class FourierSystem(FlucsSystem):
         """Computes the linear matrix using the CuPy module and stores the
         result in self.linear_matrix"""
         self.linear_matrix = cp.zeros(
-            (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+            (
+                self.number_of_fields,
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            ),
+            dtype=self.complex,
         )
 
         compute_linear_matrix_kernel = self.cupy_module.get_function(
@@ -570,7 +592,7 @@ class FourierSystem(FlucsSystem):
 
         # Compute new dt
         new_dt = self.float(
-            np.nanmin(
+            min(
                 (
                     self.max_cfl / self.cfl_rate_float,
                     self.dt_max,
@@ -596,7 +618,7 @@ class FourierSystem(FlucsSystem):
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
             print(
                 f"dt: {self.current_dt:.3e} -> "
-                f"{new_dt:.3e} (-, {self.current_step})"
+                f"{new_dt:.3e} (-, {self.current_step:.3e})"
             )
 
             self.current_dt = new_dt
@@ -616,7 +638,7 @@ class FourierSystem(FlucsSystem):
             if new_dt > self.current_dt:
                 print(
                     f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
-                    f"(+, {self.current_step})"
+                    f"(+, {self.current_step:.3e})"
                 )
 
                 self.current_dt = new_dt
@@ -655,18 +677,13 @@ class FourierSystem(FlucsSystem):
         dt1 = self.dt_array[self.current_step % 3 - 1]
         dt2 = self.dt_array[self.current_step % 3 - 2]
 
-        # Compute coefficients
-        self.ab3_coefficients[0] = 1 + (dt0 / dt1) * (
-            (2.0 / 6.0) * dt0 + dt1 + (3.0 / 6.0) * dt2
-        ) / (dt1 + dt2)
-        self.ab3_coefficients[1] = (
-            -(dt0 / dt1)
-            * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2)
-            / (dt2)
-        )
-        self.ab3_coefficients[2] = (
-            (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
-        )
+        # Compute coefficients.
+        # Disabling formatting and linting for readability.
+        # fmt: off
+        self.ab3_coefficients[0] = 1 + (dt0 / dt1) * ((2.0 / 6.0) * dt0 +               dt1 + (3.0 / 6.0) * dt2) / (dt1 + dt2) # noqa: E501
+        self.ab3_coefficients[1] =   - (dt0 / dt1) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2) / (      dt2) # noqa: E501
+        self.ab3_coefficients[2] =   + (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1                    ) / (dt1 + dt2) # noqa: E501
+        # fmt: on
 
     @abstractmethod
     def begin_time_step(self) -> None:
