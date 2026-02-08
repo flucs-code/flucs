@@ -85,25 +85,25 @@ void invert_matrix(const T A[N][N], T inv_A[N][N]) {
     // Essentially, do Gaussian elimination on each column of
     // the identity matrix.
     // Don't unroll in case we push those registers too hard.
-    for (int col = 0; col < N; ++col) {
+    for (int col = 0; col < N; col++) {
         // Temporary copy of A
         T tmp_A[N][N];
         #pragma unroll
-        for (int i = 0; i < N; ++i)
+        for (int i = 0; i < N; i++)
             #pragma unroll
-            for (int j = 0; j < N; ++j)
+            for (int j = 0; j < N; j++)
                 tmp_A[i][j] = A[i][j];
 
         // Initialize b as the col-th column of the identity
         #pragma unroll
-        for (int i = 0; i < N; ++i)
+        for (int i = 0; i < N; i++)
             b[i] = (i == col) ? T(1) : T(0);
 
         gaussian_elimination(tmp_A, x, b);
 
         // Store the result as the col-th column of inv_A
         #pragma unroll
-        for (int i = 0; i < N; ++i)
+        for (int i = 0; i < N; i++)
             inv_A[i][col] = x[i];
     }
 }
