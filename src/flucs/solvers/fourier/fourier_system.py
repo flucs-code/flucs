@@ -618,7 +618,7 @@ class FourierSystem(FlucsSystem):
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
             print(
                 f"dt: {self.current_dt:.3e} -> "
-                f"{new_dt:.3e} (-, {self.current_step})"
+                f"{new_dt:.3e} (-, {self.current_step:.3e})"
             )
 
             self.current_dt = new_dt
@@ -638,7 +638,7 @@ class FourierSystem(FlucsSystem):
             if new_dt > self.current_dt:
                 print(
                     f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
-                    f"(+, {self.current_step})"
+                    f"(+, {self.current_step:.3e})"
                 )
 
                 self.current_dt = new_dt
@@ -677,18 +677,13 @@ class FourierSystem(FlucsSystem):
         dt1 = self.dt_array[self.current_step % 3 - 1]
         dt2 = self.dt_array[self.current_step % 3 - 2]
 
-        # Compute coefficients
-        self.ab3_coefficients[0] = 1 + (dt0 / dt1) * (
-            (2.0 / 6.0) * dt0 + dt1 + (3.0 / 6.0) * dt2
-        ) / (dt1 + dt2)
-        self.ab3_coefficients[1] = (
-            -(dt0 / dt1)
-            * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2)
-            / (dt2)
-        )
-        self.ab3_coefficients[2] = (
-            (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1) / (dt1 + dt2)
-        )
+        # Compute coefficients.
+        # Disabling formatting and linting for readability.
+        # fmt: off
+        self.ab3_coefficients[0] = 1 + (dt0 / dt1) * ((2.0 / 6.0) * dt0 +               dt1 + (3.0 / 6.0) * dt2) / (dt1 + dt2) # noqa: E501
+        self.ab3_coefficients[1] =   - (dt0 / dt1) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1 + (3.0 / 6.0) * dt2) / (      dt2) # noqa: E501
+        self.ab3_coefficients[2] =   + (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1                    ) / (dt1 + dt2) # noqa: E501
+        # fmt: on
 
     @abstractmethod
     def begin_time_step(self) -> None:
