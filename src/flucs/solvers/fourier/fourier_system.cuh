@@ -27,7 +27,6 @@ extern "C" {
 
 // Precomputed matrices stored in constant memory
 __constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
-__constant__ FLUCS_COMPLEX* lhs_precomp = NULL;
 __constant__ FLUCS_COMPLEX* inverse_lhs_precomp = NULL;
 
 
