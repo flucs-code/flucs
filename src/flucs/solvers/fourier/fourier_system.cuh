@@ -47,111 +47,7 @@ __device__ void add_nonlinear_terms(const int index,
                                     const FLUCS_FLOAT AB1,
                                     const FLUCS_FLOAT AB2,
                                     const FLUCS_COMPLEX* dft_bits,
-                                    FLUCS_COMPLEX* rhs_fields);
-
-// Finds iteration matrices for a single mode.
-// If NUMBER_OF_FIELDS <= 3, lhs_matrix is the    inverted LHS matrix.
-// If NUMBER_OF_FIELDS >  3, lhs_matrix is the un-inverted LHS matrix
-__device__ void get_iteration_matrices(const int index,
-                                       const FLUCS_FLOAT dt,
-                                       FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS],
-                                       FLUCS_COMPLEX lhs_matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]){
-
-    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-
-    // Define constants
-    const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
-    const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
-    const FLUCS_FLOAT ONE = (FLUCS_FLOAT)1.0;
-
-    get_linear_matrix(index, dt, matrix);
-
-#if NUMBER_OF_FIELDS == 1
-    // TODO: one field
-#elif NUMBER_OF_FIELDS == 2
-    // Hard-coded 2x2 matrix inversion
-    rhs[0][0] = ONE + ALPHAMINUS1_DT*matrix[0][0];
-    rhs[0][1] = ALPHAMINUS1_DT*matrix[0][1];
-    rhs[1][0] = ALPHAMINUS1_DT*matrix[1][0];
-    rhs[1][1] = ONE + ALPHAMINUS1_DT*matrix[1][1];
-
-    const FLUCS_COMPLEX L00 = ONE + ALPHA_DT*matrix[0][0];
-    const FLUCS_COMPLEX L01 = ALPHA_DT*matrix[0][1];
-    const FLUCS_COMPLEX L10 = ALPHA_DT*matrix[1][0];
-    const FLUCS_COMPLEX L11 = ONE + ALPHA_DT*matrix[1][1];
-
-    const FLUCS_COMPLEX inv_det_L = ONE / (L00*L11 - L01*L10);
-
-    lhs_matrix[0][0] = L11 * inv_det_L;
-    lhs_matrix[0][1] = -L01 * inv_det_L;
-    lhs_matrix[1][0] = -L10 * inv_det_L;
-    lhs_matrix[1][1] = L00 * inv_det_L;
-#elif NUMBER_OF_FIELDS == 3
-    // TODO: hard-code 3 fields
-#else
-    // For NUMBER_OF_FIELDS > 3, we will use a generic method that requires
-    // us to store the un-inverted LHS matrix.
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs[i][j] = (i == j ? ONE : 0) + ALPHAMINUS1_DT*matrix[i][j];
-            lhs_matrix[i][j] = (i == j ? ONE : 0) + ALPHA_DT*matrix[i][j];
-        }
-    } 
-#endif
-}
-
-// Eliminates the lhs matrix to obtain the final fields.
-#if NUMBER_OF_FIELDS <= 3
-
-__device__ __forceinline__
-void eliminate_lhs_precomputed(const int index,
-                                const FLUCS_COMPLEX* rhs_fields,
-                                FLUCS_COMPLEX* current_fields){
-
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        current_fields[index + i*HALFUNPADDEDSIZE] = 0;
-
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            current_fields[index + i*HALFUNPADDEDSIZE] += inverse_lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
-        }
-    }
-}
-
-__device__ __forceinline__
-void eliminate_lhs(const int index,
-                               const FLUCS_COMPLEX* rhs_fields,
-                               FLUCS_COMPLEX* current_fields,
-                               const FLUCS_COMPLEX lhs_matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]){
-
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        current_fields[index + i*HALFUNPADDEDSIZE] = 0;
-
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            current_fields[index + i*HALFUNPADDEDSIZE] += lhs_matrix[i][j] * rhs_fields[j];
-        }
-    }
-}
-
-#else  // NUMBER_OF_FIELDS > 3
-
-__device__ __forceinline__
-void eliminate_lhs_precomputed(const int index,
-                                const FLUCS_COMPLEX* rhs_fields,
-                                FLUCS_COMPLEX* current_fields){
-    // TODO: implement solve using lhs_precomp
-    asm("trap;"); // fail loudly for now
-}
-
-__device__ __forceinline__
-void eliminate_lhs(const int index,
-                               const FLUCS_COMPLEX* rhs_fields,
-                               FLUCS_COMPLEX* current_fields,
-                               const FLUCS_COMPLEX lhs_matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]){
-    // TODO: implement solve using lhs_matrix
-    asm("trap;"); // fail loudly for now
-}
-
-#endif
+                                    FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]);
 
 
 // Returns the full (for all modes) linear matrix.
@@ -182,23 +78,41 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     if (!(index < HALFUNPADDEDSIZE))
         return;
 
-    FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX lhs_matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_iteration_matrices(index, dt, rhs, lhs_matrix);
+    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX inverse_lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
+    { // Compiler hint
+        const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
+        const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
+    
+        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+        get_linear_matrix(index, dt, matrix);
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+
+                rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
+                    (FLUCS_FLOAT)(i == j) + ALPHAMINUS1_DT * matrix[i][j];
+
+                lhs[i][j] = (FLUCS_FLOAT)(i == j) + ALPHA_DT * matrix[i][j];
+            }
+        }
+    }
+
+    invert_matrix(lhs, inverse_lhs);
+
+    #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = rhs[i][j];
-#if NUMBER_OF_FIELDS <= 3
-            // Store inverted LHS for small systems
-            inverse_lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = lhs_matrix[i][j];
-#else
-            // Store un-inverted LHS for large systems
-            lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = lhs_matrix[i][j];
-#endif
+            inverse_lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = inverse_lhs[i][j];
         }
     }
 }
+
 
 // Called right at the end of a time step,
 // combines the linear matrices and nonlinear
@@ -222,37 +136,71 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
 
 #ifdef PRECOMPUTE_LINEAR_MATRIX
 
+    #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        rhs_fields[i] = 0;
+        FLUCS_COMPLEX sum = 0;
 
+        #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs_fields[i] += rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * previous_fields[index + j*HALFUNPADDEDSIZE];
+            sum += rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * previous_fields[index + j*HALFUNPADDEDSIZE];
         }
+        rhs_fields[i] = sum;
     }
 
 #ifdef NONLINEAR
     add_nonlinear_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, rhs_fields);
 #endif
-    eliminate_lhs_precomputed(index, rhs_fields, current_fields);
 
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        FLUCS_COMPLEX sum = 0;
+
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            sum += inverse_lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * rhs_fields[j];
+        }
+        current_fields[index + i*HALFUNPADDEDSIZE] = sum;
+    }
 #else // not PRECOMPUTE_LINEAR_MATRIX
 
-    FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX lhs_matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_iteration_matrices(index, dt, rhs, lhs_matrix);
+    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        rhs_fields[i] = 0;
+    // Help the compiler a bit with the registers
+    {
+        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+        get_linear_matrix(index, dt, matrix);
 
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs_fields[i] += rhs[i][j] * previous_fields[index + j*HALFUNPADDEDSIZE];
+        const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
+        const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            FLUCS_COMPLEX sum = 0;
+
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+                lhs[i][j] = (FLUCS_FLOAT)(i == j) + ALPHA_DT * matrix[i][j];
+
+                sum += ( (FLUCS_FLOAT)(i == j) + ALPHAMINUS1_DT * matrix[i][j] )\
+                    * previous_fields[index + j*HALFUNPADDEDSIZE];
+            }
+
+            rhs_fields[i] = sum;
         }
     }
 
 #ifdef NONLINEAR
     add_nonlinear_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, rhs_fields);
 #endif
-    eliminate_lhs(index, rhs_fields, current_fields, lhs_matrix);
+
+    FLUCS_COMPLEX result[NUMBER_OF_FIELDS];
+    gaussian_elimination(lhs, result, rhs_fields);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        current_fields[index + i*HALFUNPADDEDSIZE] = result[i];
+    }
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
 }

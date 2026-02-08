@@ -34,7 +34,6 @@ class FourierSystem(FlucsSystem):
 
     # Iteration matrices (used for precomputing)
     rhs: cp.ndarray
-    lhs: cp.ndarray
     inverse_lhs: cp.ndarray
 
     # CFL condition variables
@@ -330,7 +329,7 @@ class FourierSystem(FlucsSystem):
 
         super().ready()
 
-        # Allocate precomputation arrays
+        # Allocate precomputation matrices
         if self.input["setup.precompute_linear_matrix"]:
             if not hasattr(self, "rhs"):
                 self.rhs = cp.zeros(
@@ -343,43 +342,22 @@ class FourierSystem(FlucsSystem):
                     ),
                     dtype=self.complex,
                 )
+                self.inverse_lhs = cp.zeros(
+                    (
+                        self.number_of_fields,
+                        self.number_of_fields,
+                        self.nz,
+                        self.nx,
+                        self.half_ny,
+                    ),
+                    dtype=self.complex,
+                )
 
-                # For small matrices, it is faster to precompute the inverse
-                # directly given it can be hard-coded. For larger ones, we
-                # precompute the lhs matrix itself and invert at each step.
-                if self.number_of_fields <= 3:
-                    self.inverse_lhs = cp.zeros(
-                        (
-                            self.number_of_fields,
-                            self.number_of_fields,
-                            self.nz,
-                            self.nx,
-                            self.half_ny,
-                        ),
-                        dtype=self.complex,
-                    )
-                else:
-                    self.lhs = cp.zeros(
-                        (
-                            self.number_of_fields,
-                            self.number_of_fields,
-                            self.nz,
-                            self.nx,
-                            self.half_ny,
-                        ),
-                        dtype=self.complex,
-                    )
+            cupy_set_device_pointer(
+                self.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
+            )
 
             cupy_set_device_pointer(self.cupy_module, "rhs_precomp", self.rhs)
-
-            if self.number_of_fields <= 3:
-                cupy_set_device_pointer(
-                    self.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
-                )
-            else:
-                cupy_set_device_pointer(
-                    self.cupy_module, "lhs_precomp", self.lhs
-                )
 
             self.precompute_iteration_matrices_kernel = (
                 self.cupy_module.get_function("precompute_iteration_matrices")
@@ -469,7 +447,14 @@ class FourierSystem(FlucsSystem):
         """Computes the linear matrix using the CuPy module and stores the
         result in self.linear_matrix"""
         self.linear_matrix = cp.zeros(
-            (2, 2, self.nz, self.nx, self.half_ny), dtype=self.complex
+            (
+                self.number_of_fields,
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            ),
+            dtype=self.complex,
         )
 
         compute_linear_matrix_kernel = self.cupy_module.get_function(
@@ -605,7 +590,7 @@ class FourierSystem(FlucsSystem):
 
         # Compute new dt
         new_dt = self.float(
-            np.nanmin(
+            min(
                 (
                     self.max_cfl / self.cfl_rate_float,
                     self.dt_max,
@@ -631,7 +616,7 @@ class FourierSystem(FlucsSystem):
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
             print(
                 f"dt: {self.current_dt:.3e} -> "
-                f"{new_dt:.3e} (-, {self.current_step})"
+                f"{new_dt:.3e} (-, {self.current_step:.3e})"
             )
 
             self.current_dt = new_dt
@@ -651,7 +636,7 @@ class FourierSystem(FlucsSystem):
             if new_dt > self.current_dt:
                 print(
                     f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
-                    f"(+, {self.current_step})"
+                    f"(+, {self.current_step:.3e})"
                 )
 
                 self.current_dt = new_dt
