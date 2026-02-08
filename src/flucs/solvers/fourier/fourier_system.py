@@ -303,7 +303,7 @@ class FourierSystem(FlucsSystem):
         self.dt_mult_increase = self.input["time.dt_mult_increase"]
         self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
         self.dt_array = np.array(
-            [self.current_dt, 10**10, 10 * 10], dtype=self.float
+            [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
 
