@@ -1,5 +1,7 @@
 """Setup shared by all test files."""
 
+from pathlib import Path
+
 import pytest
 
 
@@ -13,7 +15,15 @@ def pytest_collection_modifyitems(config, items):
     try:
         import flucs_fluid_itg  # noqa: F401
     except ImportError:
-        skip_fluid_itg = pytest.mark.skip(reason="need flucs_fluid_itg plugin to run")
+        skip_fluid_itg = pytest.mark.skip(
+            reason="need flucs_fluid_itg plugin to run"
+        )
         for item in items:
             if "fluid_itg" in item.keywords:
                 item.add_marker(skip_fluid_itg)
+
+
+@pytest.fixture(scope="session")
+def testdata() -> Path:
+    """Path to the test data directory."""
+    return Path(__file__).parent / "__testdata__"

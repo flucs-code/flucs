@@ -1,0 +1,93 @@
+[parameters]
+kappaT = 1.0
+chi = 1.0
+a = 0.225
+b = 0.41875
+kappaB = 1.0
+kappan = 0.0
+alpha = 0.5
+
+[time]
+dt_max = 0.01
+dt_min = 1e-8
+tfinal = 10
+max_cfl = 0.2
+dt_mult_increase = 1.10
+dt_mult_decrease = 0.75
+dt_mult_steps = 10000
+dt_method = "continuous"
+
+[dimensions] 
+nx = 11
+ny = 11
+nz = 1
+
+padded_nx = -1
+padded_ny = -1
+padded_nz = 1
+
+Lx = -1
+Ly = -1
+Lz = -1
+
+padded_primes = [2, 3]
+nonlinear_order = 2
+
+[setup]
+
+solver = "FourierSolver"
+system = "ColdITG2DFourier"
+precision = "single"
+
+timing = false
+timing_steps = 1000
+
+linear = false
+alpha = 0.5
+precompute_linear_matrix = false
+
+[init]
+rand_seed = 113
+type = "white_noise"
+amplitude = 1e-4
+
+[restart]
+write_restart_file = true
+restart_if_exists = false
+write_steps = 10000
+restart_from = ""
+reset_time = false
+
+[output]
+write_steps = 50000
+
+[output.time]
+save_steps = 10000 
+diags = []
+type = "netcdf4"
+
+[output.0d]
+save_steps = -1
+diags = []
+type = "netcdf4"
+
+[output.1d]
+save_steps = -1
+diags = []
+type = "netcdf4"
+
+[output.2d]
+save_steps = -1
+diags = []
+type = "netcdf4"
+
+[output.3d]
+save_steps = -1
+diags = []
+type = "netcdf4"
+
+[hyper]
+perphypervisc = 0.0
+perphypervisc_halfpower = 2
+parhypervisc = 0.0
+parhypervisc_halfpower = 2
