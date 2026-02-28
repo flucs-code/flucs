@@ -50,6 +50,19 @@ alpha = 0.5
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false
 
+# Generic hyperviscosity that is added to the linear matrix of any system
+# The form of the hyperviscous terms is perp * (kperp^2)^perp_power
+# and par * (kpar^2)^par_power, respectively
+#
+# Set perp and par to a negative number to turn off
+# the respective hyperviscosity
+[hyperviscosity]
+perp = -1.0
+perp_power = 2
+
+par = -1.0
+par_power = 2
+
 [output]
 
 [output.0d]

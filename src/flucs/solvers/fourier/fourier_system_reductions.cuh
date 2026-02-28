@@ -164,7 +164,7 @@ struct DelPerp2_Functor {
  * If is_half_axis is true, all elements with nonzero index along
  * the summed axis (the one of length N) are multiplied by an
  * additional factor of 2, which is useful for reducing Fourier-space
- * quantities. NB: this factor of 2 produces crap unless either one
+ * quantities. NB: this factor of 2 produces crap unless one
  * sums over the M axis, too, or if the M axis is a real one.
  *
  * The kernel must be invoked with a grid size equal to M and uses

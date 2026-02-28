@@ -48,6 +48,68 @@ __device__ void add_nonlinear_terms(const int index,
                                     const FLUCS_COMPLEX* dft_bits,
                                     FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]);
 
+// Calculates the hyperviscosity for a given mode
+__device__ __forceinline__
+FLUCS_FLOAT get_hypervisc(const int index) {
+
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    FLUCS_FLOAT hypervisc = 0;
+
+#ifdef HYPERVISC_PERP
+
+    const int ikx = indices.ikx;
+    const int iky = indices.iky;
+
+    const FLUCS_FLOAT kx = kx_from_ikx(ikx);
+    const FLUCS_FLOAT ky = ky_from_iky(iky);
+    const FLUCS_FLOAT kperp2 = kx*kx + ky*ky;
+    FLUCS_FLOAT hypervisc_perp = HYPERVISC_PERP;
+
+    #pragma unroll
+    for (int i = 0; i < HYPERVISC_PERP_POWER; i++)
+        hypervisc_perp *= kperp2;
+
+    hypervisc += hypervisc_perp;
+     
+#endif
+
+#ifdef HYPERVISC_PAR
+    const int ikz = indices.ikz;
+    const FLUCS_FLOAT kz = kz_from_ikz(ikz);
+    const FLUCS_FLOAT kz2 = kz * kz;
+
+    FLUCS_FLOAT hypervisc_par = HYPERVISC_PAR;
+
+    #pragma unroll
+    for (int i = 0; i < HYPERVISC_PAR_POWER; i++)
+        hypervisc_par *= kz2;
+
+    hypervisc += hypervisc_par;
+#endif
+
+    return hypervisc;
+}
+
+// Wrapper for get_linear_matrix that adds hyperviscosity if needed
+__device__ __forceinline__
+void get_linear_matrix_wrapped(const int index,
+                       const FLUCS_FLOAT dt,
+                       FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]) {
+
+    get_linear_matrix(index, dt, matrix);
+
+#if !(defined(HYPERVISC_PERP) || defined(HYPERVISC_PAR))
+    return;
+#endif
+
+    const FLUCS_FLOAT hypervisc = get_hypervisc(index);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++)
+        matrix[i][i] += hypervisc;
+    
+}
+
 
 // Returns the full (for all modes) linear matrix.
 // Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
@@ -59,7 +121,7 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
         return;
 
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_linear_matrix(index, dt, matrix);
+    get_linear_matrix_wrapped(index, dt, matrix);
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
@@ -85,7 +147,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
     
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix(index, dt, matrix);
+        get_linear_matrix_wrapped(index, dt, matrix);
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -169,7 +231,7 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
     // Help the compiler a bit with the registers
     {
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix(index, dt, matrix);
+        get_linear_matrix_wrapped(index, dt, matrix);
 
         const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
         const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
