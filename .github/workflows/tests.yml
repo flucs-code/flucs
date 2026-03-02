@@ -27,6 +27,12 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
+
+    - name: Install CUDA 13.0 toolkit
+      uses: Jimver/cuda-toolkit@v0.2.30
+      with:
+        cuda: '13.1.0'
+
     - name: Checkout the repository
       uses: actions/checkout@v6
       with:
