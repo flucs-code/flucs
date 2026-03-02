@@ -1,0 +1,56 @@
+name: Tests
+
+# Run tests using the flucs_fluid_itg plugin.
+# Does not run GPU tests -- these should be run manually on a GPU machine.
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+    - name: Checkout the repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Checkout flucs_fluid_itg plugin repository
+      uses: actions/checkout@v6
+      with:
+        repository: "flucs/flucs_fluid_itg"
+        path: "flucs_fluid_itg"
+        fetch-depth: 0
+
+    - name: Setup uv with Python version ${{ matrix.python-version }}
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install project
+      run: uv sync --only-group=test --extra cuda13
+
+    - name: Install flucs_fluid_itg plugin
+      run: |
+        cd flucs_fluid_itg
+        uv pip install . --no-deps
+
+    - name: Run tests
+      run: uv run pytest
