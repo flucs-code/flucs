@@ -6,12 +6,16 @@ import pytest
 
 
 def pytest_configure(config):
+    """Add markers that can be used to skip tests depending on certain
+    conditions, such as missing dependencies."""
     config.addinivalue_line(
         "markers", "fluid_itg: mark test as requiring flucs_fluid_itg plugin."
     )
 
 
 def pytest_collection_modifyitems(config, items):
+    """Skip tests marked with 'fluid_itg' if the flucs_fluid_itg plugin is not
+    installed."""
     try:
         import flucs_fluid_itg  # noqa: F401
     except ImportError:
