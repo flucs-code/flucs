@@ -35,7 +35,7 @@ jobs:
     - name: Checkout flucs_fluid_itg plugin repository
       uses: actions/checkout@v6
       with:
-        repository: "flucs/flucs_fluid_itg"
+        repository: "flucs-code/flucs_fluid_itg"
         path: "flucs_fluid_itg"
         fetch-depth: 0
 
