@@ -45,7 +45,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install project
-      run: uv sync --only-group=test --extra cuda13
+      run: uv sync --no-dev --group=test --extra=cuda13
 
     - name: Install flucs_fluid_itg plugin
       run: |
