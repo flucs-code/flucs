@@ -2,13 +2,18 @@
 Contains the definition of the FlucsInput class
 that deals with interpreting TOML input files.
 """
+from __future__ import annotations
 
 import pathlib as pl
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import toml
 
 import flucs
+
+if TYPE_CHECKING:
+    from flucs.solvers import FlucsSolver
+    from flucs.systems import FlucsSystem
 
 
 class InvalidFlucsInputFileError(ValueError):
@@ -27,34 +32,43 @@ class FlucsInput:
     with added functionality.
     """
 
-    input_path: pl.Path  # Path to the input file
-    io_path: pl.Path  # Input/output directory
+    input_path: pl.Path
+    """Path to the input file."""
 
-    _input_dict: dict[str, Any]  # Holds all the input parameters
-    _default_input_dict: dict[str, Any]  # Holds all the defaults
+    io_path: pl.Path
+    """Input/output directory."""
 
-    _solver_type: type  # Solver type for this input
-    _system_type: type  # System type for this input
-    _initialised: bool = False  # if True, __setitem__ throws an exception
+    _input_dict: dict[str, Any]
+    """Holds all the input parameters."""
 
-    def create_solver_system(self):
+    _default_input_dict: dict[str, Any]
+    """Holds all the defaults."""
+
+    _solver_type: type
+    """Solver type for this input"""
+
+    _system_type: type
+    """System type for this input"""
+
+    _initialised: bool = False
+    """If True, __setitem__ throws an exception"""
+
+    def create_solver_system(self) -> tuple[FlucsSolver, FlucsSystem]:
         """Creates the solver and system for this input.
 
         Returns
         -------
-        (solver: FlucsSolver, system: FlucsSystem)
             Tuple of solver and system.
-
         """
         system = self._system_type(self)
         solver = self._solver_type(self, system)
         system.solver = solver
         return solver, system
 
-    def __getitem__(self, arg: str):
+    def __getitem__(self, arg: str) -> Any:
         """
-        Access the dict of input data directly using
-        the TOML format aa.bb.cc for nested dicts.
+        Access the dict of input data directly using the TOML format
+        ``aa.bb.cc`` for nested dicts.
         """
         if not isinstance(arg, str):
             raise ValueError("The key should be a string!")
@@ -71,7 +85,7 @@ class FlucsInput:
 
         return _dict[split_arg[-1]]
 
-    def __setitem__(self, arg: str, value):
+    def __setitem__(self, arg: str, value: Any):
         if self._initialised:
             raise RuntimeError(
                 "Input class has finished its initialisation "
@@ -99,18 +113,19 @@ class FlucsInput:
                 f"parameter '{arg}'!"
             ) from e
 
-    def load_toml_str(self, toml_str: str, default=False):
+    def load_toml_str(self, toml_str: str, default: bool = False):
         """
         Loads parameters from a TOML string.
         """
         self.load_dict(toml.loads(toml_str), default)
 
-    def load_dict(self, _dict: dict, default=False):
+    def load_dict(self, _dict: dict, default: bool = False):
         """
-        Loads a dict into _input_dict or _default_input_dict
-        depending on whether default is False or True.
-        If default is False, the dict is checked to make sure it conforms
-        to the set of parameters outlined in _default_input_dict.
+        Loads a dict into ``_input_dict`` or ``_default_input_dict``
+        depending on whether default is ``False`` or ``True``.
+
+        If default is ``False``, the dict is checked to make sure it conforms
+        to the set of parameters outlined in ``_default_input_dict``.
         """
         if default:
             self._update_dict(self._default_input_dict, _dict, allow_new=True)
@@ -119,7 +134,7 @@ class FlucsInput:
             self._update_dict(self._input_dict, _dict)
 
     @staticmethod
-    def _update_dict(_dict: dict, _updates: dict, allow_new=False):
+    def _update_dict(_dict: dict, _updates: dict, allow_new: bool = False):
         """
         Goes recursively through a dict of dicts, updating the values of keys
         (or 'parameters' in the context of the solvers) as specified by
