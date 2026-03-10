@@ -246,6 +246,7 @@ class FlucsPostProcessing:
         -------
         tuple
             (values, boundary_indices) where
+
             - values is an np.ndarray with shape (sum(time_lengths), ...)
               after concatenation across groups
             - boundary_indices is a list of integer indices marking the

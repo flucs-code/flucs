@@ -39,6 +39,8 @@ test = [
 docs = [
     "sphinx",
     "sphinx-rtd-theme",
+    "sphinx_autodoc_typehints",
+    "sphinx-book-theme",
 ]
 
 [tool.ruff]

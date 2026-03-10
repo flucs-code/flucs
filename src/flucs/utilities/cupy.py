@@ -31,17 +31,14 @@ def cupy_set_device_pointer(
 class ModuleOptions:
     """Helper class that builds the tuple of options needed to compule CuPy's
     RawModule. Useful for defining compile-time macros and definitions.
-
-    Attributes
-    ----------
-    string_options : tuple
-        A manually specified tuple of string options to be passed to the
-        compiler. By default, this is
-        ("--ptxas-options=-O3", "--use_fast_math").
     """
 
     _defs: dict
     string_options = ("--ptxas-options=-O3", "--use_fast_math")
+    """
+    A manually specified tuple of string options to be passed to the compiler.
+    By default, this is ("--ptxas-options=-O3", "--use_fast_math").
+    """
 
     def __init__(self) -> None:
         self._defs = {}

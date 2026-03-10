@@ -362,14 +362,16 @@ class FlucsSystem(ABC):
         """
         Return a dictionary describing restart variables.
 
-        Structure:
-        {
-            "<var_name>": {
-            "data": <ndarray (NumPy or CuPy)>,
-            "dimension_names": (<dim1>, <dim2>, ...)  # optional, tuple of str
-            },
-            ...
-        }
+        Structure::
+
+            {
+                "<var_name>": {
+                    "data": <ndarray (NumPy or CuPy)>,
+                    # optional, tuple of strings
+                    "dimension_names": (<dim1>, <dim2>, ...)
+                },
+                ...
+            }
         """
 
     def __init__(self, input: FlucsInput) -> None:

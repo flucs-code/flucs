@@ -7,19 +7,15 @@ from io import TextIOBase
 class FlucsLogHandler(TextIOBase, AbstractContextManager):
     """Redirects stdout and stderr to a specified set of streams.
     Used primarily to redirect print() statements to an additional log file.
-
-    Attributes
-    ----------
-    streams : Streams where data is written.
-
     """
 
-    # List of streams to which we write data
     streams: list
+    """Streams where data is written."""
 
-    # Backup of the old stdout and stderr to restore at __exit__
     _old_stdout: TextIOBase
+    """Backup of the old stdout to restore at __exit__."""
     _old_stderr: TextIOBase
+    """Backup of the old stderr to restore at __exit__."""
 
     # Hard-coded UTF-8 encoding, strict errors, and NOT a TTY
     encoding = "utf-8"
