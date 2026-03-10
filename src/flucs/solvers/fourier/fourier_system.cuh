@@ -73,18 +73,18 @@ FLUCS_FLOAT get_hypervisc(const int index) {
      
 #endif
 
-#ifdef HYPERVISC_PAR
+#ifdef HYPERVISC_PARA
     const int ikz = indices.ikz;
     const FLUCS_FLOAT kz = kz_from_ikz(ikz);
     const FLUCS_FLOAT kz2 = kz * kz;
 
-    FLUCS_FLOAT hypervisc_par = HYPERVISC_PAR;
+    FLUCS_FLOAT hypervisc_para = HYPERVISC_PARA;
 
     #pragma unroll
-    for (int i = 0; i < HYPERVISC_PAR_POWER; i++)
-        hypervisc_par *= kz2;
+    for (int i = 0; i < HYPERVISC_PARA_POWER; i++)
+        hypervisc_para *= kz2;
 
-    hypervisc += hypervisc_par;
+    hypervisc += hypervisc_para;
 #endif
 
     return hypervisc;
@@ -98,7 +98,7 @@ void get_linear_matrix_wrapped(const int index,
 
     get_linear_matrix(index, dt, matrix);
 
-#if !(defined(HYPERVISC_PERP) || defined(HYPERVISC_PAR))
+#if !(defined(HYPERVISC_PERP) || defined(HYPERVISC_PARA))
     return;
 #endif
 

@@ -59,9 +59,8 @@ precompute_linear_matrix = false
 [hyperviscosity]
 perp = -1.0
 perp_power = 2
-
-par = -1.0
-par_power = 2
+para = -1.0
+para_power = 2
 
 [output]
 
@@ -84,9 +83,3 @@ type = "netcdf4"
 save_steps = -1
 diags = []
 type = "netcdf4"
-
-[hyper]
-perphypervisc = 0.0
-perphypervisc_halfpower = 2
-parhypervisc = 0.0
-parhypervisc_halfpower = 2

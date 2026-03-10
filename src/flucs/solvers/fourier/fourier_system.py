@@ -442,12 +442,12 @@ class FourierSystem(FlucsSystem):
                 "HYPERVISC_PERP_POWER", self.input["hyperviscosity.perp_power"]
             )
 
-        if not self.input["hyperviscosity.par"] < 0:
+        if not self.input["hyperviscosity.para"] < 0:
             self.module_options.define_constant(
-                "HYPERVISC_PAR", self.input["hyperviscosity.par"]
+                "HYPERVISC_PARA", self.input["hyperviscosity.para"]
             )
             self.module_options.define_constant(
-                "HYPERVISC_PAR_POWER", self.input["hyperviscosity.par_power"]
+                "HYPERVISC_PARA_POWER", self.input["hyperviscosity.para_power"]
             )
 
         if not self.input["setup.linear"]:
