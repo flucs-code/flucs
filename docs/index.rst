@@ -6,10 +6,8 @@
 flucs documentation
 ===================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+``flucs`` is a general GPU-native framework for solving systems of partial
+differential equations.
 
 .. toctree::
    :maxdepth: 2
