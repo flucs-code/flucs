@@ -2,16 +2,22 @@
 Main flucs script.
 Used to run simulations.
 """
+from __future__ import annotations
 
 import argparse
 import importlib.metadata
 import pathlib as pl
 from datetime import datetime
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING
 
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
+
+if TYPE_CHECKING:
+    from flucs.solvers import FlucsSolver
+    from flucs.systems import FlucsSystem
 
 FLUCS_HEADER = rf"""
 ***************************************************
@@ -36,19 +42,19 @@ solvers = entry_points().select(group="flucs.solvers")
 systems = entry_points().select(group="flucs.systems")
 
 
-def get_solver_type(solver_name: str):
+def get_solver_type(solver_name: str) -> FlucsSolver:
     """
     Returns a solver type.
 
     Parameters
     ----------
-    solver_name: str
+    solver_name
         Name of the solver. Must be registered as an
-        entry point in the flucs.solvers group.
+        entry point in the ``flucs.solvers`` group.
 
     Returns
     -------
-    Appropriate FlucsSolver type.
+        Appropriate `FlucsSolver` type.
 
     """
 
@@ -63,20 +69,19 @@ def get_solver_type(solver_name: str):
     return s.load()
 
 
-def get_system_type(system_name: str):
+def get_system_type(system_name: str)-> FlucsSystem:
     """
     Returns a system type.
 
     Parameters
     ----------
-    system_name: str
+    system_name
         Name of the system. Must be registered as an
-        entry point in the flucs.systems group.
+        entry point in the ``flucs.systems`` group.
 
     Returns
     -------
-    Appropriate FlucsSystem type.
-
+        Appropriate `FlucsSystem` type.
     """
 
     try:
@@ -113,16 +118,15 @@ def list_solvers_and_systems():
 
 def run_flucs(input_path: pl.Path, override: list | None = None):
     """
-    Construct FlucsInput then call the appropriate solver.
+    Construct `FlucsInput` then call the appropriate solver.
 
     Parameters
     ----------
-    input_path : pl.Path
+    input_path
         Path to the input file
-    override : list
+    override
         Additional override parameters specified by the --override flag in the
         command line.
-
     """
 
     # Set up redirection of stdout and stderr to an additional log file
@@ -146,7 +150,6 @@ def main():
 
     This function interprets command-line arguments and decides what to do
     next.
-
     """
 
     parser = argparse.ArgumentParser(description="flucs = fluid cuda solver.")
