@@ -439,7 +439,8 @@ class FourierSystem(FlucsSystem):
                 "HYPERDISSIPATION_PERP", self.input["hyperdissipation.perp"]
             )
             self.module_options.define_constant(
-                "HYPERDISSIPATION_PERP_POWER", self.input["hyperdissipation.perp_power"]
+                "HYPERDISSIPATION_PERP_POWER",
+                self.input["hyperdissipation.perp_power"],
             )
 
         if not self.input["hyperdissipation.par"] < 0:
@@ -447,7 +448,8 @@ class FourierSystem(FlucsSystem):
                 "HYPERDISSIPATION_PAR", self.input["hyperdissipation.par"]
             )
             self.module_options.define_constant(
-                "HYPERDISSIPATION_PAR_POWER", self.input["hyperdissipation.par_power"]
+                "HYPERDISSIPATION_PAR_POWER",
+                self.input["hyperdissipation.par_power"],
             )
 
         if not self.input["setup.linear"]:
