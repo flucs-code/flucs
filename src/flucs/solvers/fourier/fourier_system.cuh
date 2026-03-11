@@ -24,7 +24,7 @@
 
 // Calculates the perpendicular hyperviscosity for a given kx, ky mode
 __device__ __forceinline__
-FLUCS_FLOAT get_hyperviscosity_perp(const FLUCS_FLOAT kx, const FLUCS_FLOAT ky) {
+FLUCS_FLOAT get_hypervisc_perp(const FLUCS_FLOAT kx, const FLUCS_FLOAT ky) {
 
 #ifdef HYPERVISC_PERP
 
@@ -32,73 +32,86 @@ FLUCS_FLOAT get_hyperviscosity_perp(const FLUCS_FLOAT kx, const FLUCS_FLOAT ky) 
     FLUCS_FLOAT hypervisc = HYPERVISC_PERP;
 
     #pragma unroll
-    for (int i = 0; i < HYPERVISC_PERP_POWER; ++i) hypervisc *= kperp2;
+    for (int i = 0; i < HYPERVISC_PERP_POWER; i++)
+        hypervisc *= kperp2;
 
     return hypervisc;
-#else
 
+#else
     return (FLUCS_FLOAT)0;
 #endif
 }
 
 // Calculates the parallel hyperviscosity for a given kz mode
 __device__ __forceinline__
-FLUCS_FLOAT get_hyperviscosity_para(const FLUCS_FLOAT kz) {
+FLUCS_FLOAT get_hypervisc_par(const FLUCS_FLOAT kz) {
 
-#ifdef HYPERVISC_PARA
+#ifdef HYPERVISC_PAR
 
     const FLUCS_FLOAT kz2 = kz * kz;
-    FLUCS_FLOAT hypervisc = HYPERVISC_PARA;
+    FLUCS_FLOAT hypervisc = HYPERVISC_PAR;
 
     #pragma unroll
-    for (int i = 0; i < HYPERVISC_PARA_POWER; ++i) hypervisc *= kz2;
+    for (int i = 0; i < HYPERVISC_PAR_POWER; i++)
+        hypervisc *= kz2;
 
     return hypervisc;
 #else
-
     return (FLUCS_FLOAT)0;
 #endif
 }
 
 // Calculates the hyperviscosity for a given mode
 __device__ __forceinline__
-FLUCS_FLOAT get_hyperviscosity(const int index) {
+FLUCS_FLOAT get_hypervisc(const int index) {
 
-    indices3d_t idx = get_indices3d<NZ, NX, HALF_NY>(index);
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
 
-    const FLUCS_FLOAT kx = kx_from_ikx(idx.ikx);
-    const FLUCS_FLOAT ky = ky_from_iky(idx.iky);
-    const FLUCS_FLOAT kz = kz_from_ikz(idx.ikz);
+    const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
+    const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
+    const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
 
-    return get_hyperviscosity_perp(kx, ky) + get_hyperviscosity_para(kz);
+    return get_hypervisc_perp(kx, ky) + get_hypervisc_par(kz);
 }
 
-// Functor for calculating the size of the term due to perpendicular hypveriscosity for a given mode
-struct Hyperviscosity_Perp_Functor {
+// Functor for calculating the size of the term due to perpendicular hyperviscosity for a given mode
+struct HyperviscPerp_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
     __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
         
-        indices3d_t idx = get_indices3d<NZ, NX, HALF_NY>(index);
-        const FLUCS_FLOAT kx = kx_from_ikx(idx.ikx);
-        const FLUCS_FLOAT ky = ky_from_iky(idx.iky);
+        indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+        const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
+        const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
 
-        const FLUCS_FLOAT hypervisc = get_hyperviscosity_perp(kx, ky);
+        const FLUCS_FLOAT hypervisc = get_hypervisc_perp(kx, ky);
 
-        return +hypervisc * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hypervisc * Abs2_Functor{field, FLOAT_ONE}(index);
     }
 };
 
-// Functor for calculating the size of the term due to parallel hypveriscosity for a given mode
-struct Hyperviscosity_Para_Functor {
+// Functor for calculating the size of the term due to parallel hyperviscosity for a given mode
+struct HyperviscPar_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
     __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
 
-        indices3d_t idx = get_indices3d<NZ, NX, HALF_NY>(index);
-        const FLUCS_FLOAT kz = kz_from_ikz(idx.ikz);
+        indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+        const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
 
-        const FLUCS_FLOAT hypervisc = get_hyperviscosity_para(kz);
+        const FLUCS_FLOAT hypervisc = get_hypervisc_par(kz);
 
-        return +hypervisc * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hypervisc * Abs2_Functor{field, FLOAT_ONE}(index);
+    }
+};
+
+
+// Functor for calculating the total (parallel + perpendicular)
+// hyperviscosity for a given mode
+struct Hypervisc_Functor {
+    const FLUCS_COMPLEX* __restrict__ field;
+    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+
+        const FLUCS_FLOAT hypervisc = get_hypervisc(index);
+        return hypervisc * Abs2_Functor{field, FLOAT_ONE}(index);
     }
 };
 
@@ -106,15 +119,15 @@ extern "C" {
 
 // calculation of hyperviscous losses for a given field
 __global__
-void hyperviscosity_perp_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
+void hypervisc_perp_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
     add_and_sum_last_axis<HALF_NY, true>(
-        (FLUCS_FLOAT)1.0, output, Hyperviscosity_Perp_Functor{field});
+        FLOAT_ONE, output, HyperviscPerp_Functor{field});
 }
 
 __global__
-void hyperviscosity_para_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
+void hypervisc_par_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
     add_and_sum_last_axis<HALF_NY, true>(
-        (FLUCS_FLOAT)1.0, output, Hyperviscosity_Para_Functor{field});
+        FLOAT_ONE, output, HyperviscPar_Functor{field});
 }
 
 
@@ -149,11 +162,11 @@ void get_linear_matrix_wrapped(const int index,
 
     get_linear_matrix(index, dt, matrix);
 
-#if !(defined(HYPERVISC_PERP) || defined(HYPERVISC_PARA))
+#if !(defined(HYPERVISC_PERP) || defined(HYPERVISC_PAR))
     return;
 #endif
 
-    const FLUCS_FLOAT hypervisc = get_hyperviscosity(index);
+    const FLUCS_FLOAT hypervisc = get_hypervisc(index);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++)

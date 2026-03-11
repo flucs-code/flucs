@@ -56,11 +56,11 @@ precompute_linear_matrix = false
 #
 # Set perp and par to a negative number to turn off
 # the respective hyperviscosity
-[hyperviscosity]
+[hypervisc]
 perp = -1.0
 perp_power = 2
-para = -1.0
-para_power = 2
+par = -1.0
+par_power = 2
 
 [output]
 
