@@ -114,7 +114,10 @@ class FourierSystem(FlucsSystem):
             print("Using continuous time stepping.")
 
         # Check for conflicts in hyperdissipation parameters
-        if self.input["hyperdissipation.perp"] >= 0.0 and (self.input["hyperdissipation.kx"] >= 0.0 or self.input["hyperdissipation.ky"] >= 0.0):
+        if self.input["hyperdissipation.perp"] >= 0.0 and (
+            self.input["hyperdissipation.kx"] >= 0.0
+            or self.input["hyperdissipation.ky"] >= 0.0
+        ):
             raise InvalidFlucsInputFileError(
                 "Cannot enable both hyperdissipation.perp and hyperdissipation.kx/ky simultaneously. "
                 "Use either perp or kx/ky. "
