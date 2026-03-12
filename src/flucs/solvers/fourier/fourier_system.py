@@ -113,6 +113,13 @@ class FourierSystem(FlucsSystem):
                 )
             print("Using continuous time stepping.")
 
+        # Check for conflicts in hyperdissipation parameters
+        if self.input["hyperdissipation.perp"] >= 0.0 and (self.input["hyperdissipation.kx"] >= 0.0 or self.input["hyperdissipation.ky"] >= 0.0):
+            raise InvalidFlucsInputFileError(
+                "Cannot enable both hyperdissipation.perp and hyperdissipation.kx/ky simultaneously. "
+                "Use either perp or kx/ky. "
+            )
+
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
             n = self.input[f"dimensions.n{dim}"]
@@ -434,7 +441,10 @@ class FourierSystem(FlucsSystem):
 
         self.module_options.define_constant("ALPHA", self.input["setup.alpha"])
 
-        if not self.input["hyperdissipation.perp"] < 0:
+        # Hyperdissipation options
+        if not self.input["hyperdissipation.perp"] < 0.0:
+            print("Using hyperdissipation in kperp.")
+
             self.module_options.define_constant(
                 "HYPERDISSIPATION_PERP", self.input["hyperdissipation.perp"]
             )
@@ -443,13 +453,37 @@ class FourierSystem(FlucsSystem):
                 self.input["hyperdissipation.perp_power"],
             )
 
-        if not self.input["hyperdissipation.par"] < 0:
+        if not self.input["hyperdissipation.kx"] < 0.0:
+            print("Using hyperdissipation in kx.")
+
             self.module_options.define_constant(
-                "HYPERDISSIPATION_PAR", self.input["hyperdissipation.par"]
+                "HYPERDISSIPATION_KX", self.input["hyperdissipation.kx"]
             )
             self.module_options.define_constant(
-                "HYPERDISSIPATION_PAR_POWER",
-                self.input["hyperdissipation.par_power"],
+                "HYPERDISSIPATION_KX_POWER",
+                self.input["hyperdissipation.kx_power"],
+            )
+
+        if not self.input["hyperdissipation.ky"] < 0.0:
+            print("Using hyperdissipation in ky.")
+
+            self.module_options.define_constant(
+                "HYPERDISSIPATION_KY", self.input["hyperdissipation.ky"]
+            )
+            self.module_options.define_constant(
+                "HYPERDISSIPATION_KY_POWER",
+                self.input["hyperdissipation.ky_power"],
+            )
+
+        if not self.input["hyperdissipation.kz"] < 0.0:
+            print("Using hyperdissipation in kz.")
+
+            self.module_options.define_constant(
+                "HYPERDISSIPATION_KZ", self.input["hyperdissipation.kz"]
+            )
+            self.module_options.define_constant(
+                "HYPERDISSIPATION_KZ_POWER",
+                self.input["hyperdissipation.kz_power"],
             )
 
         if not self.input["setup.linear"]:

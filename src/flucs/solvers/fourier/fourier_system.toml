@@ -51,16 +51,17 @@ alpha = 0.5
 precompute_linear_matrix = false
 
 # Generic hyperdissipation that is added to the linear matrix of any system
-# The form of the hyperdissipative terms is perp * (kperp^2)^perp_power
-# and par * (kpar^2)^par_power, respectively
-#
-# Set perp and par to a negative number to turn off
-# the respective hyperdissipation
+# The form of the hyperdissipative terms is coefficient * (wavenumber^2)^perp_power
+# Set the coefficient to a negative number to turn off
 [hyperdissipation]
 perp = -1.0
 perp_power = 2
-par = -1.0
-par_power = 2
+kx = -1.0
+kx_power = 2
+ky = -1.0
+ky_power = 2
+kz = -1.0
+kz_power = 2
 
 [output]
 
