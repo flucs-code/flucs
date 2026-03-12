@@ -119,7 +119,8 @@ class FourierSystem(FlucsSystem):
             or self.input["hyperdissipation.ky"] >= 0.0
         ):
             raise InvalidFlucsInputFileError(
-                "Cannot enable both hyperdissipation.perp and hyperdissipation.kx/ky simultaneously. "
+                "Cannot enable both hyperdissipation.perp "
+                "and hyperdissipation.kx/ky simultaneously. "
                 "Use either perp or kx/ky. "
             )
 
