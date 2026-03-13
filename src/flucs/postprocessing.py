@@ -1,7 +1,7 @@
 import argparse
 import inspect
 import pathlib as pl
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
 import matplotlib.pyplot as plt
@@ -101,7 +101,7 @@ class FlucsPostProcessing:
 
     @staticmethod
     def get_netcdf_variables(
-        nc_path: pl.Path, ignore=None
+        nc_path: pl.Path, ignore: Iterable[str] | None = None
     ) -> dict[str, list[int]]:
         """
         Given a netCDF filepath, returns a mapping of variable names to the
@@ -109,15 +109,14 @@ class FlucsPostProcessing:
 
         Parameters
         ----------
-        nc_path : pl.Path
+        nc_path
             Path to the NetCDF file.
-        ignore : Iterable[str] | None
+        ignore
             Variable names to ignore.
 
         Returns
         -------
-        dict[str, list[int]]
-            Variable name -> sorted list of groups.
+            Dict mapping variable names to sorted list of groups.
         """
 
         netcdf_variables: dict[str, list[int]] = {}
@@ -147,21 +146,20 @@ class FlucsPostProcessing:
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
     def _get_all_netcdf_variables(
-        self, ignore=None
+        self, ignore: Iterable[str] | None = None
     ) -> dict[str, dict[str, list[int]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file
-        specified by self.output_file, and the groups that they appear in.
+        specified by `output_file`, and the groups that they appear in.
 
         Parameters
         ----------
-        ignore : Iterable[str] | None
+        ignore
             Variable names to ignore.
 
         Returns
         -------
-        dict[str, dict[str, list[int]]]
-            Mapping io_path (as a string) -> {variable: [group_ids], ... }
+            Mapping io_path (as a string) to ``{variable: [group_ids], ... }``
         """
 
         if self.output_file is None:
@@ -201,7 +199,6 @@ class FlucsPostProcessing:
 
         Returns
         -------
-        list[pathlib.Path]
             Filepaths that contain the given variable.
         """
 
@@ -227,7 +224,7 @@ class FlucsPostProcessing:
 
     def load_netcdf_variable(
         self, nc_path: pl.Path, variable: str, fill_value: float = np.nan
-    ):
+    ) -> tuple[np.ndarray, list[int]]:
         """
         Load a variable across all groups in a netCDF file and concatenate
         along time (zeroth axis). Groups missing the variable are filled with
@@ -235,21 +232,20 @@ class FlucsPostProcessing:
 
         Parameters
         ----------
-        nc_path : pathlib.Path
+        nc_path
             Path to the netCDF file to read.
-        variable : str
+        variable
             Name of the variable to load.
-        fill_value : float
+        fill_value
             Value to use for groups that do not contain 'variable'.
 
         Returns
         -------
-        tuple
-            (values, boundary_indices) where
+            Tuple of ``(values, boundary_indices)``, where:
 
-            - values is an np.ndarray with shape (sum(time_lengths), ...)
+            - ``values`` is an array with shape ``(sum(time_lengths), ...)``
               after concatenation across groups
-            - boundary_indices is a list of integer indices marking the
+            - ``boundary_indices`` is a list of integer indices marking the
               boundaries between groups in the concatenated time axis
         """
 
@@ -330,27 +326,27 @@ class FlucsPostProcessing:
 
     def save(
         self,
-        obj,
+        obj: Any,
         *,
-        name: str,
-        suffix: str,
+        name: str | None,
+        suffix: str | None,
         conflict_strategy: Literal["overwrite", "error"] = "overwrite",
         save_kwargs: dict | None = None,
     ) -> None:
         """
-        Save the result of post-processing to 'self.save_directory'.
+        Save the result of post-processing to `save_directory`.
 
         Parameters
         ----------
-        obj : Any
+        obj
             The object to save. Its type will determine the save handler used.
-        name : str | None
+        name
             The desired filename stem (without suffix).
-        suffix : str | None
+        suffix
             File extension.
-        conflict_strategy : {"overwrite", "error"}
+        conflict_strategy
             Behaviour when the target save filepath already exists.
-        save_kwargs : dict | None
+        save_kwargs
             Arguments forwarded to the type-specific save function.
         """
 
@@ -429,7 +425,8 @@ class FlucsPostProcessing:
     @staticmethod
     def parser() -> argparse.ArgumentParser:
         """
-        A common parser for postprocessing scripts that use FlucsPostProcessing.
+        A common parser for postprocessing scripts that use
+        `FlucsPostProcessing`.
         """
 
         parser = argparse.ArgumentParser(add_help=False)
@@ -444,7 +441,7 @@ class FlucsPostProcessing:
             help=(
                 "Paths to the i/o directories, which must contain "
                 "'input.toml'. If no path is specified, will assume the "
-                "current working directory.",
+                "current working directory."
             ),
         )
 
@@ -478,17 +475,14 @@ class FlucsPostProcessing:
 
         Parameters
         ----------
-        io_paths : pl.Path | Sequence[pl.Path]
+        io_paths
             Path or paths to i/o directories containing 'input.toml'.
-
-        save_directory : pl.Path | None
+        save_directory
             Optional path where to save results. If None, nothing will be saved.
-
-        output_file: str | None
+        output_file
             Type of output being analysed for this instance of post-processing.
             If None, no specific output type is assumed.
-
-        constraint : {"none", "solver", "system", "both"}
+        constraint
             Constraint on mixing solvers/systems across provided i/o
             directories. If "solver", all solvers must match. If "system", all
             systems must match. If "both", both solvers and systems must match.
