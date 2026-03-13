@@ -2,6 +2,7 @@
 Contains the definition of the FlucsInput class
 that deals with interpreting TOML input files.
 """
+
 from __future__ import annotations
 
 import pathlib as pl

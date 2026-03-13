@@ -2,6 +2,7 @@
 Main flucs script.
 Used to run simulations.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,7 +70,7 @@ def get_solver_type(solver_name: str) -> FlucsSolver:
     return s.load()
 
 
-def get_system_type(system_name: str)-> FlucsSystem:
+def get_system_type(system_name: str) -> FlucsSystem:
     """
     Returns a system type.
 
