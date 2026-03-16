@@ -244,7 +244,7 @@ class RealspaceSliceDiag(FlucsDiagnostic):
                 )
             )
 
-            def slice_calculator():
+            def slice_calculator(loc_name=loc_name):
                 self.vars[f"{loc_name}/data"].data_cache.append(
                     self.system.realspace_fields[ifield, iz, ix, iy]
                 )
