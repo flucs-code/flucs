@@ -21,9 +21,10 @@
 #include "flucs/solvers/fourier/fourier_system_utilities.cuh"
 #include "flucs/solvers/fourier/fourier_system_indexing.cuh"
 #include "flucs/solvers/fourier/fourier_system_reductions.cuh"
+#include "flucs/solvers/fourier/fourier_system_hyperdissipation.cuh"
+
 
 extern "C" {
-
 
 // rhs and inverse_lhs when using precomputed matrices.
 __constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
@@ -48,6 +49,27 @@ __device__ void add_nonlinear_terms(const int index,
                                     const FLUCS_COMPLEX* dft_bits,
                                     FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]);
 
+// Wrapper for get_linear_matrix that adds hyperdissipation if needed
+__device__ __forceinline__
+void get_linear_matrix_wrapped(const int index,
+                       const FLUCS_FLOAT dt,
+                       FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]) {
+
+    get_linear_matrix(index, dt, matrix);
+
+#if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) ||\
+      defined(HYPERDISSIPATION_KY) || defined(HYPERDISSIPATION_KZ))
+    return;
+#endif
+
+    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++)
+        matrix[i][i] += hyperdissipation;
+    
+}
+
 
 // Returns the full (for all modes) linear matrix.
 // Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
@@ -59,7 +81,7 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
         return;
 
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_linear_matrix(index, dt, matrix);
+    get_linear_matrix_wrapped(index, dt, matrix);
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
@@ -85,7 +107,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
     
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix(index, dt, matrix);
+        get_linear_matrix_wrapped(index, dt, matrix);
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -169,7 +191,7 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
     // Help the compiler a bit with the registers
     {
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix(index, dt, matrix);
+        get_linear_matrix_wrapped(index, dt, matrix);
 
         const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
         const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
