@@ -2,7 +2,6 @@
 
 Solves a system of PDEs in a periodic box using
 pseudospectral Fourier methods.
-
 """
 
 import time
@@ -13,7 +12,7 @@ from flucs.solvers.fourier.fourier_system import FourierSystem
 
 class FourierSolver(FlucsSolver[FourierSystem]):
     """A pseudospectral solver for a system of nonlinear fluid PDEs in 2D or 3D
-    that are specified by a FourierSystem.
+    that are specified by a `FourierSystem`.
 
     """
 
