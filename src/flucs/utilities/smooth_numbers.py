@@ -2,22 +2,20 @@ import heapq
 
 
 def next_smooth_number(n: int, primes: list | None = None) -> int:
-    """Returns the smallest number that is strictly bigger
-    than a given number n and divisible only by
-    the prime numbers specified in primes.
+    """Returns the smallest number that is strictly bigger than a given number n
+    and divisible only by the prime numbers specified in primes.
 
     Parameters
     ----------
-    n : int
-    primes : list
-        List of primes. Defaults to [2, 3].
-        N.B. The algorithm assumes but does not check
-        that these numbers are prime.
+    n
+        The number to find the next smooth number for.
+    primes
+        List of primes. Defaults to ``[2, 3]``.  The algorithm assumes but does
+        not check that these numbers are prime.
 
     Returns
     -------
-    int
-        The smallest 3-smooth number bigger than n.
+        The smallest 3-smooth number bigger than ``n``.
 
     """
 

@@ -4,6 +4,17 @@ import pathlib as pl
 def clean_directory(path: pl.Path, patterns: tuple[str, ...]) -> None:
     """
     Cleans up files matching given patterns in the specified directory.
+
+    User confirmation is required before deletion to prevent accidental data
+    loss.
+
+    Parameters
+    ----------
+    path
+        The directory in which to clean files.
+    patterns
+        The file patterns to match for deletion. Uses glob-style patterns (e.g.,
+        ``"*.log"``, ``"temp_*.txt"``).
     """
 
     abort_msg = "Cleaning aborted."
