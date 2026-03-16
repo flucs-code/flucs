@@ -31,18 +31,26 @@ if TYPE_CHECKING:
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""
 
-    input: FlucsInput = None
+    input: FlucsInput | None = None
 
-    # Solver running the system
     solver: FlucsSolver
+    """Solver running the system."""
 
     # Float and complex types
     float: type
+    """Float type, always set to either `numpy.float32` or `numpy.float64`
+    depending on whether the setting ``setup.precision`` is set to ``"single"``
+    or ``"double"``."""
     complex: type
+    """Complex type, always set to the complex version of the system's float
+    type."""
     int: type
+    """Integer type, always set to `numpy.int32`."""
     tolerance: float
+    """Floating point tolerance, calculated as 64 times the machine epsilon for
+    the system's float type."""
 
-    # Variables to that keep track of time
+    # Variables that keep track of time
     current_step: int
     current_dt: float
     current_time: float
@@ -51,30 +59,32 @@ class FlucsSystem(ABC):
     init_time: float
     init_dt: float
 
-    # Restart manager
     restart_manager: FlucsRestart
+    """Restart manager."""
 
-    # CuPy module for the system
     cupy_module: cp.RawModule
+    """CuPy module for the system."""
 
-    # Compile options for CUDA
     module_options: ModuleOptions
+    """Compile options for CUDA."""
 
-    # A priority queue of outputs
     output_heap: list[FlucsOutput] | None = None
+    """A priority queue of outputs."""
     steps_until_next_write: int
+    """Number of steps until the next write of outputs."""
 
-    # A dict of supported diagnostics
     diags_dict: dict[str, type[FlucsDiagnostic]]
+    """Dictionary of supported diagnostics."""
 
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):
-        """Loads default parameters into a flucs input object.
+        """Loads default parameters into a `FlucsInput`.
+
         Goes recursively through all the parent systems.
 
         Parameters
         ----------
-        flucs_input : FlucsInput
+        flucs_input
             Input object that will be initialised with the defaults.
         """
         import importlib
@@ -120,9 +130,9 @@ class FlucsSystem(ABC):
 
         Parameters
         ----------
-        force: bool
-            If force is True, then all diagnostics are executed
-            regardless of their next save time.
+        force
+            If force is ``True``, then all diagnostics are executed regardless
+            of their next save time.
 
         """
         if self.output_heap is None:
@@ -192,12 +202,11 @@ class FlucsSystem(ABC):
         """Compiles the CuPy CUDA module associated with the system
 
         Custom CUDA setup should be done by overriding this method. Do not
-        forget to call super().compile_cupy_module()!
+        forget to call ``super().compile_cupy_module()``!
 
-        The CUDA module for the system should be located in the same
-        directory as its .py file and have a name that matches the .py file,
-        with the .cu extension.
-
+        The CUDA module for the system should be located in the same directory
+        as its ``.py`` file and have a name that matches the ``.py`` file, with
+        the ``.cu`` extension.
         """
 
         import datetime
@@ -217,28 +226,29 @@ class FlucsSystem(ABC):
 
         self.cupy_module.compile()
 
-    def get_memory_usage(self, devices=None, synchronize=True) -> dict:
+    def get_memory_usage(
+        self, devices: list[int] | None = None, synchronize: bool = True
+    ) -> dict:
         """
         Checks the memory usage on the current devices and returns a dictionary
         with the results.
 
         Parameters
         ----------
-        devices: list[int] | None
+        devices
             Specific device ordinals to query. If None, queries all visible
             devices.
-
-        synchronize: bool
-            If True, calls deviceSynchronize() on each device before sampling.
+        synchronize
+            If ``True``, calls ``deviceSynchronize()`` on each device before
+            sampling.
 
         Returns
         -------
-        device_info: dict
-            Dictionary with memory usage data
+            A dictionary with memory usage data
 
         Notes
         -----
-        All of the memory values in device_info are in bytes.
+        All of the memory values in the returned dict are in bytes.
 
         """
 
