@@ -1,9 +1,8 @@
-import re
-import cupy as cp
-from cupy.cuda import cufft
-import numpy as np
-from typing import ClassVar
 from collections.abc import Callable
+from typing import ClassVar
+
+import cupy as cp
+import numpy as np
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 

@@ -324,7 +324,7 @@ class FlucsOutputNC(FlucsOutput):
 
         self.group = dataset.groups[self.group_name]
 
-    def _createDimension(
+    def _createDimension(  # noqa: N802
         self,
         rootgrp: Dataset or Group,
         dim_name: str,
