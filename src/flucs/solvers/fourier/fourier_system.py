@@ -110,6 +110,17 @@ class FourierSystem(FlucsSystem):
                 )
             print("Using continuous time stepping.")
 
+        # Check for conflicts in hyperdissipation parameters
+        if self.input["hyperdissipation.perp"] > 0.0 and (
+            self.input["hyperdissipation.kx"] > 0.0
+            or self.input["hyperdissipation.ky"] > 0.0
+        ):
+            raise InvalidFlucsInputFileError(
+                "Cannot enable both hyperdissipation.perp "
+                "and hyperdissipation.kx/ky simultaneously. "
+                "Use either perp or kx/ky. "
+            )
+
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
             n = self.input[f"dimensions.n{dim}"]
@@ -377,19 +388,7 @@ class FourierSystem(FlucsSystem):
         )
 
     def compile_cupy_module(self) -> None:
-        # Add module options
-        self.module_options.define_constant(
-            "TWOPI_OVER_LX", 2 * np.pi / self.input["dimensions.Lx"]
-        )
-
-        self.module_options.define_constant(
-            "TWOPI_OVER_LY", 2 * np.pi / self.input["dimensions.Ly"]
-        )
-
-        self.module_options.define_constant(
-            "TWOPI_OVER_LZ", 2 * np.pi / self.input["dimensions.Lz"]
-        )
-
+        # FourierSystem specific constants
         self.module_options.define_constant(
             "NUMBER_OF_FIELDS", self.number_of_fields
         )
@@ -406,47 +405,45 @@ class FourierSystem(FlucsSystem):
             "DFT_PADDEDSIZE_FACTOR", self.float(1.0 / self.full_padded_size)
         )
 
-        self.module_options.define_constant("NX", self.nx)
-        self.module_options.define_constant("LX", self.input["dimensions.Lx"])
-        self.module_options.define_constant("HALF_NX", self.half_nx)
-        self.module_options.define_constant("PADDED_NX", self.padded_nx)
-        self.module_options.define_constant(
-            "HALF_PADDED_NX", self.half_padded_nx
-        )
+        # Dimensions
+        for dim in ["x", "y", "z"]:
+            box_size = self.float(self.input[f"dimensions.L{dim}"])
 
-        self.module_options.define_constant("NY", self.ny)
-        self.module_options.define_constant("LY", self.input["dimensions.Ly"])
-        self.module_options.define_constant("HALF_NY", self.half_ny)
-        self.module_options.define_constant("PADDED_NY", self.padded_ny)
-        self.module_options.define_constant(
-            "HALF_PADDED_NY", self.half_padded_ny
-        )
+            self.module_options.define_constant(
+                f"TWOPI_OVER_L{dim.upper()}", 2 * np.pi / box_size
+            )
 
-        self.module_options.define_constant("NZ", self.nz)
-        self.module_options.define_constant("LZ", self.input["dimensions.Lz"])
-        self.module_options.define_constant("HALF_NZ", self.half_nz)
-        self.module_options.define_constant("PADDED_NZ", self.padded_nz)
-        self.module_options.define_constant(
-            "HALF_PADDED_NZ", self.half_padded_nz
-        )
+            self.module_options.define_constant(
+                f"N{dim.upper()}", getattr(self, f"n{dim}")
+            )
+            self.module_options.define_constant(f"L{dim.upper()}", box_size)
+            self.module_options.define_constant(
+                f"HALF_N{dim.upper()}", getattr(self, f"half_n{dim}")
+            )
+            self.module_options.define_constant(
+                f"PADDED_N{dim.upper()}", getattr(self, f"padded_n{dim}")
+            )
+            self.module_options.define_constant(
+                f"HALF_PADDED_N{dim.upper()}",
+                getattr(self, f"half_padded_n{dim}"),
+            )
 
+        # Hyperdissipation
+        for component in ["perp", "kx", "ky", "kz"]:
+            if self.input[f"hyperdissipation.{component}"] > 0.0:
+                print(f"Using hyperdissipation in {component}.")
+
+                self.module_options.define_constant(
+                    f"HYPERDISSIPATION_{component.upper()}",
+                    self.input[f"hyperdissipation.{component}"],
+                )
+                self.module_options.define_constant(
+                    f"HYPERDISSIPATION_{component.upper()}_POWER",
+                    self.input[f"hyperdissipation.{component}_power"],
+                )
+
+        # Setup
         self.module_options.define_constant("ALPHA", self.input["setup.alpha"])
-
-        if not self.input["hyperviscosity.perp"] < 0:
-            self.module_options.define_constant(
-                "HYPERVISC_PERP", self.input["hyperviscosity.perp"]
-            )
-            self.module_options.define_constant(
-                "HYPERVISC_PERP_POWER", self.input["hyperviscosity.perp_power"]
-            )
-
-        if not self.input["hyperviscosity.par"] < 0:
-            self.module_options.define_constant(
-                "HYPERVISC_PAR", self.input["hyperviscosity.par"]
-            )
-            self.module_options.define_constant(
-                "HYPERVISC_PAR_POWER", self.input["hyperviscosity.par_power"]
-            )
 
         if not self.input["setup.linear"]:
             self.module_options.define_constant("NONLINEAR")

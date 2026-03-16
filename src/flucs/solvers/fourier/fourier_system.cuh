@@ -21,9 +21,10 @@
 #include "flucs/solvers/fourier/fourier_system_utilities.cuh"
 #include "flucs/solvers/fourier/fourier_system_indexing.cuh"
 #include "flucs/solvers/fourier/fourier_system_reductions.cuh"
+#include "flucs/solvers/fourier/fourier_system_hyperdissipation.cuh"
+
 
 extern "C" {
-
 
 // Precomputed matrices stored in constant memory
 __constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
@@ -48,49 +49,7 @@ __device__ void add_nonlinear_terms(const int index,
                                     const FLUCS_COMPLEX* dft_bits,
                                     FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]);
 
-// Calculates the hyperviscosity for a given mode
-__device__ __forceinline__
-FLUCS_FLOAT get_hypervisc(const int index) {
-
-    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
-    FLUCS_FLOAT hypervisc = 0;
-
-#ifdef HYPERVISC_PERP
-
-    const int ikx = indices.ikx;
-    const int iky = indices.iky;
-
-    const FLUCS_FLOAT kx = kx_from_ikx(ikx);
-    const FLUCS_FLOAT ky = ky_from_iky(iky);
-    const FLUCS_FLOAT kperp2 = kx*kx + ky*ky;
-    FLUCS_FLOAT hypervisc_perp = HYPERVISC_PERP;
-
-    #pragma unroll
-    for (int i = 0; i < HYPERVISC_PERP_POWER; i++)
-        hypervisc_perp *= kperp2;
-
-    hypervisc += hypervisc_perp;
-     
-#endif
-
-#ifdef HYPERVISC_PAR
-    const int ikz = indices.ikz;
-    const FLUCS_FLOAT kz = kz_from_ikz(ikz);
-    const FLUCS_FLOAT kz2 = kz * kz;
-
-    FLUCS_FLOAT hypervisc_par = HYPERVISC_PAR;
-
-    #pragma unroll
-    for (int i = 0; i < HYPERVISC_PAR_POWER; i++)
-        hypervisc_par *= kz2;
-
-    hypervisc += hypervisc_par;
-#endif
-
-    return hypervisc;
-}
-
-// Wrapper for get_linear_matrix that adds hyperviscosity if needed
+// Wrapper for get_linear_matrix that adds hyperdissipation if needed
 __device__ __forceinline__
 void get_linear_matrix_wrapped(const int index,
                        const FLUCS_FLOAT dt,
@@ -98,15 +57,16 @@ void get_linear_matrix_wrapped(const int index,
 
     get_linear_matrix(index, dt, matrix);
 
-#if !(defined(HYPERVISC_PERP) || defined(HYPERVISC_PAR))
+#if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) ||\
+      defined(HYPERDISSIPATION_KY) || defined(HYPERDISSIPATION_KZ))
     return;
 #endif
 
-    const FLUCS_FLOAT hypervisc = get_hypervisc(index);
+    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++)
-        matrix[i][i] += hypervisc;
+        matrix[i][i] += hyperdissipation;
     
 }
 
