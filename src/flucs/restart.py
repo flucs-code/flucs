@@ -21,21 +21,28 @@ class FlucsRestart:
     Helper class that handles writing and reading restart files.
     """
 
-    # Parent system
     system: FlucsSystem
+    """Parent system"""
 
     # Reading a restart file
     initial_path: pl.Path | None = None
+    """Path to the restart file to load initial data from."""
     data: dict | None = None
+    """Data loaded from the restart file."""
 
     # Writing a restart file
     write_restart_file: bool = False
+    """Whether to write restart files during the simulation."""
     write_path: pl.Path
+    """Path to the restart file to write simulation data to."""
     backup_path: pl.Path
+    """Path to the backup restart file. Previous restart file is moved here
+    before writing a new one."""
     steps_until_write: int = 0
+    """Number of steps until the next restart file write."""
 
-    # Flag to reset simulation
     reset_time: bool = False
+    """Flag to reset simulation time."""
 
     def __init__(self, system: FlucsSystem):
         self.system = system
@@ -47,7 +54,6 @@ class FlucsRestart:
     def _decide_initial_path(self):
         """
         Decides the location of the restart file for loading initial data.
-
         """
 
         restart_if_exists = self.system.input["restart.restart_if_exists"]
@@ -93,18 +99,18 @@ class FlucsRestart:
 
     def _load_restart_data(self) -> None:
         """
-        Load restart array data from self.initial_path and stores a dict in
-        self.data that is identical to that returned by
-        FlucsSystem.get_restart_data().
+        Load restart array data from `initial_path` and stores a dict in `data`
+        that is identical to that returned by `FlucsSystem.get_restart_data`.
 
-        The structure of the data dict is as follows:
-        {
-            "<var_name>": {
-                "data": np.ndarray,  # NumPy arrays (host)
-                "dimension_names": (<dim1>, <dim2>, ...),  # tuple[str]
-            },
-            ...
-        }
+        The structure of the data dict is as follows::
+
+            {
+                "<var_name>": {
+                    "data": np.ndarray,  # NumPy arrays (host)
+                    "dimension_names": (<dim1>, <dim2>, ...),  # tuple[str]
+                },
+                ...
+            }
 
         """
 
@@ -197,14 +203,14 @@ class FlucsRestart:
             )
 
     def write_restart(self, force: bool = False) -> None:
-        """
-        Executes writing restart data if necessary.
+        """Executes writing restart data if necessary.
+
         Must be called every time step to work properly.
 
         Parameters
         ----------
-        force : bool
-            If force is True, the restart data is written at that timestep.
+        force
+            If force is ``True``, the restart data is written at that timestep.
         """
 
         if not self.write_restart_file:
@@ -327,10 +333,10 @@ class FlucsRestart:
 
         Parameters
         ----------
-        filepath: str | Path
+        restart_file_path
             Path to the restart file.
 
-        io_path: str | Path
+        io_path
             Path where the reconstructed input file will be written.
 
         """
