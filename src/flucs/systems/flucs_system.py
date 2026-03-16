@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import cupy as cp
+from cupy.cuda import cufft
 import numpy as np
 
 import flucs
@@ -59,6 +60,10 @@ class FlucsSystem(ABC):
 
     # Compile options for CUDA
     module_options: ModuleOptions
+
+    # CUFFT plan types
+    fft_c2r_plan_type: int
+    fft_r2c_plan_type: int
 
     # A priority queue of outputs
     output_heap: list[FlucsOutput] | None = None
@@ -145,8 +150,9 @@ class FlucsSystem(ABC):
 
     def setup(self) -> None:
         """
-        Sets up the initial time data, calls the restart manager
-        and then delegates to the system-specific setup hook.
+        Sets up the initial time data, calls the restart manager,
+        sets up Fourier-transform types, and then delegates to
+        the system-specific setup hook.
 
         """
 
@@ -155,6 +161,14 @@ class FlucsSystem(ABC):
         self.final_time = self.float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestart(self)
+
+        if self.input["setup.precision"] == "single":
+            self.fft_c2r_plan_type = cufft.CUFFT_C2R
+            self.fft_r2c_plan_type = cufft.CUFFT_R2C
+        else:
+            self.fft_c2r_plan_type = cufft.CUFFT_Z2D
+            self.fft_r2c_plan_type = cufft.CUFFT_D2Z
+
         self._setup_system()
 
     @abstractmethod

@@ -20,10 +20,18 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
+    # Total number of time steps for which we hold field data in memory
+    # This is typically 2 (previous time step +
+    # the current one we are solving for)
+    fields_history_size = 2
+
     # This will hold all the fields. Should be a list of CuPy arrays.
     # It's a list in order to store fields at previous time steps, as required
     # by the algorithm.
     fields: list
+
+    # Real-space fields in CPU memory, used for diagnostics
+    realspace_fields: np.ndarray | None = None
 
     # Fourier-space pieces out of which we construct the nonlinear term at each
     # time step
@@ -221,13 +229,17 @@ class FourierSystem(FlucsSystem):
     def _setup_system(self) -> None:
         """Sets up the system for running the solver. Should be called *after*
         any child class has done its setup, i.e., do not forget to do
-        super().setup() in anything that inherits FourierSystem.
+        super()._setup_system() in anything that inherits FourierSystem.
 
         """
         self._set_initial_conditions()
         self._check_initial_conditions()
 
     def _precompute_wavenumbers(self):
+        # Check if we have already done this
+        if hasattr(self, "ky"):
+            return
+
         self.kx = (
             2
             * np.pi
@@ -696,6 +708,29 @@ class FourierSystem(FlucsSystem):
         self.ab3_coefficients[2] =   + (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1                    ) / (dt1 + dt2) # noqa: E501
         # fmt: on
 
+    def get_realspace_fields(self):
+        """
+        Calculates the real-space fields at the current time step as a
+        NumPy array. The FFTs are done on the CPU in order to save GPU memory.
+        This makes them quite time-consuming so use this sparingly!
+
+        The data is saved in FourierSystem.realspace_fields
+
+        """
+
+        # If not None, then we have already called it this time step
+        if self.realspace_fields is not None:
+            return
+
+        # TODO: this needs to be changed if there's flow shear
+        fields_cpu_memory: np.ndarray = self.fields[
+            self.current_step % self.fields_history_size].get()
+
+        self.realspace_fields = np.fft.irfftn(fields_cpu_memory,
+                                              norm="forward",
+                                              axes=(1, 2, 3),
+                                              s=self.full_unpadded_tuple)
+
     @abstractmethod
     def begin_time_step(self) -> None:
         """Executed in the beginning of the time step. Should be used to
@@ -703,6 +738,10 @@ class FourierSystem(FlucsSystem):
 
         """
         self.current_step += 1
+
+        # Set this to None so that get_realspace_fields() knows
+        # whether it has already been called. Saves some time.
+        self.realspace_fields = None
 
     @abstractmethod
     def calculate_nonlinear_terms(self) -> None:
@@ -729,9 +768,9 @@ class FourierSystem(FlucsSystem):
                 self.ab3_coefficients[0],
                 self.ab3_coefficients[1],
                 self.ab3_coefficients[2],
-                self.fields[self.current_step % self.number_of_fields - 1],
+                self.fields[self.current_step % self.fields_history_size - 1],
                 self.dft_bits,
-                self.fields[self.current_step % self.number_of_fields],
+                self.fields[self.current_step % self.fields_history_size],
             ),
         )
 

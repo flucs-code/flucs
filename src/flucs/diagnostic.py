@@ -43,7 +43,9 @@ class FlucsDiagnostic(ABC):
     # Name of the diagnostic
     name: str
 
-    # Default values for any options
+    # Default values for any options the diagnostic may have
+    # Note that all valid options must be declared here
+    # together with their defaults.
     option_defaults: ClassVar[dict[str, object]] = {}
 
     # Parent output and system

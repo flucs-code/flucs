@@ -84,3 +84,18 @@ type = "netcdf4"
 save_steps = -1
 diags = []
 type = "netcdf4"
+
+[output.realspace1d]
+save_steps = -1
+diags = []
+type = "netcdf4"
+
+[output.realspace2d]
+save_steps = -1
+diags = []
+type = "netcdf4"
+
+[output.realspace3d]
+save_steps = -1
+diags = []
+type = "netcdf4"

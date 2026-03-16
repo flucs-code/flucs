@@ -89,8 +89,8 @@ class FlucsOutput(ABC):
                 diag_opts = diag_entry.get("options", {})
             else:
                 raise TypeError(
-                    "Each diagnostic must be specified as a string or "
-                    "with {name=..., options={...}}."
+                    "Each diagnostic must be specified either by its name "
+                    "or by a {name=..., options={...}} dictionary."
                 )
             diag_to_add = self.system.diags_dict[diag_name](
                 system=self.system, output=self, options=diag_opts
@@ -324,6 +324,60 @@ class FlucsOutputNC(FlucsOutput):
 
         self.group = dataset.groups[self.group_name]
 
+    def _createDimension(self,
+                         rootgrp: Dataset or Group,
+                         dim_name: str,
+                         dim_size: int or None,
+                         dim_data):
+        """
+        Wrapper for netCDF4's createDimension that allows the user to
+        create dimensions using the / notation for separating group names.
+
+        Parameters
+        ----------
+        rootgrp: netcdf4.Dataset or netcdf4.Group
+            Base group or dataset
+
+        dim_name: str
+            Name of the dimension
+
+        dim_size: int or None
+            Size of the dimension
+
+        dim_data: np.ndarray, list, etc
+            Data for the dimension variable
+        """
+        grp = rootgrp
+
+        name_pieces = dim_name.split("/")
+        name_pieces.reverse()
+
+        while len(name_pieces) > 1:
+            # If len(name_pieces) > 1, then
+            # there is a group name to parse
+            next_piece = name_pieces.pop()
+
+            if next_piece not in grp.groups:
+                grp.createGroup(next_piece)
+
+            grp = grp[next_piece]
+
+            if not isinstance(grp, (Dataset, Group)):
+                raise ValueError(
+                    f"Something is off: '{next_piece}' is supposed "
+                    f"to be a group. Instead, it is a {grp}."
+                )
+
+        # The last piece left in name_pieces should be the dim name
+        dim_name = name_pieces.pop()
+
+        # Finally, create dimension and dimension data in the appropriate group
+        grp.createDimension(dim_name, dim_size)
+        dim_var = grp.createVariable(
+            dim_name, "f4", (dim_name,)
+        )
+        dim_var[:] = dim_data[:]
+
     def _setup_output_file(self):
         """Creates all the necessary groups, dimensions, and variables in the
         netCDF4 file where the output data will be written. Should be called
@@ -342,14 +396,13 @@ class FlucsOutputNC(FlucsOutput):
                 diagnostic_group = self.group[diagnostic.name]
 
                 for var in diagnostic.vars.values():
-                    for dim_name, dim_data in var.dimensions:
+                    for dim_name, dim_data in var.dimensions.items():
                         dim_size = len(dim_data)
 
-                        diagnostic_group.createDimension(dim_name, dim_size)
-                        dim_var = self.group.createVariable(
-                            dim_name, "f4", (dim_name,)
-                        )
-                        dim_var[:] = dim_data[:]
+                        self._createDimension(diagnostic_group,
+                                              dim_name,
+                                              dim_size,
+                                              dim_data)
 
                     # Create variable
                     if var.is_complex:
@@ -407,16 +460,15 @@ class FlucsOutputNC(FlucsOutput):
                         if var.is_complex:
                             diagnostic_group[f"{var.name}_real"][
                                 first_index:last_index
-                            ] = np.array(var.data_cache).real
+                            ] = np.asarray(var.data_cache).real
                             diagnostic_group[f"{var.name}_imag"][
                                 first_index:last_index
-                            ] = np.array(var.data_cache).imag
+                            ] = np.asarray(var.data_cache).imag
                         else:
                             diagnostic_group[var.name][
                                 first_index:last_index
-                            ] = np.array(var.data_cache)
+                            ] = np.asarray(var.data_cache).real
                     else:
-                        # TODO: Rewrite with np.array
                         if var.is_complex:
                             for i in range(times_to_write):
                                 diagnostic_group[f"{var.name}_real"][
@@ -429,6 +481,6 @@ class FlucsOutputNC(FlucsOutput):
                             for i in range(times_to_write):
                                 diagnostic_group[var.name][
                                     first_index + i, :
-                                ] = var.data_cache[i][:]
+                                ] = var.data_cache[i][:].real
 
                 diag.clear()
