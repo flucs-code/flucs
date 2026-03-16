@@ -15,8 +15,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import cupy as cp
-from cupy.cuda import cufft
 import numpy as np
+from cupy.cuda import cufft
 
 import flucs
 from flucs import FlucsInput
