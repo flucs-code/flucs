@@ -324,11 +324,13 @@ class FlucsOutputNC(FlucsOutput):
 
         self.group = dataset.groups[self.group_name]
 
-    def _createDimension(self,
-                         rootgrp: Dataset or Group,
-                         dim_name: str,
-                         dim_size: int or None,
-                         dim_data):
+    def _createDimension(
+        self,
+        rootgrp: Dataset or Group,
+        dim_name: str,
+        dim_size: int or None,
+        dim_data,
+    ):
         """
         Wrapper for netCDF4's createDimension that allows the user to
         create dimensions using the / notation for separating group names.
@@ -373,9 +375,7 @@ class FlucsOutputNC(FlucsOutput):
 
         # Finally, create dimension and dimension data in the appropriate group
         grp.createDimension(dim_name, dim_size)
-        dim_var = grp.createVariable(
-            dim_name, "f4", (dim_name,)
-        )
+        dim_var = grp.createVariable(dim_name, "f4", (dim_name,))
         dim_var[:] = dim_data[:]
 
     def _setup_output_file(self):
@@ -399,10 +399,9 @@ class FlucsOutputNC(FlucsOutput):
                     for dim_name, dim_data in var.dimensions.items():
                         dim_size = len(dim_data)
 
-                        self._createDimension(diagnostic_group,
-                                              dim_name,
-                                              dim_size,
-                                              dim_data)
+                        self._createDimension(
+                            diagnostic_group, dim_name, dim_size, dim_data
+                        )
 
                     # Create variable
                     if var.is_complex:

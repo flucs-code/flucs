@@ -724,12 +724,15 @@ class FourierSystem(FlucsSystem):
 
         # TODO: this needs to be changed if there's flow shear
         fields_cpu_memory: np.ndarray = self.fields[
-            self.current_step % self.fields_history_size].get()
+            self.current_step % self.fields_history_size
+        ].get()
 
-        self.realspace_fields = np.fft.irfftn(fields_cpu_memory,
-                                              norm="forward",
-                                              axes=(1, 2, 3),
-                                              s=self.full_unpadded_tuple)
+        self.realspace_fields = np.fft.irfftn(
+            fields_cpu_memory,
+            norm="forward",
+            axes=(1, 2, 3),
+            s=self.full_unpadded_tuple,
+        )
 
     @abstractmethod
     def begin_time_step(self) -> None:

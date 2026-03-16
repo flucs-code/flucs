@@ -31,12 +31,14 @@ class LinearSpectrumDiag(FlucsDiagnostic):
             "kz": self.system.kz,
         }
 
-        self.add_var(FlucsDiagnosticVariable(
-            name="omega",
-            shape=("kz", "kx", "ky"),
-            dimensions_dict=dimensions_dict,
-            is_complex=True,
-        ))
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="omega",
+                shape=("kz", "kx", "ky"),
+                dimensions_dict=dimensions_dict,
+                is_complex=True,
+            )
+        )
 
     def execute(self):
         # Do not execute at first time step
@@ -54,11 +56,13 @@ class LinearSpectrumDiag(FlucsDiagnostic):
             self.field_index, :
         ]
 
-        self.vars["omega"].data_cache.append(cp.as_numpy(
-            (1j / self.system.current_dt)
-            * (current_field - previous_field)
-            / (alpha * current_field + (1 - alpha) * previous_field)
-        ))
+        self.vars["omega"].data_cache.append(
+            cp.as_numpy(
+                (1j / self.system.current_dt)
+                * (current_field - previous_field)
+                / (alpha * current_field + (1 - alpha) * previous_field)
+            )
+        )
 
 
 class FourierSliceDiag(FlucsDiagnostic):
@@ -124,27 +128,26 @@ class FourierSliceDiag(FlucsDiagnostic):
             self.system._precompute_wavenumbers()
 
             dimensions = {
-                f"{loc_name}/field": np.arange(
-                    system.number_of_fields
-                )[ifield],
+                f"{loc_name}/field": np.arange(system.number_of_fields)[ifield],
                 f"{loc_name}/kz": system.kz[ikz],
                 f"{loc_name}/kx": system.kx[ikx],
                 f"{loc_name}/ky": system.ky[iky],
             }
 
-            self.add_var(FlucsDiagnosticVariable(
-                name=f"{loc_name}/data",
-                shape=("field", "kz", "kx", "ky"),
-                dimensions=dimensions,
-                is_complex=True,
-            ))
+            self.add_var(
+                FlucsDiagnosticVariable(
+                    name=f"{loc_name}/data",
+                    shape=("field", "kz", "kx", "ky"),
+                    dimensions=dimensions,
+                    is_complex=True,
+                )
+            )
 
             def slice_calculator():
                 self.vars[f"{loc_name}/data"].data_cache.append(
                     system.fields[
                         system.current_step % system.fields_history_size
                     ][ifield, ikz, ikx, iky].get()
-
                 )
 
             self.slice_calculators.append(slice_calculator)
@@ -219,32 +222,28 @@ class RealspaceSliceDiag(FlucsDiagnostic):
                 )
 
             dimensions = {
-                f"{loc_name}/field": np.arange(
-                    self.system.number_of_fields
-                )[ifield],
+                f"{loc_name}/field": np.arange(self.system.number_of_fields)[
+                    ifield
+                ],
                 f"{loc_name}/z": np.linspace(
-                    0,
-                    self.system.input["dimensions.Lz"],
-                    self.system.nz
+                    0, self.system.input["dimensions.Lz"], self.system.nz
                 )[iz],
                 f"{loc_name}/x": np.linspace(
-                    0,
-                    self.system.input["dimensions.Lx"],
-                    self.system.nx
+                    0, self.system.input["dimensions.Lx"], self.system.nx
                 )[ix],
                 f"{loc_name}/y": np.linspace(
-                    0,
-                    self.system.input["dimensions.Ly"],
-                    self.system.ny
+                    0, self.system.input["dimensions.Ly"], self.system.ny
                 )[iy],
             }
 
-            self.add_var(FlucsDiagnosticVariable(
-                name=f"{loc_name}/data",
-                shape=("field", "z", "x", "y"),
-                dimensions=dimensions,
-                is_complex=False,
-            ))
+            self.add_var(
+                FlucsDiagnosticVariable(
+                    name=f"{loc_name}/data",
+                    shape=("field", "z", "x", "y"),
+                    dimensions=dimensions,
+                    is_complex=False,
+                )
+            )
 
             def slice_calculator():
                 self.vars[f"{loc_name}/data"].data_cache.append(
