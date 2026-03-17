@@ -155,8 +155,6 @@ class FourierSliceDiag(FlucsDiagnostic):
         pass
 
     def execute(self):
-        self.system.get_realspace_fields()
-
         for slice_calculator in self.slice_calculators:
             slice_calculator()
 
