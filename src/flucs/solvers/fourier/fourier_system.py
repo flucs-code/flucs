@@ -1,5 +1,5 @@
 """
-Abstract base class for a system that can be solved by FourierSolver.
+Abstract base class for a system that can be solved by `FourierSolver`.
 """
 
 from abc import abstractmethod
@@ -17,27 +17,29 @@ class FourierSystem(FlucsSystem):
     """A generic system of equations solved using pseudospectral Fourier
     methods."""
 
-    # Number of fields that the solver is solving for
     number_of_fields: int
+    """Number of fields that the solver is solving for."""
 
     # Number of fields to be DFT'ed for the pseudospectral nonlinearity
     # number_of_dfts: int
 
-    # This will hold all the fields. Should be a list of CuPy arrays.
-    # It's a list in order to store fields at previous time steps, as required
-    # by the algorithm.
     fields: list
+    """A list of CuPy arrays holding all the fields.
 
-    # Fourier-space pieces out of which we construct the nonlinear term at each
-    # time step
+    It's a list in order to store fields at previous time steps, as required
+    by the algorithm."""
+
     dft_bits: cp.ndarray
+    """Fourier-space pieces out of which we construct the nonlinear term at each
+    time step."""
 
-    # Linear matrix (used for linear postprocessing)
     linear_matrix: cp.ndarray
+    """Linear matrix (used for linear postprocessing)"""
 
-    # Iteration matrices (used for precomputing)
     rhs: cp.ndarray
+    """Iteration matrix (used for precomputing)"""
     inverse_lhs: cp.ndarray
+    """Iteration matrix (used for precomputing)"""
 
     # CFL condition variables
     max_cfl: float
@@ -66,8 +68,8 @@ class FourierSystem(FlucsSystem):
     half_padded_cuda_grid_size: int
     full_padded_cuda_grid_size: int
 
-    # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
+    """Initial conditions, always in CPU memory."""
 
     # Array sizes
     nx: int
@@ -256,13 +258,14 @@ class FourierSystem(FlucsSystem):
             / self.input["dimensions.Ly"]
         )
 
-    def get_broadcast_wavenumbers(self):
-        """Returns wavenumber arrays broadcast to (nz, nx, half_ny)
+    def get_broadcast_wavenumbers(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Returns wavenumber arrays broadcast to ``(nz, nx, half_ny)``
 
         Returns
         -------
-        kx_broadcast, ky_broadcast, kz_broadcast
-            Wavenumber arrays of shape (nz, nx, half_ny)
+            Wavenumber arrays of shape ``(nz, nx, half_ny)``.
 
         """
         kx_broadcast = np.broadcast_to(
@@ -280,12 +283,13 @@ class FourierSystem(FlucsSystem):
         return kx_broadcast, ky_broadcast, kz_broadcast
 
     @abstractmethod
-    def compute_complex_omega(self):
-        """Returns an array of shape (nz, nx, half_ny, number_of_fields) with
-        the solutions to the linear dispersion relation. This should be
+    def compute_complex_omega(self) -> np.ndarray:
+        """Returns an array of shape ``(nz, nx, half_ny, number_of_fields)``
+        with the solutions to the linear dispersion relation. This should be
         calculated using only CPU resources.
 
         """
+        pass
 
     def ready(self) -> None:
         # Basic setup
@@ -460,7 +464,7 @@ class FourierSystem(FlucsSystem):
 
     def compute_linear_matrix(self) -> None:
         """Computes the linear matrix using the CuPy module and stores the
-        result in self.linear_matrix"""
+        result in `linear_matrix`"""
         self.linear_matrix = cp.zeros(
             (
                 self.number_of_fields,

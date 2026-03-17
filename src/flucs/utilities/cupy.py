@@ -13,12 +13,12 @@ def cupy_set_device_pointer(
 
     Parameters
     ----------
-    module : CuPy.RawModule
+    module
         CuPy module that declares the pointer to be assigned.
-    ptr_name : str
+    ptr_name
         Name of the pointer variable.
-    data_array : CuPy.array
-        Device memory to which ptr_name should point.
+    data_array
+        Device memory to which ``ptr_name`` should point.
 
     """
 
@@ -29,19 +29,19 @@ def cupy_set_device_pointer(
 
 
 class ModuleOptions:
-    """Helper class that builds the tuple of options needed to compule CuPy's
-    RawModule. Useful for defining compile-time macros and definitions.
+    """Helper class that builds the tuple of options needed to compile a
+    `cupy.RawModule`.
 
-    Attributes
-    ----------
-    string_options : tuple
-        A manually specified tuple of string options to be passed to the
-        compiler. By default, this is
-        ("--ptxas-options=-O3", "--use_fast_math").
+    Useful for defining compile-time macros and definitions.
     """
 
     _defs: dict
     string_options = ("--ptxas-options=-O3", "--use_fast_math")
+    """
+    A manually specified tuple of string options to be passed to the compiler.
+
+    By default, this is ``("--ptxas-options=-O3", "--use_fast_math")``.
+    """
 
     def __init__(self) -> None:
         self._defs = {}
@@ -54,20 +54,20 @@ class ModuleOptions:
         self, name: str, value: Any = "", float_convert: bool = False
     ):
         """Adds a definition to the compiler flags.
-        Effectively, this is equivalent to adding
 
-        #define name value
+        Effectively, this is equivalent to adding::
+
+            #define name value
 
         to the source files.
 
         Parameters
         ----------
-        name : str
+        name
             Name of the macro/constant to be defined.
-
         value
-            Converted to a string if needed. If value is any of (float,
-            np.float16, np.float32, np.float64), "(FLUCS_FLOAT)" is added in
+            Converted to a string if needed. If value is any of ``(float,
+            np.float16, np.float32, np.float64)``, ``(FLUCS_FLOAT)`` is added in
             front of it in order to cast it to the correct type.
 
         """
@@ -85,7 +85,7 @@ class ModuleOptions:
         self._defs[name] = value_to_add
 
     def get_options(self) -> tuple:
-        """Returns the tuple of options to be passed to CuPy's RawModule/"""
+        """Returns the tuple of options to be passed to `cupy.RawModule`."""
 
         ret = ()
         ret += self.string_options

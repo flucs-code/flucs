@@ -18,41 +18,48 @@ if TYPE_CHECKING:
 @dataclass
 class FlucsDiagnosticVariable:
     """Data and dimensions for a single output variable.
-    A FlucsDiagnostic has a set of FlucsDiagnosticVariable.
+
+    A `FlucsDiagnostic` has a set of `FlucsDiagnosticVariable`.
     """
 
-    # Name of the data variable
     name: str
+    """Name of the data variable."""
 
-    # Shape of the data for a single time step.
-    # This is a tuple of strings that correspond to the names of the dimensions
-    # used in the netCDF4 file and specified in dimensions_dict.
-    shape: tuple
+    shape: tuple[str, ...]
+    """Shape of the data for a single time step.
+
+    This is a tuple of strings that correspond to the names of the dimensions
+    used in the netCDF4 file and specified in `dimensions`.
+    """
 
     dimensions: dict[str, np.ndarray | float]
 
     data_cache: list[np.ndarray] = field(default_factory=list, init=False)
 
-    # Complex-number variables are handled separately
     is_complex: bool = False
+    """Complex-number variables are handled separately."""
 
 
 class FlucsDiagnostic(ABC):
-    """Prepares data to be written by a FlucsOutput."""
+    """Prepares data to be written by a `FlucsOutput`."""
 
-    # Name of the diagnostic
     name: str
+    """Name of the diagnostic."""
 
-    # Parent output and system
     output: FlucsOutput
+    """Parent output."""
+
     system: FlucsSystem
+    """Parent system."""
 
-    # Length of the data cache, i.e., number of
-    # saves to be written at next write
     cache_len: int
+    """Length of the data cache
 
-    # Output variables
+    i.e. the number of saves to be written at next write.
+    """
+
     vars: dict[str, FlucsDiagnosticVariable]
+    """Output variables."""
 
     def __init__(self, system: FlucsSystem, output: FlucsOutput):
         self.system = system

@@ -1,5 +1,5 @@
 """
-Defines the FlucsOutput class that handles a group of diagnostics that are
+Defines the `FlucsOutput` class that handles a group of diagnostics that are
 executed together and output to a file of specified format.
 """
 
@@ -24,28 +24,27 @@ if TYPE_CHECKING:
 _registered_outputs = entry_points().select(group="flucs.output")
 
 
-def get_output_type(output_type: str):
+def get_output_type(output_type: str) -> type[FlucsOutput]:
     """Returns an output type.
 
     Parameters
     ----------
-    output_type: str
+    output_type
         Name of the output type. Must be registered as an
-        entry point in the flucs.outputs group.
+        entry point in the ``flucs.outputs`` group.
 
     Returns
     -------
-    Appropriate FlucsOutput type.
-
+        Appropriate `FlucsOutput` type.
     """
     return _registered_outputs[output_type].load()
 
 
 class FlucsOutput(ABC):
-    """Deals with a single output file. A FlucsSystem typically has several
-    FlucsOuputs that handle different kinds of diagnostics and different kinds
-    of output formats.
+    """Deals with a single output file.
 
+    A `FlucsSystem` typically has several `FlucsOutput`'s that handle different
+    kinds of diagnostics and different kinds of output formats.
     """
 
     name: str
@@ -55,15 +54,17 @@ class FlucsOutput(ABC):
     save_steps: int
     next_save: int
 
-    # Associated system
     system: FlucsSystem
+    """Associated system"""
 
-    # List of diagnostics
     diagnostics: list[FlucsDiagnostic]
+    """List of diagnostics"""
 
-    # Cache of times and dts at which data was saved
     time_cache: list[float]
+    """Cache of times at which data was saved."""
+
     dt_cache: list[float]
+    """Cache of ``dt``'s at which data was saved."""
 
     def __new__(cls, name: str, system: FlucsSystem):
         output_type = system.input[f"output.{name}.type"]
@@ -211,13 +212,13 @@ class FlucsOutputText(FlucsOutput):
 
         super().execute()
 
-    def format_data(self, data):
+    def format_data(self, data: str | int | float | complex | np.number) -> str:
         """Returns an appropriately formatted representation of given data as
-        a string of fixed width equal to FlucsOutputText.column_width.
+        a string of fixed width equal to `column_width`.
 
         Parameters
         ----------
-        data: str, int, float, or complex
+        data
             The data to be formatted
 
         """
@@ -274,13 +275,16 @@ class FlucsOutputText(FlucsOutput):
 class FlucsOutputNC(FlucsOutput):
     """netCDF4 output"""
 
-    extension = "nc"
-    # Dataset for the netCDF4 file
-    dataset: Dataset
+    extension: str = "nc"
 
-    # netCDF4 group to write to
-    group_name: str
+    dataset: Dataset
+    """Dataset for the netCDF4 file"""
+
     group: Group
+    """netCDF4 group to write to."""
+
+    group_name: str
+    """Name of the netCDF4 group to write to."""
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
@@ -358,8 +362,8 @@ class FlucsOutputNC(FlucsOutput):
 
     def write(self):
         """Saves any cached diagnostic data to disk and clears the cache.
-        Saves data only if we are not timing.
 
+        Saves data only if we are not timing.
         """
         if self.system.solver.state != FlucsSolverState.RUNNING:
             return

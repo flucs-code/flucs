@@ -113,3 +113,32 @@ $ ruff check <path to file> [--fix]
 The `--fix` flag is optional, and will automatically correct many issues. Note that 
 both the `format` and `check` commands will also apply recursively if run on a directory 
 (such as `flucs/src`). 
+
+## Documentation
+
+To build the documentation locally, first install with the `docs` group or
+`dev` group:
+
+```console
+$ pip install -e .[cuda13] --group docs
+# or...
+$ pip install -e .[cuda13] --group dev
+```
+
+For `uv` users, the `docs` group will be included when using `uv sync`.
+
+The docs can then be built using:
+
+```console
+$ cd docs
+$ make html
+```
+
+A simple HTTP server can be set up using:
+
+```console
+$ python -m http.server -d "$(pwd)/_build/html"
+```
+
+The docs can then be viewed by navigating to the address displayed in your
+terminal.
