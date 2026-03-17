@@ -70,7 +70,30 @@ class FlucsSystem(ABC):
     steps_until_next_write: int
 
     # A dict of supported diagnostics
-    diags_dict: dict[str, type[FlucsDiagnostic]]
+    diags: dict[str, type[FlucsDiagnostic]]
+
+    @classmethod
+    def get_available_diags(cls) -> dict[str, type[FlucsDiagnostic]]:
+        """Returns a dict of available diagnostics.
+        Goes recursively through all the parent systems.
+
+        """
+
+        # FlucsDiagnostic uses its name attribute to create a hash
+        # so using a set here will give us a set of unique diagnostics
+        # where uniqueness is based on their name.
+        diags = set()
+
+        for parent_cls in reversed(cls.__mro__):
+            if not issubclass(parent_cls, FlucsSystem):
+                continue
+
+            if not hasattr(parent_cls, "diags"):
+                continue
+
+            diags.update(parent_cls.diags)
+
+        return {diag.name: diag for diag in diags}
 
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):

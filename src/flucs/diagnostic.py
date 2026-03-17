@@ -104,6 +104,10 @@ class FlucsDiagnostic(ABC):
         for var in self.vars.values():
             var.data_cache.clear()
 
+    def __hash__(self):
+        """Hash diagnostics using their name."""
+        return hash(self.name)
+
     @abstractmethod
     def init_vars(self) -> None:
         """Initialises self.vars."""

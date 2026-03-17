@@ -8,6 +8,7 @@ from typing import ClassVar
 import cupy as cp
 import numpy as np
 
+from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
@@ -111,10 +112,10 @@ class FourierSystem(FlucsSystem):
     kz: np.ndarray
 
     # Diagnostics available to all FourierSystems
-    base_diags_dict: ClassVar[dict[str, type]] = {
-        "linear_spectrum": LinearSpectrumDiag,
-        "fourier_slice": FourierSliceDiag,
-        "realspace_slice": RealspaceSliceDiag,
+    diags: ClassVar[set[type[FlucsDiagnostic]]] = {
+        LinearSpectrumDiag,
+        FourierSliceDiag,
+        RealspaceSliceDiag,
     }
 
     def _interpret_input(self):

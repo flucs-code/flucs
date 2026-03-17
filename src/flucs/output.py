@@ -81,10 +81,7 @@ class FlucsOutput(ABC):
     def _add_diagnostics_from_input(self):
         """Adds all diagnostics from the input of the associated FlucsSystem"""
 
-        available_diags = {
-            **getattr(self.system, "base_diags_dict", {}),
-            **getattr(self.system, "diags_dict", {}),
-        }
+        available_diags = self.system.get_available_diags()
 
         for diag_entry in self.system.input[f"output.{self.name}.diags"]:
             if isinstance(diag_entry, str):
