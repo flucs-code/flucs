@@ -23,10 +23,11 @@ class FourierSystem(FlucsSystem):
     # Number of fields to be DFT'ed for the pseudospectral nonlinearity
     # number_of_dfts: int
 
-    # A list of CuPy arrays holding all the fields.
-    # It's a list in order to store fields at previous time steps, as required
-    # by the algorithm.
     fields: list
+    """A list of CuPy arrays holding all the fields.
+
+    It's a list in order to store fields at previous time steps, as required
+    by the algorithm."""
 
     dft_bits: cp.ndarray
     """Fourier-space pieces out of which we construct the nonlinear term at each
