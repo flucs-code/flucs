@@ -15,9 +15,9 @@ from flucs.utilities.cupy import cupy_set_device_pointer
 from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
-    FourierSliceDiag,
+    FourierDataDiag,
     LinearSpectrumDiag,
-    RealspaceSliceDiag,
+    RealspaceDataDiag,
 )
 
 
@@ -114,8 +114,8 @@ class FourierSystem(FlucsSystem):
     # Diagnostics available to all FourierSystems
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
         LinearSpectrumDiag,
-        FourierSliceDiag,
-        RealspaceSliceDiag,
+        FourierDataDiag,
+        RealspaceDataDiag,
     }
 
     def _interpret_input(self):

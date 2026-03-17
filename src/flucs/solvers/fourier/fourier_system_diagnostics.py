@@ -65,16 +65,16 @@ class LinearSpectrumDiag(FlucsDiagnostic):
         )
 
 
-class FourierSliceDiag(FlucsDiagnostic):
+class FourierDataDiag(FlucsDiagnostic):
     """
-    Outputs 1D, 2D, or 3D slices of the Fourier-space data.
+    Outputs 1D, 2D, or 3D `locations` of the Fourier-space data.
 
     Requires specifying diagnostic options with the following structure:
     {
-        locations = [loc0, loc1, ...]
+        locations = [location0, location1, ...]
     }
 
-    where each of loc0, loc1, etc, are strings with the format
+    where each of location0, location1, etc, are strings with the format
 
         'ifield, ikz, ikx, iky'
 
@@ -83,7 +83,7 @@ class FourierSliceDiag(FlucsDiagnostic):
     For example, '0, :, :, :' saves all Fourier data for field 0.
     """
 
-    name = "fourier_slice"
+    name = "fourier_data"
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
     type: str
     slices: dict
@@ -166,16 +166,16 @@ class FourierSliceDiag(FlucsDiagnostic):
             slice_calculator()
 
 
-class RealspaceSliceDiag(FlucsDiagnostic):
+class RealspaceDataDiag(FlucsDiagnostic):
     """
-    Outputs 1D, 2D, or 3D slices of the real-space data.
+    Outputs 1D, 2D, or 3D `locations` of the real-space data.
 
     Requires specifying diagnostic options with the following structure:
     {
-        locations = [loc0, loc1, ...]
+        locations = [location0, location1, ...]
     }
 
-    where each of loc0, loc1, etc, are strings with the format
+    where each of location0, location1, etc, are strings with the format
 
         'ifield, iz, ix, iy'
 
@@ -184,7 +184,7 @@ class RealspaceSliceDiag(FlucsDiagnostic):
     For example, '0, 0, :, :' produces a cut of field 0 in the z=0 plane.
     """
 
-    name = "realspace_slice"
+    name = "realspace_data"
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
     type: str
     slices: dict
