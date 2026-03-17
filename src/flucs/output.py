@@ -80,6 +80,12 @@ class FlucsOutput(ABC):
 
     def _add_diagnostics_from_input(self):
         """Adds all diagnostics from the input of the associated FlucsSystem"""
+
+        available_diags = {
+            **getattr(self.system, "base_diags_dict", {}),
+            **getattr(self.system, "diags_dict", {}),
+        }
+
         for diag_entry in self.system.input[f"output.{self.name}.diags"]:
             if isinstance(diag_entry, str):
                 diag_name = diag_entry
@@ -92,7 +98,11 @@ class FlucsOutput(ABC):
                     "Each diagnostic must be specified either by its name "
                     "or by a {name=..., options={...}} dictionary."
                 )
-            diag_to_add = self.system.diags_dict[diag_name](
+
+            if diag_name not in available_diags:
+                raise KeyError(f"Diagnostic '{diag_name}' is not available.")
+
+            diag_to_add = available_diags[diag_name](
                 system=self.system, output=self, options=diag_opts
             )
             diag_to_add.output = self

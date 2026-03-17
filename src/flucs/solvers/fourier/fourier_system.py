@@ -3,6 +3,7 @@ Abstract base class for a system that can be solved by FourierSolver.
 """
 
 from abc import abstractmethod
+from typing import ClassVar
 
 import cupy as cp
 import numpy as np
@@ -11,6 +12,12 @@ from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
 from flucs.utilities.smooth_numbers import next_smooth_number
+
+from .fourier_system_diagnostics import (
+    FourierSliceDiag,
+    LinearSpectrumDiag,
+    RealspaceSliceDiag,
+)
 
 
 class FourierSystem(FlucsSystem):
@@ -102,6 +109,13 @@ class FourierSystem(FlucsSystem):
     kx: np.ndarray
     ky: np.ndarray
     kz: np.ndarray
+
+    # Diagnostics available to all FourierSystems
+    base_diags_dict: ClassVar[dict[str, type]] = {
+        "linear_spectrum": LinearSpectrumDiag,
+        "fourier_slice": FourierSliceDiag,
+        "realspace_slice": RealspaceSliceDiag,
+    }
 
     def _interpret_input(self):
         """Validates and sets up the number of lattice points."""

@@ -1,12 +1,13 @@
 from collections.abc import Callable
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import cupy as cp
 import numpy as np
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 
-from .fourier_system import FourierSystem
+if TYPE_CHECKING:
+    from .fourier_system import FourierSystem
 
 
 class LinearSpectrumDiag(FlucsDiagnostic):
@@ -18,7 +19,7 @@ class LinearSpectrumDiag(FlucsDiagnostic):
 
     name = "linear_spectrum"
     is_complex = True
-    system: FourierSystem
+    system: "FourierSystem"
 
     # Speficies which field to use for estimating linear frequencies
     field_index: int = 0
