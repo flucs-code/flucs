@@ -24,8 +24,8 @@ def plot_0d_vs_time(post, variable=None):
         sim_color = plt.cm.rainbow(np.linspace(0, 1, len(nc_paths)))[index]
 
         # Read data from netCDF file
-        time, _ = post.load_netcdf_variable(nc_path, "time")
-        data, _ = post.load_netcdf_variable(nc_path, variable)
+        time, _, _ = post.load_netcdf_variable(nc_path, "time")
+        data, _, _ = post.load_netcdf_variable(nc_path, variable)
 
         # Plot data
         ax.plot(

@@ -2,6 +2,7 @@ import argparse
 import inspect
 import pathlib as pl
 from collections.abc import Sequence
+from collections import OrderedDict
 from typing import Any, Literal
 
 import matplotlib.pyplot as plt
@@ -250,9 +251,9 @@ class FlucsPostProcessing:
               after concatenation across groups
             - boundary_indices is a list of integer indices marking the
               boundaries between groups in the concatenated time axis
-            - dims_dicts is a list of dictionaries of the variable's dimensions
-              and their data. The length of dims_dicts is the total number
-              of restart groups.
+            - dims_dicts is a list of ordered dictionaries of the variable's
+              dimensions and their data. The length of dims_dicts is the
+              total number of restart groups.
         """
 
         # Helper function to get variable from group
@@ -264,9 +265,9 @@ class FlucsPostProcessing:
                 return None
 
             # Diagnostic variables
-            diag, var = name.split("/", 1)
-            if diag in grp.groups and var in grp.groups[diag].variables:
-                return grp.groups[diag].variables[var]
+            subgrp, var = name.split("/", 1)
+            if subgrp in grp.groups:
+                return _get_var(grp[subgrp], var)
             return None
 
         # Read data from netCDF file
@@ -285,7 +286,7 @@ class FlucsPostProcessing:
             var_iter = (
                 (grp_number, var_obj)
                 for grp_number, grp in groups
-                if (var_obj := grp[variable]) is not None
+                if (var_obj := _get_var(grp, variable)) is not None
             )
             try:
                 grp_number, var = next(var_iter)
@@ -305,8 +306,8 @@ class FlucsPostProcessing:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
 
-                dims_dicts.append({})
-                var_obj = grp[variable]
+                dims_dicts.append(OrderedDict())
+                var_obj = _get_var(grp, variable)
                 if var_obj is not None:
                     arr = np.asarray(var_obj[:])
                     if arr.shape[0] != time_length:

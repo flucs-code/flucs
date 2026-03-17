@@ -2,6 +2,8 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
+from collections import OrderedDict
+from bisect import bisect_right
 
 from flucs.postprocessing import FlucsPostProcessing
 
@@ -9,26 +11,55 @@ def plot_1d(ax, data, dims):
     # 1D plots here
     pass
 
-def plot_2d(ax, data, dims):
-    n_levels = 200
+def plot_2d(axs, data, plot_dims):
     ampl = np.max(np.abs(data))
-    levels = np.linspace(-ampl, ampl, n_levels)
-    ax.contourf(dims[0], dims[1], data[0, :, :].transpose(), cmap="seismic", levels=levels)
+
+    try:
+        for ifield, ax in enumerate(axs):
+            ax.imshow(
+                data[ifield, :, :].transpose(),
+                origin="lower",
+                extent=[plot_dims[0].min(), plot_dims[0].max(), plot_dims[1].min(), plot_dims[1].max()],
+                aspect="auto",
+                cmap="seismic",
+                vmin=-ampl,
+                vmax=ampl,
+            )
+    except IndexError:
+        print("Could not plot, likely missing data.")
+
 
 def plot_3d(ax, data, dims):
     # 3D cube plots here
     pass
 
+
+def parse_slice(s: str) -> slice:
+    # Check if slice syntax or just a single index
+    if ":" not in s:
+        index = int(s.strip())
+        return slice(index, index + 1)
+
+    parts = s.split(":")
+    if len(parts) > 3:
+        raise ValueError(f"Invalid slice string: {s}")
+
+    def get_index(i):
+        return None if i == "" else int(i)
+
+    return slice(*(get_index(p) for p in parts))
+
 def interative_slider_plot(post, loc):
     loc_str = f"realspace_slice/location_{loc}/"
     nc_paths = post.get_valid_files(loc_str + "data")
 
-    plot_fun = {1: plot_1d, 2: plot_2d, 3: plot_3d}[loc.count(":")]
-
     for index, nc_path in enumerate(nc_paths):
-        fig, ax = plt.subplots(1, 1)
         time, boundaries, _ = post.load_netcdf_variable(nc_path, "time")
         data, _, dims_dicts = post.load_netcdf_variable(nc_path, loc_str + "data")
+
+        fig, axs = plt.subplots(1, data.shape[1])
+        if data.shape[1] == 1:
+            axs = (axs,)
 
         fig.subplots_adjust(bottom=0.22)
         slider = Slider(
@@ -40,12 +71,25 @@ def interative_slider_plot(post, loc):
             valstep=1
         )
 
-        dims = [dims_dicts[0]["x"], dims_dicts[0]["y"]]
+        plot_dims_groups = []
+        for i in range(len(dims_dicts)):
+            plot_dims_groups.append([])
+            for num_coord, coord in enumerate(dims_dicts[i].keys()):
+                if num_coord == 0:
+                    continue  # The first coord is the field index
+                if len(dims_dicts[i][coord]) == 1:
+                    continue
+                plot_dims_groups[-1].append(dims_dicts[i][coord])
 
-        def update(fig=fig, ax=ax, slider=slider, time=time, data=data, dims=dims):
+        axes_to_remove = tuple(i for i, n in enumerate(data.shape) if n == 1 and i > 1)
+        plot_fun = {1: plot_1d, 2: plot_2d, 3: plot_3d}[3 - len(axes_to_remove)]
+
+        def update(val, fig=fig, axs=axs, slider=slider, time=time, data=np.squeeze(data, axes_to_remove), plot_dims_groups=plot_dims_groups):
             time_index = int(slider.val)
-            plot_fun(ax, data[time_index, 0, :, :], dims)
-            slider.valtext.set_text(f"t = {time[time_index]}")
+            restart_index = bisect_right(boundaries, time_index)
+            plot_fun(axs, data[time_index, :], plot_dims_groups[restart_index])
+            slider.valtext.set_text(f"t = {time[time_index]:.2f}")
+            fig.canvas.draw_idle()
 
         slider.on_changed(update)
 
