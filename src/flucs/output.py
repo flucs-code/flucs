@@ -366,7 +366,7 @@ class FlucsOutputNC(FlucsOutput):
 
             if not isinstance(grp, (Dataset, Group)):
                 raise ValueError(
-                    f"Something is off: '{next_piece}' is supposed "
+                    f"Error creating output: '{next_piece}' is supposed "
                     f"to be a group. Instead, it is a {grp}."
                 )
 

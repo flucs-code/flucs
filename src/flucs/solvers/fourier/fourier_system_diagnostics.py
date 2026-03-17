@@ -75,11 +75,11 @@ class FourierSliceDiag(FlucsDiagnostic):
 
     where each of loc0, loc1, etc, are strings with the format
 
-        'ifield,ikz,ikx,iky'
+        'ifield, ikz, ikx, iky'
 
-    where ifield, ikz, iky, and ikx specify the Fourier-space indices at
+    where ifield, ikz, ikx, and iky specify the Fourier-space indices at
     which is saved. Simple NumPy-like slicing of format a:b:c is allowed.
-    For example, '0,:,:,:' saves all Fourier data for field 0.
+    For example, '0, :, :, :' saves all Fourier data for field 0.
     """
 
     name = "fourier_slice"
@@ -108,7 +108,7 @@ class FourierSliceDiag(FlucsDiagnostic):
             return slice(*(get_index(p) for p in parts))
 
         for loc in self.locations:
-            loc_name = f"loc_{loc}"
+            loc_name = f"location_{loc}"
             try:
                 loc_parts = [part.strip() for part in loc.split(",")]
 
@@ -119,7 +119,7 @@ class FourierSliceDiag(FlucsDiagnostic):
 
             except (IndexError, ValueError):
                 raise ValueError(
-                    f"'{loc}' is not a valid realspace location. "
+                    f"'{loc}' is not a valid Fourier location. "
                     r"The correct location format is '(ifield, ikz, ikx, iky)' "
                     r"where the indices are integers or slices 'a:b:c'."
                 )
@@ -163,7 +163,7 @@ class FourierSliceDiag(FlucsDiagnostic):
 
 class RealspaceSliceDiag(FlucsDiagnostic):
     """
-    Outputs 1D, 2D, or 3D real-space slices of the Fourier-space data.
+    Outputs 1D, 2D, or 3D slices of the real-space data.
 
     Requires specifying diagnostic options with the following structure:
     {
@@ -172,11 +172,11 @@ class RealspaceSliceDiag(FlucsDiagnostic):
 
     where each of loc0, loc1, etc, are strings with the format
 
-        'ifield,ix,iy,iz'
+        'ifield, iz, ix, iy'
 
-    where ifield, ix, iy, and iz specify the real-space indices at
-    which is saved. Simple NumPy-like slicing of format a:b is allowed.
-    For example, '0,0,:,:' produces a cut of field 0 in the z=0 plane.
+    where ifield, iz, ix, and iy specify the real-space indices at
+    which is saved. Simple NumPy-like slicing of format a:b:c is allowed.
+    For example, '0, 0, :, :' produces a cut of field 0 in the z=0 plane.
     """
 
     name = "realspace_slice"
@@ -204,7 +204,7 @@ class RealspaceSliceDiag(FlucsDiagnostic):
             return slice(*(get_index(p) for p in parts))
 
         for loc in self.locations:
-            loc_name = f"loc_{loc}"
+            loc_name = f"location_{loc}"
             try:
                 loc_parts = [part.strip() for part in loc.split(",")]
 
@@ -216,8 +216,8 @@ class RealspaceSliceDiag(FlucsDiagnostic):
             except (IndexError, ValueError):
                 raise ValueError(
                     f"'{loc}' is not a valid realspace location. "
-                    r"The correct location format is '(ifield, iz, ix, ky)' "
-                    r"where the indices are integers or slices 'a:b'."
+                    r"The correct location format is '(ifield, iz, ix, iy)' "
+                    r"where the indices are integers or slices 'a:b:c'."
                 )
 
             dimensions = {
