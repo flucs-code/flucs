@@ -142,7 +142,13 @@ class FourierSliceDiag(FlucsDiagnostic):
                 )
             )
 
-            def slice_calculator():
+            def slice_calculator(
+                loc_name=loc_name,
+                ifield=ifield,
+                ikz=ikz,
+                ikx=ikx,
+                iky=iky,
+            ):
                 self.vars[f"{loc_name}/data"].data_cache.append(
                     system.fields[
                         system.current_step % system.fields_history_size
@@ -242,7 +248,13 @@ class RealspaceSliceDiag(FlucsDiagnostic):
                 )
             )
 
-            def slice_calculator(loc_name=loc_name):
+            def slice_calculator(
+                loc_name=loc_name,
+                ifield=ifield,
+                iz=iz,
+                ix=ix,
+                iy=iy,
+            ):
                 self.vars[f"{loc_name}/data"].data_cache.append(
                     self.system.realspace_fields[ifield, iz, ix, iy]
                 )
