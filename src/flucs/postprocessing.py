@@ -130,19 +130,19 @@ class FlucsPostProcessing:
             if grp_number not in netcdf_variables[name]:
                 netcdf_variables[name].append(grp_number)
 
+        # Helper function to add variables from nested groups
+        def _add_nested(grp, grp_number, base_name="") -> None:
+            for var_name in grp.variables.keys():
+                _add(base_name + var_name, grp_number)
+
+            for subgrp_name, subgrp in grp.groups.items():
+                _add_nested(subgrp, grp_number, base_name=base_name + f"{subgrp_name}/")
+
         # Iterate over groups in netCDF file
         with Dataset(pl.Path(nc_path), "r", format="NETCDF4") as ds:
             for grp_name, grp in ds.groups.items():
                 grp_number = int(grp_name)
-
-                # Group variables
-                for var_name in grp.variables.keys():
-                    _add(var_name, grp_number)
-
-                # Diagnostic variables
-                for diag_name, diag_grp in grp.groups.items():
-                    for var_name in diag_grp.variables.keys():
-                        _add(f"{diag_name}/{var_name}", grp_number)
+                _add_nested(grp, grp_number)
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
@@ -245,11 +245,14 @@ class FlucsPostProcessing:
         Returns
         -------
         tuple
-            (values, boundary_indices) where
+            (values, boundary_indices, dims_dict) where
             - values is an np.ndarray with shape (sum(time_lengths), ...)
               after concatenation across groups
             - boundary_indices is a list of integer indices marking the
               boundaries between groups in the concatenated time axis
+            - dims_dicts is a list of dictionaries of the variable's dimensions
+              and their data. The length of dims_dicts is the total number
+              of restart groups.
         """
 
         # Helper function to get variable from group
@@ -282,7 +285,7 @@ class FlucsPostProcessing:
             var_iter = (
                 (grp_number, var_obj)
                 for grp_number, grp in groups
-                if (var_obj := _get_var(grp, variable)) is not None
+                if (var_obj := grp[variable]) is not None
             )
             try:
                 grp_number, var = next(var_iter)
@@ -297,11 +300,13 @@ class FlucsPostProcessing:
             # Get data from each group
             group_data = []
             boundaries = []
+            dims_dicts = []
             for grp_number, grp in groups:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
 
-                var_obj = _get_var(grp, variable)
+                dims_dicts.append({})
+                var_obj = grp[variable]
                 if var_obj is not None:
                     arr = np.asarray(var_obj[:])
                     if arr.shape[0] != time_length:
@@ -311,6 +316,12 @@ class FlucsPostProcessing:
                             f"(has {arr.shape} but expected {time_length})"
                         )
                     group_data.append(arr.astype(var_dtype, copy=False))
+
+                    # Add dimensions
+                    for dim in var_obj.dimensions:
+                        if dim == "time":
+                            continue
+                        dims_dicts[-1][dim] = np.asarray(var_obj.group()[dim][:])
                 else:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
@@ -325,7 +336,7 @@ class FlucsPostProcessing:
         values = np.concatenate(group_data, axis=0)
         boundary_indices = list(np.cumsum(boundaries)[:-1])
 
-        return values, boundary_indices
+        return values, boundary_indices, dims_dicts
 
     def save(
         self,
