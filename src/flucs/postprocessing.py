@@ -404,7 +404,7 @@ class FlucsPostProcessing:
         *,
         name: str,
         suffix: str,
-        conflict_strategy: Literal["overwrite", "error"] = "overwrite",
+        conflict_strategy: Literal["overwrite", "preserve", "error"] = "overwrite",
         save_kwargs: dict | None = None,
     ) -> None:
         """
@@ -418,7 +418,7 @@ class FlucsPostProcessing:
             The desired filename stem (without suffix).
         suffix : str | None
             File extension.
-        conflict_strategy : {"overwrite", "error"}
+        conflict_strategy : {"overwrite", "preserve", "error"}
             Behaviour when the target save filepath already exists.
         save_kwargs : dict | None
             Arguments forwarded to the type-specific save function.
@@ -429,7 +429,7 @@ class FlucsPostProcessing:
             return None
 
         # Validate conflict strategy
-        if conflict_strategy not in ("overwrite", "error"):
+        if conflict_strategy not in ("overwrite", "preserve", "error"):
             raise ValueError("Invalid value for 'conflict_strategy'.")
 
         # Ensure directory exists
@@ -440,20 +440,28 @@ class FlucsPostProcessing:
         ext = f".{suffix.lstrip('.')}" if suffix else ""
         base_save_filepath = directory / f"{name}{ext}"
 
-        # If conflict_strategy = 'error', raise an error if any existing files
-        # match '{name}_*{ext}'.
-        if conflict_strategy == "error":
-            pattern = f"{name}_*{ext}"
-            if any(directory.glob(pattern)):
+        # Handle conflict strategies
+        if base_save_filepath.exists():
+            if conflict_strategy == "overwrite":
+                pass  
+            elif conflict_strategy == "preserve":
+                return
+            elif conflict_strategy == "error":
                 raise OSError(
-                    f"Conflicting files matching '{pattern}' already "
-                    f"exist: {directory}"
+                    f"Target save path already exists: {base_save_filepath}"
                 )
 
         # Call type-specific save function
-        if isinstance(obj, (Figure, Axes)):
-            self._save_matplotlib_figures(
-                base_save_filepath=base_save_filepath,
+        if isinstance(obj, Figure):
+            self._save_matplotlib_figure(
+                fig=obj,
+                save_filepath=base_save_filepath,
+                save_kwargs=save_kwargs,
+            )
+        elif isinstance(obj, Axes):
+            self._save_matplotlib_figure(
+                fig=obj.figure,
+                save_filepath=base_save_filepath,
                 save_kwargs=save_kwargs,
             )
         else:
@@ -464,35 +472,25 @@ class FlucsPostProcessing:
 
         return
 
-    def _save_matplotlib_figures(
+    def _save_matplotlib_figure(
         self,
-        base_save_filepath: pl.Path,
+        fig: Figure,
+        save_filepath: pl.Path,
         save_kwargs: dict | None,
     ) -> None:
         """
-        Save all open Matplotlib figures to self.save_directory.
+        Save a single Matplotlib figure to self.save_directory.
         """
-
-        # Get all figures to save
-        fignums = plt.get_fignums()
-        if not fignums:
-            raise RuntimeError("No Matplotlib figures available to save.")
 
         # Parse kwargs
         kwargs = dict(save_kwargs or {})
         close_fig = bool(kwargs.pop("close", False))
 
         # Save each figure
-        f = base_save_filepath
-        for fignum in fignums:
-            fig = plt.figure(fignum)
-            number = f"_{int(fig.number):03d}" if len(fignums) > 1 else ""
-            filename = f"{f.with_suffix('').name}{number}{f.suffix}"
-            save_path = f.parent / filename
+        fig.savefig(save_filepath, **kwargs)
 
-            fig.savefig(save_path, **kwargs)
-            if close_fig:
-                plt.close(fig)
+        if close_fig:
+            plt.close(fig)
 
         return
 

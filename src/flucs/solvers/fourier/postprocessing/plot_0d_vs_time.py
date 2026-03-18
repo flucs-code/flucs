@@ -53,7 +53,7 @@ def plot_0d_vs_time(post, variable=None):
         fig,
         name=figure_name,
         suffix="png",
-        save_kwargs={"dpi": 300, "close": True},
+        save_kwargs={"dpi": 300},
     )
 
     plt.show()
