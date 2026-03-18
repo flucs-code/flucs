@@ -62,6 +62,7 @@ def plot_0d_vs_time(post, variable=None):
 
 
 if __name__ == "__main__":
+
     # Setup parser
     parser = argparse.ArgumentParser(
         parents=[FlucsPostProcessing.parser()],
@@ -70,9 +71,7 @@ if __name__ == "__main__":
         ),
     )
 
-    operation_modes = parser.add_mutually_exclusive_group(required=True)
-
-    operation_modes.add_argument(
+    parser.add_argument(
         "--list",
         "-l",
         action="store_true",
@@ -80,7 +79,7 @@ if __name__ == "__main__":
         help="List all available variables to plot and exit.",
     )
 
-    operation_modes.add_argument(
+    parser.add_argument(
         "--variable",
         "-v",
         type=str,
