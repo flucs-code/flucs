@@ -22,7 +22,8 @@ class FlucsPostProcessing:
 
     # Postprocessing-specific attributes
     io_paths: list[pl.Path]
-    output_file: str | None
+    output_files: list[str] | None
+    _output_paths: dict[pl.Path, list[pl.Path]]
     save_directory: pl.Path | None
     _script_paths: dict[str, list[pl.Path]]
 
@@ -100,6 +101,37 @@ class FlucsPostProcessing:
             "'python <script path> --help'"
         )
 
+    def _get_output_paths(self) -> dict[pl.Path, list[pl.Path]]:
+        """
+        For each i/o directory, gathers the paths to the output files
+        specified by self.output_files.
+
+        Returns
+        -------
+        dict[pl.Path, list[pl.Path]]
+            Mapping io_path -> list of filepaths corresponding to
+            self.output_files.
+        """
+
+        output_paths: dict[pl.Path, list[pl.Path]] = {}
+
+        for io_path in self.io_paths:
+            matched_paths = []
+            seen = set()
+
+            for output_file in self.output_files or []:
+                for path in sorted(io_path.glob(output_file)):
+                    if not path.is_file():
+                        continue
+                    if path in seen:
+                        continue
+                    seen.add(path)
+                    matched_paths.append(path)
+
+            output_paths[io_path] = matched_paths
+
+        return output_paths
+
     @staticmethod
     def get_netcdf_variables(
         nc_path: pl.Path, ignore=None
@@ -149,10 +181,10 @@ class FlucsPostProcessing:
 
     def _get_all_netcdf_variables(
         self, ignore=None
-    ) -> dict[str, dict[str, list[int]]]:
+    ) -> dict[pl.Path, dict[pl.Path, dict[str, list[int]]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file
-        specified by self.output_file, and the groups that they appear in.
+        specified by self.output_files, and the groups that they appear in.
 
         Parameters
         ----------
@@ -161,25 +193,30 @@ class FlucsPostProcessing:
 
         Returns
         -------
-        dict[str, dict[str, list[int]]]
-            Mapping io_path (as a string) -> {variable: [group_ids], ... }
+        dict[pl.Path, dict[pl.Path, dict[str, list[int]]]]
+            Mapping io_path -> {nc_path -> {variable: [group_ids], ... }, ... }
         """
 
-        if self.output_file is None:
+        if self.output_files is None:
             raise ValueError(
-                "'output_file' must be set to derive netCDF paths from "
+                "'output_files' must be set to derive netCDF paths from "
                 "i/o directories."
             )
 
-        result: dict[str, dict[str, list[int]]] = {}
-        for io_path in self.io_paths:
-            nc_path = io_path / self.output_file
-            if not nc_path.exists():
-                result[str(io_path)] = {}
-                continue
-            result[str(io_path)] = FlucsPostProcessing.get_netcdf_variables(
-                nc_path, ignore=ignore
-            )
+        # Get netCDF paths from all output paths
+        netcdf_paths = {
+            io_path: [path for path in paths if path.suffix == ".nc"]
+            for io_path, paths in self._output_paths.items()
+        }
+
+        result: dict[pl.Path, dict[pl.Path, dict[str, list[int]]]] = {}
+        for io_path, nc_paths in netcdf_paths.items():
+            result[io_path] = {}
+
+            for nc_path in nc_paths:
+                result[io_path][nc_path] = self.get_netcdf_variables(
+                    nc_path, ignore=ignore
+                )
 
         return result
 
@@ -193,24 +230,28 @@ class FlucsPostProcessing:
 
         print("Available netCDF variables:")
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
-        for io_path, variables_dict in netcdf_variables.items():
+        for io_path, file_map in netcdf_variables.items():
+            all_variables = set()
+
+            for variables_dict in file_map.values():
+                all_variables.update(variables_dict.keys())
 
             listed_variables = []
-            seen_variables = set()
+            unique_variables = set()
 
-            for variable in sorted(variables_dict.keys()):
+            for variable in sorted(all_variables):
                 if variable.startswith(("realspace_data/", "fourier_data/")):
                     variable = variable.rsplit("/", 1)[0]
 
-                if variable in seen_variables:
+                if variable in unique_variables:
                     continue
 
-                seen_variables.add(variable)
+                unique_variables.add(variable)
                 listed_variables.append(variable)
 
             print(rf"{self._indent}{io_path}: {listed_variables}")
 
-    def get_valid_files(self, variable: str) -> list[pl.Path]:
+    def get_valid_netcdf_paths(self, variable: str) -> list[pl.Path]:
         """
         Return the netCDF filepaths that contain a given variable.
 
@@ -226,13 +267,17 @@ class FlucsPostProcessing:
         found = []
         missing = []
 
-        for io_path, variables in mapping.items():
-            nc_path = pl.Path(io_path) / self.output_file
-            if variables.get(variable):
-                found.append(nc_path)
-            else:
-                missing.append(nc_path)
-        # Report files that are missing the variable
+        for io_path, file_map in mapping.items():
+            io_found = False
+
+            for nc_path, variables in file_map.items():
+                if variables.get(variable):
+                    found.append(nc_path)
+                    io_found = True
+
+            if not io_found:
+                missing.extend(file_map.keys())
+
         if missing:
             print(f"Variable '{variable}' not found in:")
             for path in missing:
@@ -494,7 +539,7 @@ class FlucsPostProcessing:
         io_paths: pl.Path | Sequence[pl.Path],
         *,
         save_directory: pl.Path | None = None,
-        output_file: str | None = None,
+        output_files: str | Sequence[str] | None = None,
         constraint: Literal["none", "solver", "system", "both"] = "none",
     ) -> None:
         """
@@ -509,8 +554,8 @@ class FlucsPostProcessing:
         save_directory : pl.Path | None
             Optional path where to save results. If None, nothing will be saved.
 
-        output_file: str | None
-            Type of output being analysed for this instance of post-processing.
+        output_files: str | Sequence[str] | None
+            Type(s) of output being analysed for this instance of post-processing.
             If None, no specific output type is assumed.
 
         constraint : {"none", "solver", "system", "both"}
@@ -525,15 +570,23 @@ class FlucsPostProcessing:
 
         self.io_paths = []
         for path in io_paths:
-            input_file = pl.Path(path) / "input.toml"
+            resolved_path = pl.Path(path).expanduser().resolve()
+            input_file = resolved_path / "input.toml"
             if not input_file.exists():
                 raise ValueError(f"Path {path} is not a valid i/o directory.")
-            self.io_paths.append(pl.Path(path))
+            self.io_paths.append(resolved_path)
 
-        # Set output file and save directory
-        self.output_file = output_file
+        # Set output files
+        if isinstance(output_files, str):
+            self.output_files = [output_files]
+        else:
+            self.output_files = list(output_files) if output_files is not None else None
+
+        self._output_paths = self._get_output_paths()
+
+        # Set save directory
         self.save_directory = (
-            pl.Path(save_directory).resolve() if save_directory else None
+            pl.Path(save_directory).expanduser().resolve() if save_directory else None
         )
 
         # Determine solver and system types across all i/o directories
@@ -560,6 +613,6 @@ class FlucsPostProcessing:
         print(
             f"FlucsPostProcessing "
             f"({len(self.io_paths)}, "
-            f"{self.output_file}, "
+            f"{self.output_files}, "
             f"{self.save_directory})"
         )

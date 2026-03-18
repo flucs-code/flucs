@@ -8,8 +8,9 @@ from flucs.postprocessing import FlucsPostProcessing
 
 
 def plot_0d_vs_time(post, variable=None):
+
     # Get valid files for the specified variable
-    nc_paths = post.get_valid_files(str(variable))
+    nc_paths = post.get_valid_netcdf_paths(str(variable))
 
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout="constrained")
@@ -19,13 +20,14 @@ def plot_0d_vs_time(post, variable=None):
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
+
         # Assign identifiers
-        sim_label = pl.Path(nc_path)
+        sim_label = pl.Path(nc_path).parent.name
         sim_color = plt.cm.rainbow(np.linspace(0, 1, len(nc_paths)))[index]
 
         # Read data from netCDF file
-        time, _, _ = post.load_netcdf_variable(nc_path, "time")
-        data, _, _ = post.load_netcdf_variable(nc_path, variable)
+        time = post.load_netcdf_variable(nc_path, "time")[0]
+        data = post.load_netcdf_variable(nc_path, variable)[0]
 
         # Plot data
         ax.plot(
@@ -92,7 +94,7 @@ if __name__ == "__main__":
     post = FlucsPostProcessing(
         io_paths=args.io_path,
         save_directory=args.save_directory,
-        output_file="output.0d.nc",
+        output_files=["output.0d.nc"],
         constraint="none",
     )
 

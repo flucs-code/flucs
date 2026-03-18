@@ -52,7 +52,7 @@ def parse_slice(s: str) -> slice:
 
 def interative_slider_plot(post, loc):
     loc_str = f"realspace_data/location_{loc}/"
-    nc_paths = post.get_valid_files(loc_str + "data")
+    nc_paths = post.get_valid_netcdf_paths(loc_str + "data")
     figure_name = (
         "realspace_data_"
         + loc.replace(",", "_").replace(":", "all").replace("/", "_")
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     post = FlucsPostProcessing(
         io_paths=args.io_path,
         save_directory=args.save_directory,
-        output_file=f"output.realspace{args.n}d.nc",
+        output_files=[f"output.realspace{args.n}d.nc"],
         constraint="none",
     )
 

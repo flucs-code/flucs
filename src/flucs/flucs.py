@@ -232,7 +232,7 @@ def main():
     )
 
     args = parser.parse_args()
-    io_path = pl.Path(args.io_path).resolve()
+    io_path = pl.Path(args.io_path).expanduser().resolve()
 
     # If nothing is specified, assume --run
     if not any(
