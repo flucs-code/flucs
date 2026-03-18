@@ -16,6 +16,7 @@ def plot_2d(axs, data, plot_dims):
 
     try:
         for ifield, ax in enumerate(axs):
+            ax.clear()
             ax.imshow(
                 data[ifield, :, :].transpose(),
                 origin="lower",
@@ -50,24 +51,30 @@ def parse_slice(s: str) -> slice:
     return slice(*(get_index(p) for p in parts))
 
 def interative_slider_plot(post, loc):
-    loc_str = f"realspace_slice/location_{loc}/"
+    loc_str = f"realspace_data/location_{loc}/"
     nc_paths = post.get_valid_files(loc_str + "data")
+    figure_name = (
+        "realspace_data_"
+        + loc.replace(",", "_").replace(":", "all").replace("/", "_")
+    )
 
     for index, nc_path in enumerate(nc_paths):
         time, boundaries, _ = post.load_netcdf_variable(nc_path, "time")
         data, _, dims_dicts = post.load_netcdf_variable(nc_path, loc_str + "data")
+        initial_time_index = max(0, time.shape[0] - 1)
 
         fig, axs = plt.subplots(1, data.shape[1])
         if data.shape[1] == 1:
             axs = (axs,)
+        fig.canvas.manager.set_window_title(f"{figure_name}_{index}")
 
         fig.subplots_adjust(bottom=0.22)
         slider = Slider(
             plt.axes([0.2, 0.1, 0.6, 0.03]),
             "Time",
             0,
-            time.shape[0],
-            valinit=0,
+            initial_time_index,
+            valinit=initial_time_index,
             valstep=1
         )
 
@@ -85,14 +92,22 @@ def interative_slider_plot(post, loc):
         plot_fun = {1: plot_1d, 2: plot_2d, 3: plot_3d}[3 - len(axes_to_remove)]
 
         def update(val, fig=fig, axs=axs, slider=slider, time=time, data=np.squeeze(data, axes_to_remove), plot_dims_groups=plot_dims_groups):
-            time_index = int(slider.val)
+            time_index = min(int(slider.val), time.shape[0] - 1)
             restart_index = bisect_right(boundaries, time_index)
             plot_fun(axs, data[time_index, :], plot_dims_groups[restart_index])
             slider.valtext.set_text(f"t = {time[time_index]:.2f}")
             fig.canvas.draw_idle()
 
         slider.on_changed(update)
+        update(initial_time_index)
 
+    if plt.get_fignums():
+        post.save(
+            plt.figure(plt.get_fignums()[0]),
+            name=figure_name,
+            suffix="png",
+            save_kwargs={"dpi": 300},
+        )
     plt.show()
 
 if __name__ == "__main__":

@@ -194,7 +194,21 @@ class FlucsPostProcessing:
         print("Available netCDF variables:")
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
         for io_path, variables_dict in netcdf_variables.items():
-            print(rf"{self._indent}{io_path}: {sorted(variables_dict.keys())}")
+
+            listed_variables = []
+            seen_variables = set()
+
+            for variable in sorted(variables_dict.keys()):
+                if variable.startswith(("realspace_data/", "fourier_data/")):
+                    variable = variable.rsplit("/", 1)[0]
+
+                if variable in seen_variables:
+                    continue
+
+                seen_variables.add(variable)
+                listed_variables.append(variable)
+
+            print(rf"{self._indent}{io_path}: {listed_variables}")
 
     def get_valid_files(self, variable: str) -> list[pl.Path]:
         """
