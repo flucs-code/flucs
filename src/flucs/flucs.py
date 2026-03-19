@@ -6,6 +6,8 @@ Used to run simulations.
 import argparse
 import importlib.metadata
 import pathlib as pl
+import subprocess
+import sys
 from datetime import datetime
 from importlib.metadata import entry_points
 
@@ -109,6 +111,20 @@ def list_solvers_and_systems():
             print(f"{_indent}{s.name:20} ({s.dist.name})")
 
     print("For more information, see https://github.com/flucs-code")
+
+
+def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
+    """
+    Split command-line arguments so that everything following
+    '-p/--postprocess' can be passed through directly to a selected
+    postprocessing script.
+    """
+
+    for index, arg in enumerate(argv):
+        if arg in ('-p', '--postprocess'):
+            return argv[: index + 1], argv[index + 1 :]
+
+    return argv, None
 
 
 def run_flucs(input_path: pl.Path, override: list | None = None):
@@ -218,8 +234,8 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Provides information about post-processing options for a given "
-        "i/o directory (specified via '--io_path') and exit.",
+        help="List post-processing scripts for the specified i/o directory, "
+        "or run a given script using '-p <integer> <script arguments>'.",
     )
 
     operation_modes.add_argument(
@@ -231,8 +247,10 @@ def main():
         "Note that --override is ignored.",
     )
 
-    args = parser.parse_args()
-    io_path = pl.Path(args.io_path).expanduser().resolve()
+    # Parse command-line arguments
+    flucs_args, postprocess_args = parse_cli_arguments(sys.argv[1:])
+    args = parser.parse_args(flucs_args)
+    io_path = pl.Path(args.io_path).resolve()
 
     # If nothing is specified, assume --run
     if not any(
@@ -279,5 +297,23 @@ def main():
     if args.postprocess:
         from flucs.postprocessing import FlucsPostProcessing
 
-        FlucsPostProcessing(io_path).list_script_paths()
+        postprocessing = FlucsPostProcessing(io_path, quiet=True)
+
+        if not postprocess_args:
+            postprocessing.list_script_paths()
+            return
+
+        try:
+            script_integer = int(postprocess_args[0])
+        except ValueError as e:
+            raise ValueError(
+                "The first argument after '-p/--postprocess' must be the "
+                "integer of one of the listed postprocessing scripts."
+            ) from e
+
+        script_path = postprocessing.get_script_path(script_integer)
+        subprocess.run(
+            [sys.executable, str(script_path), *postprocess_args[1:]],
+            check=True,
+        )
         return

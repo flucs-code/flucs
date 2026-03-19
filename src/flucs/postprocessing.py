@@ -25,7 +25,7 @@ class FlucsPostProcessing:
     output_files: list[str] | None
     _output_paths: dict[pl.Path, list[pl.Path]]
     save_directory: pl.Path | None
-    _script_paths: dict[str, list[pl.Path]]
+    _script_paths: list[tuple[int, str, pl.Path]]
 
     # Solver and system for the outputs
     _solver_names: dict[pl.Path, str]
@@ -59,28 +59,63 @@ class FlucsPostProcessing:
             self._solver_types[io_path] = flucs.get_solver_type(solver_name)
             self._system_types[io_path] = flucs.get_system_type(system_name)
 
-    def _get_script_paths(self) -> None:
+    def _get_script_paths(self) -> list[tuple[int, str, pl.Path]]:
         """
         Gathers the paths to the relevant postprocessing scripts for each
-        solver and system used across all provided i/o directories.
+        solver and system used across all provided i/o directories and returns
+        them in a stable integer-addressable order.
         """
 
-        self._script_paths = {}
+        self._script_paths = []
 
-        # Collect unique types across all io_paths
-        unique_types: set[type] = set()
-        unique_types.update(self._solver_types.values())
-        unique_types.update(self._system_types.values())
+        # Keep solver scripts ahead of system scripts in the printed order.
+        ordered_types = []
+        for flucs_types in (
+            self._solver_types.values(),
+            self._system_types.values(),
+        ):
+            for flucs_type in sorted(
+                set(flucs_types), key=lambda f: f.__name__.lower()
+            ):
+                if flucs_type not in ordered_types:
+                    ordered_types.append(flucs_type)
 
-        for flucs_type in unique_types:
-            name = flucs_type.__name__
+        # Find each type's adjacent postprocessing directory and collect Python scripts.
+        for flucs_type in ordered_types:
+            type_name = flucs_type.__name__
             path = inspect.getfile(flucs_type)
 
-            self._script_paths[name] = []
             scripts_dir = pl.Path(path).parent / "postprocessing"
             if scripts_dir.exists():
-                for script in scripts_dir.glob("*.py"):
-                    self._script_paths[name].append(pl.Path(script))
+                for script in sorted(
+                    scripts_dir.glob("*.py"), key=lambda p: p.name.lower()
+                ):
+                    self._script_paths.append(
+                        (len(self._script_paths), type_name, pl.Path(script))
+                    )
+
+        return self._script_paths
+
+    def get_script_path(self, script_integer: int) -> pl.Path:
+        """
+        Returns the postprocessing script corresponding to a given integer.
+        """
+
+        script_paths = self._get_script_paths()
+
+        if not script_paths:
+            raise ValueError(
+                "No postprocessing scripts are available for the specified "
+                "i/o directory."
+            )
+
+        if not 0 <= script_integer < len(script_paths):
+            raise ValueError(
+                f"Invalid postprocessing script integer: {script_integer}. "
+                f"Expected a value between 0 and {len(script_paths) - 1}."
+            )
+
+        return script_paths[script_integer][2]
 
     def list_script_paths(self) -> None:
         """
@@ -89,16 +124,23 @@ class FlucsPostProcessing:
         provided i/o directories.
         """
 
-        self._get_script_paths()
+        script_paths = self._get_script_paths()
 
         print("Available postprocessing scripts:")
-        for type_name, paths in self._script_paths.items():
-            print(f"{self._indent}{type_name}:")
-            for path in paths:
-                print(f"{2 * self._indent}{path}")
+        if not script_paths:
+            print(f"{self._indent}None")
+        else:
+            integer_width = len(str(len(script_paths) - 1))
+            current_type = None
+            for integer, type_name, path in script_paths:
+                if type_name != current_type:
+                    print(f"{self._indent}{type_name}:")
+                    current_type = type_name
+                label = f"[{integer:>{integer_width}}]"
+                print(f"{2 * self._indent}{label} {path}")
         print(
-            "For information on a specific script, run: "
-            "'python <script path> --help'"
+            "To run a specific script: "
+            "'flucs -p <integer> <script arguments>'."
         )
 
     def _get_output_paths(self) -> dict[pl.Path, list[pl.Path]]:
@@ -539,6 +581,7 @@ class FlucsPostProcessing:
         save_directory: pl.Path | None = None,
         output_files: str | Sequence[str] | None = None,
         constraint: Literal["none", "solver", "system", "both"] = "none",
+        quiet: bool = False,
     ) -> None:
         """
         Given one or more i/o directories, sets up the relevant paths, and
@@ -560,6 +603,9 @@ class FlucsPostProcessing:
             Constraint on mixing solvers/systems across provided i/o
             directories. If "solver", all solvers must match. If "system", all
             systems must match. If "both", both solvers and systems must match.
+        quiet : bool
+            Whether to suppress the short summary printed when the
+            postprocessing object is initialised.
         """
 
         # Parse io_paths input
@@ -608,9 +654,10 @@ class FlucsPostProcessing:
                 "system when 'constraint' is 'system' or 'both'."
             )
 
-        print(
-            f"FlucsPostProcessing "
-            f"({len(self.io_paths)}, "
-            f"{self.output_files}, "
-            f"{self.save_directory})"
-        )
+        if not quiet:
+            print(
+                f"FlucsPostProcessing "
+                f"({len(self.io_paths)}, "
+                f"{self.output_files}, "
+                f"{self.save_directory})"
+            )
