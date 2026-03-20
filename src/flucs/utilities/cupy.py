@@ -34,61 +34,138 @@ class ModuleOptions:
 
     Attributes
     ----------
-    string_options : tuple
+    options : tuple[str]
         A manually specified tuple of string options to be passed to the
         compiler. By default, this is
         ("--ptxas-options=-O3", "--use_fast_math").
     """
 
     _defs: dict
-    string_options = ("--ptxas-options=-O3", "--use_fast_math")
+    options = ("--ptxas-options=-O3", "--use_fast_math")
 
     def __init__(self) -> None:
         self._defs = {}
 
-    def add_string_option(self, option: str) -> None:
+    def add_compiler_option(self, option: str) -> None:
         """Adds a compiler option."""
-        self.string_options += (str(option),)
+        self.options += (str(option),)
 
-    def define_constant(
-        self, name: str, value: Any = "", float_convert: bool = False
+    def _define_constant(
+        self, name: str, value=None, value_type: str | None = None
     ):
         """Adds a definition to the compiler flags.
-        Effectively, this is equivalent to adding
+        Equivalent to
 
-        #define name value
-
-        to the source files.
+            #define name (value_type)(value)
 
         Parameters
         ----------
-        name : str
+        name: str
             Name of the macro/constant to be defined.
 
-        value
+        value:
             Converted to a string if needed. If value is any of (float,
             np.float16, np.float32, np.float64), "(FLUCS_FLOAT)" is added in
             front of it in order to cast it to the correct type.
 
+        value_type:
+            Type to which the value is cast.
+
         """
 
-        if float_convert or type(value) in (
-            float,
-            np.float16,
-            np.float32,
-            np.float64,
-        ):
-            value_to_add = f"((FLUCS_FLOAT)({value!s}))"
+        if value is None:
+            _value_to_add = ""
         else:
-            value_to_add = f"({value!s})"
+            _value_to_add = f"(({value_type})({value!s}))"
 
-        self._defs[name] = value_to_add
+        self._defs[name] = _value_to_add
+
+    def define_flag(
+        self,
+        name: str,
+    ):
+        """Adds a flag-like macro to the compiler flags.
+        Equivalent to
+
+            #define name
+
+        Parameters
+        ----------
+        name: str
+            Name of the macro/constant to be defined.
+
+        """
+        self._define_constant(name)
+
+
+    def define_float(
+        self,
+        name: str,
+        value
+    ):
+        """Adds a definition to the compiler flags.
+        Equivalent to
+
+            #define name ((FLUCS_FLOAT)(value))
+
+        Parameters
+        ----------
+        name: str
+            Name of the macro/constant to be defined.
+
+        value:
+            Value of the constant
+
+        """
+        self._define_constant(name, value, "FLUCS_FLOAT")
+
+    def define_int(
+        self,
+        name: str,
+        value
+    ):
+        """Adds a definition of a 32-bit int to the compiler flags.
+        Equivalent to
+
+            #define name ((int)(value))
+
+        Parameters
+        ----------
+        name: str
+            Name of the macro/constant to be defined.
+
+        value:
+            Value of the constant
+
+        """
+        self._define_constant(name, value, "int")
+
+    def define_dimension(
+        self,
+        name: str,
+        value
+    ):
+        """Adds a definition of a size_t value to the compiler flags.
+        Equivalent to
+
+            #define name ((size_t)(value))
+
+        Parameters
+        ----------
+        name: str
+            Name of the macro/constant to be defined.
+
+        value:
+            Value of the constant
+
+        """
+        self._define_constant(name, value, "size_t")
 
     def get_options(self) -> tuple:
         """Returns the tuple of options to be passed to CuPy's RawModule/"""
 
         ret = ()
-        ret += self.string_options
+        ret += self.options
 
         for key, value in self._defs.items():
             if len(value) > 0:

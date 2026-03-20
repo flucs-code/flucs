@@ -416,19 +416,19 @@ class FourierSystem(FlucsSystem):
 
     def compile_cupy_module(self) -> None:
         # FourierSystem specific constants
-        self.module_options.define_constant(
+        self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
         )
 
-        self.module_options.define_constant(
+        self.module_options.define_dimension(
             "HALFUNPADDEDSIZE", self.half_unpadded_size
         )
-        self.module_options.define_constant(
+        self.module_options.define_dimension(
             "HALFPADDEDSIZE", self.half_padded_size
         )
-        self.module_options.define_constant("PADDEDSIZE", self.full_padded_size)
+        self.module_options.define_dimension("PADDEDSIZE", self.full_padded_size)
 
-        self.module_options.define_constant(
+        self.module_options.define_float(
             "DFT_PADDEDSIZE_FACTOR", self.float(1.0 / self.full_padded_size)
         )
 
@@ -436,21 +436,21 @@ class FourierSystem(FlucsSystem):
         for dim in ["x", "y", "z"]:
             box_size = self.float(self.input[f"dimensions.L{dim}"])
 
-            self.module_options.define_constant(
+            self.module_options.define_float(
                 f"TWOPI_OVER_L{dim.upper()}", 2 * np.pi / box_size
             )
 
-            self.module_options.define_constant(
+            self.module_options.define_dimension(
                 f"N{dim.upper()}", getattr(self, f"n{dim}")
             )
-            self.module_options.define_constant(f"L{dim.upper()}", box_size)
-            self.module_options.define_constant(
+            self.module_options.define_float(f"L{dim.upper()}", box_size)
+            self.module_options.define_dimension(
                 f"HALF_N{dim.upper()}", getattr(self, f"half_n{dim}")
             )
-            self.module_options.define_constant(
+            self.module_options.define_dimension(
                 f"PADDED_N{dim.upper()}", getattr(self, f"padded_n{dim}")
             )
-            self.module_options.define_constant(
+            self.module_options.define_dimension(
                 f"HALF_PADDED_N{dim.upper()}",
                 getattr(self, f"half_padded_n{dim}"),
             )
@@ -460,24 +460,24 @@ class FourierSystem(FlucsSystem):
             if self.input[f"hyperdissipation.{component}"] > 0.0:
                 print(f"Using hyperdissipation in {component}.")
 
-                self.module_options.define_constant(
+                self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
                     self.input[f"hyperdissipation.{component}"],
                 )
-                self.module_options.define_constant(
+                self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}_POWER",
                     self.input[f"hyperdissipation.{component}_power"],
                 )
 
         # Setup
-        self.module_options.define_constant("ALPHA", self.input["setup.alpha"])
+        self.module_options.define_float("ALPHA", self.input["setup.alpha"])
 
         if not self.input["setup.linear"]:
-            self.module_options.define_constant("NONLINEAR")
+            self.module_options.define_flag("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
             print("Linear matrices will be precomputed.")
-            self.module_options.define_constant("PRECOMPUTE_LINEAR_MATRIX")
+            self.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
         super().compile_cupy_module()
 

@@ -11,6 +11,7 @@ import datetime
 import heapq
 import importlib
 import pathlib as pl
+import sys
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -129,7 +130,7 @@ class FlucsSystem(ABC):
             case "double":
                 self.float = np.float64
                 self.complex = np.complex128
-                self.module_options.define_constant("DOUBLE_PRECISION")
+                self.module_options.define_flag("DOUBLE_PRECISION")
 
         # We always use 32-bit integers
         self.int = np.int32
@@ -252,7 +253,7 @@ class FlucsSystem(ABC):
             code=cuda_module, options=self.module_options.get_options()
         )
 
-        self.cupy_module.compile()
+        self.cupy_module.compile(log_stream=sys.stdout)
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """
@@ -412,7 +413,7 @@ class FlucsSystem(ABC):
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        self.module_options.add_string_option(
+        self.module_options.add_compiler_option(
             f"-I{pl.Path(flucs.__file__).parent.parent}"
         )
         self._interpret_input()

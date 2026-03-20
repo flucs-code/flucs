@@ -77,7 +77,7 @@ FLUCS_FLOAT get_hyperdissipation_kz(const FLUCS_FLOAT kz) {
 
 // Calculates the total hyperdissipation for a given mode
 __device__ __forceinline__
-FLUCS_FLOAT get_hyperdissipation(const int index) {
+FLUCS_FLOAT get_hyperdissipation(const size_t index) {
 
     indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
 
@@ -94,7 +94,7 @@ FLUCS_FLOAT get_hyperdissipation(const int index) {
 // Functor for calculating the size of the term due to perpendicular hyperdissipation for a given mode
 struct HyperdissipationPerp_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
-    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
         
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
@@ -109,7 +109,7 @@ struct HyperdissipationPerp_Functor {
 // Functor for calculating the size of the term due to kx hyperdissipation for a given mode
 struct HyperdissipationKx_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
-    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
@@ -123,7 +123,7 @@ struct HyperdissipationKx_Functor {
 // Functor for calculating the size of the term due to ky hyperdissipation for a given mode
 struct HyperdissipationKy_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
-    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
@@ -137,7 +137,7 @@ struct HyperdissipationKy_Functor {
 // Functor for calculating the size of the term due to kz hyperdissipation for a given mode
 struct HyperdissipationKz_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
-    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
@@ -153,7 +153,7 @@ struct HyperdissipationKz_Functor {
 // hyperdissipation for a given mode
 struct Hyperdissipation_Functor {
     const FLUCS_COMPLEX* __restrict__ field;
-    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index);
         return hyperdissipation * Abs2_Functor{field, FLOAT_ONE}(index);

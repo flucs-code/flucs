@@ -33,16 +33,16 @@ __constant__ FLUCS_COMPLEX* inverse_lhs_precomp = NULL;
 
 // Gets the linear matrix for a single mode.
 // This must be implemented by the user.
-__device__ void get_linear_matrix(const int index,
+__device__ void get_linear_matrix(const size_t index,
                                   const FLUCS_FLOAT dt,
                                   FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 
 // Finds the nonlinear terms for the current time
 // step and adds them to rhs_fields.
 // Must be implemented by the user.
-__device__ void add_nonlinear_terms(const int index,
+__device__ void add_nonlinear_terms(const size_t index,
                                     const FLUCS_FLOAT dt,
-                                    const int current_step,
+                                    const long long current_step,
                                     const FLUCS_FLOAT AB0,
                                     const FLUCS_FLOAT AB1,
                                     const FLUCS_FLOAT AB2,
@@ -51,7 +51,7 @@ __device__ void add_nonlinear_terms(const int index,
 
 // Wrapper for get_linear_matrix that adds hyperdissipation if needed
 __device__ __forceinline__
-void get_linear_matrix_wrapped(const int index,
+void get_linear_matrix_wrapped(const size_t index,
                        const FLUCS_FLOAT dt,
                        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]) {
 
@@ -74,7 +74,7 @@ void get_linear_matrix_wrapped(const int index,
 // Returns the full (for all modes) linear matrix.
 // Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
 __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linear_matrix){
-    const int index = blockDim.x * blockIdx.x + threadIdx.x;
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
     if (!(index < HALFUNPADDEDSIZE))
@@ -93,7 +93,7 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
 
 // Precomputes the rhs and inverse_lhs matrices.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
-    const int index = blockDim.x * blockIdx.x + threadIdx.x;
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
     if (!(index < HALFUNPADDEDSIZE))
@@ -139,7 +139,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 // combines the linear matrices and nonlinear
 // terms to find the fields at the current time step.
 __global__ void finish_step(const FLUCS_FLOAT dt,
-                            const int current_step,
+                            const long long current_step,
                             const FLUCS_FLOAT AB0,
                             const FLUCS_FLOAT AB1,
                             const FLUCS_FLOAT AB2,
@@ -147,7 +147,7 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
                             const FLUCS_COMPLEX* dft_bits,
                             FLUCS_COMPLEX* current_fields){
 
-    const int index = blockDim.x * blockIdx.x + threadIdx.x;
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
     if (!(index < HALFUNPADDEDSIZE))
