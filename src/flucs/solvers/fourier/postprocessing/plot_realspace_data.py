@@ -131,11 +131,15 @@ def plot_realspace_data(post, location, time_to_plot):
         data, _, dims_dicts = post.load_netcdf_variable(nc_path,
                                                         loc_str + "data")
 
+        initial_render_time_index = -1
+
         if time_to_plot is not None:
             initial_render_time_index = bisect_right(time, time_to_plot)
-        else:
-            # If not specifiec, the initial render time is
-            # the last time for which we have data
+
+        # If not specifiec, the initial render time is
+        # the last time for which we have data
+        elif len(boundaries) > 1:
+            # Deal with multiple groups if they exist
             initial_render_time_index = len(time) - 1
             last_group_with_data = -1
             while not dims_dicts[last_group_with_data]:
