@@ -1,6 +1,6 @@
 # flucs
-$\texttt{flucs}$ is a general GPU-native framework for solving systems of partial 
-differential equations. This base $\texttt{flucs}$ repository contains 
+$\texttt{FLUCS}$ is a general GPU-native framework for solving systems of partial 
+differential equations. This base $\texttt{FLUCS}$ repository contains 
 the `solvers` that can be used to evolve the available `systems` that are housed 
 in separate repositories within the [flucs-code](https://github.com/flucs-code)
 organisation. These repositories must be installed separately; see the instructions 
@@ -14,7 +14,7 @@ The following dependencies must be installed prior to installing $\texttt{flucs}
 - [CUDA toolkit](https://developer.nvidia.com/cuda-downloads) (version 11, or
   higher)
 
-$\texttt{flucs}$ is currently not available on PyPI, and so must be installed
+$\texttt{FLUCS}$ is currently not available on PyPI, and so must be installed
 from the source code. This will install both the Python library
 and the `flucs` command line tool.
 
@@ -25,14 +25,14 @@ $ git clone https://github.com/flucs-code/flucs
 $ cd flucs
 ```
 
-It is recommended to install $\texttt{flucs}$ to a fresh virtual environment:
+It is recommended to install $\texttt{FLUCS}$ to a fresh virtual environment:
 
 ```console
 $ python -m venv venv
 $ source venv/bin/activate
 ```
 
-$\texttt{flucs}$ may then be installed using `pip`:
+$\texttt{FLUCS}$ may then be installed using `pip`:
 
 ```console
 $ pip install -e .[cuda13]
@@ -60,7 +60,7 @@ $ deactivate
 
 ## Installation for `systems`
 
-After installing $\texttt{flucs}$ as described above, `systems` can be installed as 
+After installing $\texttt{FLUCS}$ as described above, `systems` can be installed as 
 plugins in the same virtual environment.
 
 For example, if using `pip`:
