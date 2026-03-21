@@ -11,11 +11,13 @@ import datetime
 import heapq
 import importlib
 import pathlib as pl
+import sys
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import cupy as cp
 import numpy as np
+from cupy.cuda import cufft
 
 import flucs
 from flucs import FlucsInput
@@ -60,12 +62,39 @@ class FlucsSystem(ABC):
     # Compile options for CUDA
     module_options: ModuleOptions
 
+    # CUFFT plan types
+    fft_c2r_plan_type: int
+    fft_r2c_plan_type: int
+
     # A priority queue of outputs
     output_heap: list[FlucsOutput] | None = None
     steps_until_next_write: int
 
     # A dict of supported diagnostics
-    diags_dict: dict[str, type[FlucsDiagnostic]]
+    diags: dict[str, type[FlucsDiagnostic]]
+
+    @classmethod
+    def get_available_diags(cls) -> dict[str, type[FlucsDiagnostic]]:
+        """Returns a dict of available diagnostics.
+        Goes recursively through all the parent systems.
+
+        """
+
+        # FlucsDiagnostic uses its name attribute to create a hash
+        # so using a set here will give us a set of unique diagnostics
+        # where uniqueness is based on their name.
+        diags = set()
+
+        for parent_cls in reversed(cls.__mro__):
+            if not issubclass(parent_cls, FlucsSystem):
+                continue
+
+            if not hasattr(parent_cls, "diags"):
+                continue
+
+            diags.update(parent_cls.diags)
+
+        return {diag.name: diag for diag in diags}
 
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):
@@ -101,7 +130,7 @@ class FlucsSystem(ABC):
             case "double":
                 self.float = np.float64
                 self.complex = np.complex128
-                self.module_options.define_constant("DOUBLE_PRECISION")
+                self.module_options.define_flag("DOUBLE_PRECISION")
 
         # We always use 32-bit integers
         self.int = np.int32
@@ -145,8 +174,9 @@ class FlucsSystem(ABC):
 
     def setup(self) -> None:
         """
-        Sets up the initial time data, calls the restart manager
-        and then delegates to the system-specific setup hook.
+        Sets up the initial time data, calls the restart manager,
+        sets up Fourier-transform types, and then delegates to
+        the system-specific setup hook.
 
         """
 
@@ -155,6 +185,14 @@ class FlucsSystem(ABC):
         self.final_time = self.float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestart(self)
+
+        if self.input["setup.precision"] == "single":
+            self.fft_c2r_plan_type = cufft.CUFFT_C2R
+            self.fft_r2c_plan_type = cufft.CUFFT_R2C
+        else:
+            self.fft_c2r_plan_type = cufft.CUFFT_Z2D
+            self.fft_r2c_plan_type = cufft.CUFFT_D2Z
+
         self._setup_system()
 
     @abstractmethod
@@ -215,7 +253,7 @@ class FlucsSystem(ABC):
             code=cuda_module, options=self.module_options.get_options()
         )
 
-        self.cupy_module.compile()
+        self.cupy_module.compile(log_stream=sys.stdout)
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """
@@ -375,7 +413,7 @@ class FlucsSystem(ABC):
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        self.module_options.add_string_option(
+        self.module_options.add_compiler_option(
             f"-I{pl.Path(flucs.__file__).parent.parent}"
         )
         self._interpret_input()

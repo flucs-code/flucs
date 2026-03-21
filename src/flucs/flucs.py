@@ -6,6 +6,8 @@ Used to run simulations.
 import argparse
 import importlib.metadata
 import pathlib as pl
+import subprocess
+import sys
 from datetime import datetime
 from importlib.metadata import entry_points
 
@@ -111,6 +113,20 @@ def list_solvers_and_systems():
     print("For more information, see https://github.com/flucs-code")
 
 
+def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
+    """
+    Split command-line arguments so that everything following
+    '-p/--postprocess' can be passed through directly to a selected
+    postprocessing script.
+    """
+
+    for index, arg in enumerate(argv):
+        if arg in ("-p", "--postprocess"):
+            return argv[: index + 1], argv[index + 1 :]
+
+    return argv, None
+
+
 def run_flucs(input_path: pl.Path, override: list | None = None):
     """
     Construct FlucsInput then call the appropriate solver.
@@ -149,7 +165,7 @@ def main():
 
     """
 
-    parser = argparse.ArgumentParser(description="flucs = fluid cuda solver.")
+    parser = argparse.ArgumentParser(description="FLUCS = fluid cuda solver.")
 
     parser.add_argument(
         "--io_path",
@@ -171,8 +187,6 @@ def main():
         "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'.",
     )
 
-    # The script can only do one thing at a time.
-    # Here are the options.
     operation_modes = parser.add_mutually_exclusive_group()
 
     operation_modes.add_argument(
@@ -218,8 +232,8 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Provides information about post-processing options for a given "
-        "i/o directory (specified via '--io_path') and exit.",
+        help="List post-processing scripts for the specified i/o directory, "
+        "or run a given script using '-p <integer> <script arguments>'.",
     )
 
     operation_modes.add_argument(
@@ -231,7 +245,9 @@ def main():
         "Note that --override is ignored.",
     )
 
-    args = parser.parse_args()
+    # Parse command-line arguments
+    flucs_args, postprocess_args = parse_cli_arguments(sys.argv[1:])
+    args = parser.parse_args(flucs_args)
     io_path = pl.Path(args.io_path).resolve()
 
     # If nothing is specified, assume --run
@@ -247,7 +263,7 @@ def main():
     ):
         args.run = True
 
-    # Actually solve something
+    # Launch the solver
     if args.run:
         input_path = io_path / "input.toml"
 
@@ -279,5 +295,23 @@ def main():
     if args.postprocess:
         from flucs.postprocessing import FlucsPostProcessing
 
-        FlucsPostProcessing(io_path).list_script_paths()
+        postprocessing = FlucsPostProcessing(io_path, quiet=True)
+
+        if not postprocess_args:
+            postprocessing.list_script_paths()
+            return
+
+        try:
+            script_integer = int(postprocess_args[0])
+        except ValueError as e:
+            raise ValueError(
+                "The first argument after '-p/--postprocess' must be the "
+                "integer of one of the listed postprocessing scripts."
+            ) from e
+
+        script_path = postprocessing.get_script_path(script_integer)
+        subprocess.run(
+            [sys.executable, str(script_path), *postprocess_args[1:]],
+            check=True,
+        )
         return

@@ -358,7 +358,7 @@ class FlucsRestart:
                 ) from e
 
         # Check whether an input file of the same name already exists
-        input_file_path = pl.Path(io_path) / "input.toml"
+        input_file_path = pl.Path(io_path).expanduser().resolve() / "input.toml"
         if input_file_path.exists():
             raise FileExistsError(
                 f"Input file already exists: {input_file_path}"
