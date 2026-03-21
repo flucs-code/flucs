@@ -89,14 +89,33 @@ def on_key_pressed(event):
         event.canvas.figure._update_plot()
 
 
-def plot_1d(ax, data, plot_dims, coord_names=None):
-    # 1D plots here
-    pass
+def plot_1d(axs, data, plot_dims, coord_names=None):
+    
+    # Iterate over fields and plot data
+    for ifield, ax in enumerate(axs):
+        ax.clear()
+        try:
+            ax.plot(
+                plot_dims[0],
+                data[ifield, :],
+                color="black",
+                linewidth=1.5,
+            )
+
+            # Set plot options
+            ax.set_title(f"field_{ifield}")
+            if coord_names is not None:
+                ax.set_xlabel(coord_names[0])
+            ax.set_xlim(plot_dims[0].min(), plot_dims[0].max())
+            ax.axhline(y=0, color="gray", linestyle="solid", linewidth=1.0)
+
+        except IndexError:
+            print("Could not render plot, likely due to missing data.")
 
 
 def plot_2d(axs, data, plot_dims, coord_names=None):
 
-    # Iterate over fields and plot the data. 
+    # Iterate over fields and plot data. 
     for ifield, ax in enumerate(axs):
         ax.clear()
         try:
