@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import pathlib as pl
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
+from matplotlib import cm, colors
 from bisect import bisect_right
 
 from flucs.postprocessing import FlucsPostProcessing
@@ -144,9 +144,93 @@ def plot_2d(axs, data, plot_dims, coord_names=None):
             print("Could not render plot, likely due to missing data.")
 
 
-def plot_3d(ax, data, plot_dims, coord_names=None):
-    # 3D cube plots here
-    pass
+def plot_3d(axs, data, plot_dims, coord_names=None):
+
+    # Extract dimensions
+    z, x, y = plot_dims
+
+    # Set colormap
+    cmap = cm.seismic
+
+    # Iterate over fields and plot data
+    for ifield, ax in enumerate(axs):
+        ax.clear()
+
+        try:
+            # Extract full cube for current field
+            field_data = data[ifield, :, :, :]   # shape = (nz, nx, ny)
+
+            # Normalise to maximum
+            amplitude = np.nanmax(np.abs(field_data))
+            norm = colors.Normalize(vmin=-amplitude, vmax=amplitude)
+
+            # Plot the physical x/y face at fixed z = z[-1].
+            # Display axes: X->z, Y->x, Z->y
+            Y_xy, Z_xy = np.meshgrid(x, y, indexing="ij")
+            X_xy = np.full_like(Y_xy, z[-1])
+            data_xy = field_data[-1, :, :]
+            ax.plot_surface(
+                X_xy, Y_xy, Z_xy,
+                facecolors=cmap(norm(data_xy)),
+                edgecolor="none",
+                rstride=1,
+                cstride=1,
+                shade=False,
+                linewidth=0,
+                antialiased=False,
+            )
+
+            # Plot the physical z/y face at fixed x = x[0].
+            # Display axes: X->z, Y->x, Z->y
+            X_zy, Z_zy = np.meshgrid(z, y, indexing="ij")
+            Y_zy = np.full_like(X_zy, x[0])
+            data_zy = field_data[:, 0, :]
+            ax.plot_surface(
+                X_zy, Y_zy, Z_zy,
+                facecolors=cmap(norm(data_zy)),
+                edgecolor="none",
+                rstride=1,
+                cstride=1,
+                shade=False,
+                linewidth=0,
+                antialiased=False,
+            )
+
+            # Plot the physical z/x face at fixed y = y[-1].
+            # Display axes: X->z, Y->x, Z->y
+            X_zx, Y_zx = np.meshgrid(z, x, indexing="ij")
+            Z_zx = np.full_like(X_zx, y[-1])
+            data_zx = field_data[:, :, -1]
+            ax.plot_surface(
+                X_zx, Y_zx, Z_zx,
+                facecolors=cmap(norm(data_zx)),
+                edgecolor="none",
+                rstride=1,
+                cstride=1,
+                shade=False,
+                linewidth=0,
+                antialiased=False,
+            )
+
+            # Set plot options
+            ax.set_title(f"field_{ifield}")
+            ax.set_xlabel("z")
+            ax.set_ylabel("x")
+            ax.set_zlabel("y")
+
+            ax.set_xlim(z.min(), z.max())
+            ax.set_ylim(x.min(), x.max())
+            ax.set_zlim(y.min(), y.max())
+            ax.set_box_aspect((1, 1, 1))
+
+            ax.grid(False)
+            ax.tick_params(labelsize=6, pad=0)
+
+            ax.set_proj_type("ortho")
+            ax.view_init(elev=18, azim=-30)
+
+        except IndexError:
+            print("Could not render plot, likely due to missing data.")
 
 
 def plot_realspace_data(post, location, time_to_plot):
@@ -197,8 +281,29 @@ def plot_realspace_data(post, location, time_to_plot):
             else:
                 initial_render_time_index = boundaries[last_group_with_data] - 1
 
+        # Remove any axes corresponding to dimensions of length 1. 
+        axes_to_remove = tuple(
+            i for i, n in enumerate(data.shape)
+            if n == 1 and i > 1
+        )
+        plot_rank = 3 - len(axes_to_remove)
+        plot_function = {1: plot_1d, 2: plot_2d, 3: plot_3d}[plot_rank]
+
         # Initialise plotting and cast to list
-        fig, axs = plt.subplots(1, data.shape[1], sharex=True, sharey=True, layout="constrained")
+        if plot_rank == 3:
+            fig = plt.figure()
+            axs = tuple(
+                fig.add_subplot(1, data.shape[1], i + 1, projection="3d")
+                for i in range(data.shape[1])
+            )
+        else:
+            fig, axs = plt.subplots(
+                1,
+                data.shape[1],
+                sharex=True,
+                sharey=True,
+                layout="constrained",
+            )
 
         if data.shape[1] == 1:
             axs = (axs,)
@@ -223,13 +328,6 @@ def plot_realspace_data(post, location, time_to_plot):
                     continue
                 plot_dims_groups[-1].append(dims_dicts[i][coord])
                 plot_coord_names_groups[-1].append(coord)
-
-        # Remove any axes corresponding to dimensions of length 1. 
-        axes_to_remove = tuple(
-            i for i, n in enumerate(data.shape)
-            if n == 1 and i > 1
-        )
-        plot_function = {1: plot_1d, 2: plot_2d, 3: plot_3d}[3 - len(axes_to_remove)]
 
         # Define updating function, connect key events, and update
         def update(
