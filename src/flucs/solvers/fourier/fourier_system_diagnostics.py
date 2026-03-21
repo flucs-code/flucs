@@ -108,10 +108,13 @@ class FourierDataDiag(FlucsDiagnostic):
 
             return slice(*(get_index(p) for p in parts))
 
-        for loc in self.locations:
+        for location in self.locations:
+
+            loc = ",".join(part.strip() for part in location.split(","))
             loc_name = f"location_{loc}"
+
             try:
-                loc_parts = [part.strip() for part in loc.split(",")]
+                loc_parts = loc.split(",")
 
                 ifield = parse_slice(loc_parts[0])
                 ikz = parse_slice(loc_parts[1])
@@ -208,10 +211,13 @@ class RealspaceDataDiag(FlucsDiagnostic):
 
             return slice(*(get_index(p) for p in parts))
 
-        for loc in self.locations:
+        for location in self.locations:
+
+            loc = ",".join(part.strip() for part in location.split(","))
             loc_name = f"location_{loc}"
+
             try:
-                loc_parts = [part.strip() for part in loc.split(",")]
+                loc_parts = loc.split(",")
 
                 ifield = parse_slice(loc_parts[0])
                 iz = parse_slice(loc_parts[1])
