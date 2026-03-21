@@ -89,15 +89,15 @@ def on_key_pressed(event):
         event.canvas.figure._update_plot()
 
 
-def plot_1d(axs, data, plot_dims, coord_names=None):
+def plot_1d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
     
     # Iterate over fields and plot data
     for ifield, ax in enumerate(axs):
         ax.clear()
         try:
             ax.plot(
-                plot_dims[0],
-                data[ifield, :],
+                plot_dims[0][::downsample_factor],
+                data[ifield,::downsample_factor],
                 color="black",
                 linewidth=1.5,
             )
@@ -113,15 +113,18 @@ def plot_1d(axs, data, plot_dims, coord_names=None):
             print("Could not render plot, likely due to missing data.")
 
 
-def plot_2d(axs, data, plot_dims, coord_names=None):
+def plot_2d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
 
     # Iterate over fields and plot data. 
     for ifield, ax in enumerate(axs):
         ax.clear()
         try:
-            amplitude = np.max(np.abs(data[ifield, :, :]))
+            field_data = data[ifield, :, :]
+            field_data_downsampled = field_data[::downsample_factor, ::downsample_factor]
+            amplitude = np.max(np.abs(field_data))
+
             ax.imshow(
-                data[ifield, :, :].transpose(),
+                field_data_downsampled.transpose(),
                 origin="lower",
                 extent=[plot_dims[0].min(),
                         plot_dims[0].max(),
@@ -131,6 +134,7 @@ def plot_2d(axs, data, plot_dims, coord_names=None):
                 cmap="seismic",
                 vmin=-amplitude,
                 vmax=amplitude,
+                interpolation="nearest"
             )
 
             # Set plot options
@@ -144,10 +148,14 @@ def plot_2d(axs, data, plot_dims, coord_names=None):
             print("Could not render plot, likely due to missing data.")
 
 
-def plot_3d(axs, data, plot_dims, coord_names=None):
+def plot_3d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
 
     # Extract dimensions
     z, x, y = plot_dims
+
+    z_downsampled = z[::downsample_factor]
+    x_downsampled = x[::downsample_factor]
+    y_downsampled = y[::downsample_factor]
 
     # Set colormap
     cmap = cm.seismic
@@ -166,9 +174,9 @@ def plot_3d(axs, data, plot_dims, coord_names=None):
 
             # Plot the physical x/y face at fixed z = z[-1].
             # Display axes: X->z, Y->x, Z->y
-            Y_xy, Z_xy = np.meshgrid(x, y, indexing="ij")
+            Y_xy, Z_xy = np.meshgrid(x_downsampled, y_downsampled, indexing="ij")
             X_xy = np.full_like(Y_xy, z[-1])
-            data_xy = field_data[-1, :, :]
+            data_xy = field_data[-1, ::downsample_factor, ::downsample_factor]
             ax.plot_surface(
                 X_xy, Y_xy, Z_xy,
                 facecolors=cmap(norm(data_xy)),
@@ -182,9 +190,9 @@ def plot_3d(axs, data, plot_dims, coord_names=None):
 
             # Plot the physical z/y face at fixed x = x[0].
             # Display axes: X->z, Y->x, Z->y
-            X_zy, Z_zy = np.meshgrid(z, y, indexing="ij")
+            X_zy, Z_zy = np.meshgrid(z_downsampled, y_downsampled, indexing="ij")
             Y_zy = np.full_like(X_zy, x[0])
-            data_zy = field_data[:, 0, :]
+            data_zy = field_data[::downsample_factor, 0, ::downsample_factor]
             ax.plot_surface(
                 X_zy, Y_zy, Z_zy,
                 facecolors=cmap(norm(data_zy)),
@@ -198,9 +206,9 @@ def plot_3d(axs, data, plot_dims, coord_names=None):
 
             # Plot the physical z/x face at fixed y = y[-1].
             # Display axes: X->z, Y->x, Z->y
-            X_zx, Y_zx = np.meshgrid(z, x, indexing="ij")
+            X_zx, Y_zx = np.meshgrid(z_downsampled, x_downsampled, indexing="ij")
             Z_zx = np.full_like(X_zx, y[-1])
-            data_zx = field_data[:, :, -1]
+            data_zx = field_data[::downsample_factor, ::downsample_factor, -1]
             ax.plot_surface(
                 X_zx, Y_zx, Z_zx,
                 facecolors=cmap(norm(data_zx)),
@@ -233,7 +241,7 @@ def plot_3d(axs, data, plot_dims, coord_names=None):
             print("Could not render plot, likely due to missing data.")
 
 
-def plot_realspace_data(post, location, time_to_plot):
+def plot_realspace_data(post, location, time_to_plot, downsample_factor):
 
     # Parse user input location
     if location is None:
@@ -246,6 +254,10 @@ def plot_realspace_data(post, location, time_to_plot):
         raise ValueError(
             "Location must have four comma-separated entries: ifield,iz,ix,iy"
         )
+
+    # Parse downsample factor
+    if downsample_factor < 1:
+        raise ValueError("Downsample factor must be a positive integer.")
 
     # Get netCDF paths for the specified location
     loc = ",".join(location_parts)
@@ -337,6 +349,8 @@ def plot_realspace_data(post, location, time_to_plot):
             data=np.squeeze(data, axes_to_remove),
             plot_dims_groups=plot_dims_groups,
             boundaries=boundaries,
+            downsample_factor=downsample_factor
+
         ):
             restart_index = bisect_right(boundaries, fig._time_index)
 
@@ -344,7 +358,8 @@ def plot_realspace_data(post, location, time_to_plot):
                 axs,
                 data[fig._time_index, :],
                 plot_dims_groups[restart_index],
-                plot_coord_names_groups[restart_index] if plot_coord_names_groups else None
+                plot_coord_names_groups[restart_index] if plot_coord_names_groups else None,
+                downsample_factor,
             )
 
             fig.canvas.manager.set_window_title(
@@ -412,6 +427,16 @@ if __name__ == "__main__":
         ),
     )
 
+    parser.add_argument(
+        "--downsample",
+        "-d",
+        type=int,
+        default=1,
+        help=(
+            "The factor by which to downsample the data for plotting. Default is 1 (no downsampling)."
+        ),
+    )
+
     args = parser.parse_args()
 
     # Initialise post-processing object
@@ -427,4 +452,4 @@ if __name__ == "__main__":
         exit()
 
     # Call function
-    plot_realspace_data(post, args.location, args.time)
+    plot_realspace_data(post, args.location, args.time, args.downsample)
