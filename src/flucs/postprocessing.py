@@ -1,8 +1,8 @@
 import argparse
 import inspect
 import pathlib as pl
-from collections.abc import Sequence
 from collections import OrderedDict
+from collections.abc import Sequence
 from typing import Any, Literal
 
 import matplotlib.pyplot as plt
@@ -80,7 +80,7 @@ class FlucsPostProcessing:
                 if flucs_type not in ordered_types:
                     ordered_types.append(flucs_type)
 
-        # Find each type's adjacent postprocessing directory and collect Python scripts.
+        # Find postprocessing directory and collect Python scripts.
         for flucs_type in ordered_types:
             type_name = flucs_type.__name__
             path = inspect.getfile(flucs_type)
@@ -139,8 +139,7 @@ class FlucsPostProcessing:
                 label = f"[{integer:>{integer_width}}]"
                 print(f"{2 * self._indent}{label} {path}")
         print(
-            "To run a specific script: "
-            "'flucs -p <integer> <script arguments>'."
+            "To run a specific script: 'flucs -p <integer> <script arguments>'."
         )
 
     def _get_output_paths(self) -> dict[pl.Path, list[pl.Path]]:
@@ -211,7 +210,9 @@ class FlucsPostProcessing:
                 _add(base_name + var_name, grp_number)
 
             for subgrp_name, subgrp in grp.groups.items():
-                _add_nested(subgrp, grp_number, base_name=base_name + f"{subgrp_name}/")
+                _add_nested(
+                    subgrp, grp_number, base_name=base_name + f"{subgrp_name}/"
+                )
 
         # Iterate over groups in netCDF file
         with Dataset(pl.Path(nc_path), "r", format="NETCDF4") as ds:
@@ -423,7 +424,9 @@ class FlucsPostProcessing:
                     for dim in var_obj.dimensions:
                         if dim == "time":
                             continue
-                        dims_dicts[-1][dim] = np.asarray(var_obj.group()[dim][:])
+                        dims_dicts[-1][dim] = np.asarray(
+                            var_obj.group()[dim][:]
+                        )
                 else:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
@@ -446,7 +449,9 @@ class FlucsPostProcessing:
         *,
         name: str,
         suffix: str,
-        conflict_strategy: Literal["overwrite", "preserve", "error"] = "overwrite",
+        conflict_strategy: Literal[
+            "overwrite", "preserve", "error"
+        ] = "overwrite",
         save_kwargs: dict | None = None,
     ) -> None:
         """
@@ -485,7 +490,7 @@ class FlucsPostProcessing:
         # Handle conflict strategies
         if base_save_filepath.exists():
             if conflict_strategy == "overwrite":
-                pass  
+                pass
             elif conflict_strategy == "preserve":
                 return
             elif conflict_strategy == "error":
@@ -596,7 +601,7 @@ class FlucsPostProcessing:
             Optional path where to save results. If None, nothing will be saved.
 
         output_files: str | Sequence[str] | None
-            Type(s) of output being analysed for this instance of post-processing.
+            Output files being analysed for this instance of post-processing.
             If None, no specific output type is assumed.
 
         constraint : {"none", "solver", "system", "both"}
@@ -624,13 +629,17 @@ class FlucsPostProcessing:
         if isinstance(output_files, str):
             self.output_files = [output_files]
         else:
-            self.output_files = list(output_files) if output_files is not None else None
+            self.output_files = (
+                list(output_files) if output_files is not None else None
+            )
 
         self._output_paths = self._get_output_paths()
 
         # Set save directory
         self.save_directory = (
-            pl.Path(save_directory).expanduser().resolve() if save_directory else None
+            pl.Path(save_directory).expanduser().resolve()
+            if save_directory
+            else None
         )
 
         # Determine solver and system types across all i/o directories

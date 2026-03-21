@@ -426,7 +426,9 @@ class FourierSystem(FlucsSystem):
         self.module_options.define_dimension(
             "HALFPADDEDSIZE", self.half_padded_size
         )
-        self.module_options.define_dimension("PADDEDSIZE", self.full_padded_size)
+        self.module_options.define_dimension(
+            "PADDEDSIZE", self.full_padded_size
+        )
 
         self.module_options.define_float(
             "DFT_PADDEDSIZE_FACTOR", self.float(1.0 / self.full_padded_size)

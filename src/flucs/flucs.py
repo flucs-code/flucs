@@ -121,7 +121,7 @@ def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
     """
 
     for index, arg in enumerate(argv):
-        if arg in ('-p', '--postprocess'):
+        if arg in ("-p", "--postprocess"):
             return argv[: index + 1], argv[index + 1 :]
 
     return argv, None

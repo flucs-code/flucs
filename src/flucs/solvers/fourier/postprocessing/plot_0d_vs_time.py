@@ -8,7 +8,6 @@ from flucs.postprocessing import FlucsPostProcessing
 
 
 def plot_0d_vs_time(post, variable=None):
-
     # Get valid files for the specified variable
     nc_paths = post.get_valid_netcdf_paths(str(variable))
 
@@ -20,7 +19,6 @@ def plot_0d_vs_time(post, variable=None):
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
-
         # Assign identifiers
         sim_label = pl.Path(nc_path).parent.name
         sim_color = plt.cm.rainbow(np.linspace(0, 1, len(nc_paths)))[index]
@@ -62,7 +60,6 @@ def plot_0d_vs_time(post, variable=None):
 
 
 if __name__ == "__main__":
-
     # Setup parser
     parser = argparse.ArgumentParser(
         parents=[FlucsPostProcessing.parser()],

@@ -1,9 +1,6 @@
 """A selection of useful functions and classes for dealing with CuPy"""
 
-from typing import Any
-
 import cupy as cp
-import numpy as np
 
 
 def cupy_set_device_pointer(
@@ -97,12 +94,7 @@ class ModuleOptions:
         """
         self._define_constant(name)
 
-
-    def define_float(
-        self,
-        name: str,
-        value
-    ):
+    def define_float(self, name: str, value):
         """Adds a definition to the compiler flags.
         Equivalent to
 
@@ -119,11 +111,7 @@ class ModuleOptions:
         """
         self._define_constant(name, value, "FLUCS_FLOAT")
 
-    def define_int(
-        self,
-        name: str,
-        value
-    ):
+    def define_int(self, name: str, value):
         """Adds a definition of a 32-bit int to the compiler flags.
         Equivalent to
 
@@ -140,11 +128,7 @@ class ModuleOptions:
         """
         self._define_constant(name, value, "int")
 
-    def define_dimension(
-        self,
-        name: str,
-        value
-    ):
+    def define_dimension(self, name: str, value):
         """Adds a definition of a size_t value to the compiler flags.
         Equivalent to
 
