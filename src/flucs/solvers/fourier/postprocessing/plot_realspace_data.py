@@ -134,7 +134,6 @@ def plot_2d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
                 cmap="seismic",
                 vmin=-amplitude,
                 vmax=amplitude,
-                interpolation="nearest"
             )
 
             # Set plot options
