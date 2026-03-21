@@ -165,7 +165,7 @@ def main():
 
     """
 
-    parser = argparse.ArgumentParser(description="flucs = fluid cuda solver.")
+    parser = argparse.ArgumentParser(description="FLUCS = fluid cuda solver.")
 
     parser.add_argument(
         "--io_path",
@@ -187,8 +187,6 @@ def main():
         "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'.",
     )
 
-    # The script can only do one thing at a time.
-    # Here are the options.
     operation_modes = parser.add_mutually_exclusive_group()
 
     operation_modes.add_argument(
@@ -265,7 +263,7 @@ def main():
     ):
         args.run = True
 
-    # Actually solve something
+    # Launch the solver
     if args.run:
         input_path = io_path / "input.toml"
 
