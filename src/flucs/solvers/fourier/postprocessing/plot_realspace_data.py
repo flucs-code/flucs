@@ -8,8 +8,6 @@ from matplotlib import cm, colors
 
 from flucs.postprocessing import FlucsPostProcessing
 
-### TODO needs significant cleaning up everywhere
-
 
 # Helper functions
 def increment_time_index(fig, inc):
@@ -172,7 +170,7 @@ def plot_3d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
             norm = colors.Normalize(vmin=-amplitude, vmax=amplitude)
 
             # Plot the physical x/y face at fixed z = z[-1].
-            # Display axes: y_plot->z, y_plot->x, z_plot->y
+            # Display axes: x_plot->z, y_plot->x, z_plot->y
             y_plot_xy, z_plot_xy = np.meshgrid(
                 x_downsampled, y_downsampled, indexing="ij"
             )
@@ -212,12 +210,14 @@ def plot_3d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
             )
 
             # Plot the physical z/x face at fixed y = y[-1].
-            # Display axes: y_plot->z, y_plot->x, z_plot->y
-            y_plot_zx, z_plot_zx = np.meshgrid(
+            # Display axes: x_plot->z, y_plot->x, z_plot->y
+            x_plot_zx, y_plot_zx = np.meshgrid(
                 z_downsampled, x_downsampled, indexing="ij"
             )
-            x_plot_zx = np.full_like(y_plot_zx, y[-1])
+            z_plot_zx = np.full_like(x_plot_zx, y[-1])
+
             data_zx = field_data[::downsample_factor, ::downsample_factor, -1]
+
             ax.plot_surface(
                 x_plot_zx,
                 y_plot_zx,
@@ -313,7 +313,7 @@ def plot_realspace_data(post, location, time_to_plot, downsample_factor):
         plot_rank = 3 - len(axes_to_remove)
         plot_function = {1: plot_1d, 2: plot_2d, 3: plot_3d}[plot_rank]
 
-        # Initialise plotting and cast to list
+        # Initialise plotting making sure axs is a list/tuple
         if plot_rank == 3:
             fig = plt.figure()
             axs = tuple(
@@ -329,8 +329,8 @@ def plot_realspace_data(post, location, time_to_plot, downsample_factor):
                 layout="constrained",
             )
 
-        if data.shape[1] == 1:
-            axs = (axs,)
+            if data.shape[1] == 1:
+                axs = (axs,)
 
         fig._base_name = (
             f"realspace_data_{loc}" + f"_{pl.Path(nc_path).parent.name}"
