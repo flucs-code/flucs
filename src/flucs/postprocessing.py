@@ -1,6 +1,7 @@
 import argparse
 import inspect
 import pathlib as pl
+from collections import OrderedDict
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -21,9 +22,10 @@ class FlucsPostProcessing:
 
     # Postprocessing-specific attributes
     io_paths: list[pl.Path]
-    output_file: str | None
+    output_files: list[str] | None
+    _output_paths: dict[pl.Path, list[pl.Path]]
     save_directory: pl.Path | None
-    _script_paths: dict[str, list[pl.Path]]
+    _script_paths: list[tuple[int, str, pl.Path]]
 
     # Solver and system for the outputs
     _solver_names: dict[pl.Path, str]
@@ -57,28 +59,63 @@ class FlucsPostProcessing:
             self._solver_types[io_path] = flucs.get_solver_type(solver_name)
             self._system_types[io_path] = flucs.get_system_type(system_name)
 
-    def _get_script_paths(self) -> None:
+    def _get_script_paths(self) -> list[tuple[int, str, pl.Path]]:
         """
         Gathers the paths to the relevant postprocessing scripts for each
-        solver and system used across all provided i/o directories.
+        solver and system used across all provided i/o directories and returns
+        them in a stable integer-addressable order.
         """
 
-        self._script_paths = {}
+        self._script_paths = []
 
-        # Collect unique types across all io_paths
-        unique_types: set[type] = set()
-        unique_types.update(self._solver_types.values())
-        unique_types.update(self._system_types.values())
+        # Keep solver scripts ahead of system scripts in the printed order.
+        ordered_types = []
+        for flucs_types in (
+            self._solver_types.values(),
+            self._system_types.values(),
+        ):
+            for flucs_type in sorted(
+                set(flucs_types), key=lambda f: f.__name__.lower()
+            ):
+                if flucs_type not in ordered_types:
+                    ordered_types.append(flucs_type)
 
-        for flucs_type in unique_types:
-            name = flucs_type.__name__
+        # Find postprocessing directory and collect Python scripts.
+        for flucs_type in ordered_types:
+            type_name = flucs_type.__name__
             path = inspect.getfile(flucs_type)
 
-            self._script_paths[name] = []
             scripts_dir = pl.Path(path).parent / "postprocessing"
             if scripts_dir.exists():
-                for script in scripts_dir.glob("*.py"):
-                    self._script_paths[name].append(pl.Path(script))
+                for script in sorted(
+                    scripts_dir.glob("*.py"), key=lambda p: p.name.lower()
+                ):
+                    self._script_paths.append(
+                        (len(self._script_paths), type_name, pl.Path(script))
+                    )
+
+        return self._script_paths
+
+    def get_script_path(self, script_integer: int) -> pl.Path:
+        """
+        Returns the postprocessing script corresponding to a given integer.
+        """
+
+        script_paths = self._get_script_paths()
+
+        if not script_paths:
+            raise ValueError(
+                "No postprocessing scripts are available for the specified "
+                "i/o directory."
+            )
+
+        if not 0 <= script_integer < len(script_paths):
+            raise ValueError(
+                f"Invalid postprocessing script integer: {script_integer}. "
+                f"Expected a value between 0 and {len(script_paths) - 1}."
+            )
+
+        return script_paths[script_integer][2]
 
     def list_script_paths(self) -> None:
         """
@@ -87,17 +124,54 @@ class FlucsPostProcessing:
         provided i/o directories.
         """
 
-        self._get_script_paths()
+        script_paths = self._get_script_paths()
 
         print("Available postprocessing scripts:")
-        for type_name, paths in self._script_paths.items():
-            print(f"{self._indent}{type_name}:")
-            for path in paths:
-                print(f"{2 * self._indent}{path}")
+        if not script_paths:
+            print(f"{self._indent}None")
+        else:
+            integer_width = len(str(len(script_paths) - 1))
+            current_type = None
+            for integer, type_name, path in script_paths:
+                if type_name != current_type:
+                    print(f"{self._indent}{type_name}:")
+                    current_type = type_name
+                label = f"[{integer:>{integer_width}}]"
+                print(f"{2 * self._indent}{label} {path}")
         print(
-            "For information on a specific script, run: "
-            "'python <script path> --help'"
+            "To run a specific script: 'flucs -p <integer> <script arguments>'."
         )
+
+    def _get_output_paths(self) -> dict[pl.Path, list[pl.Path]]:
+        """
+        For each i/o directory, gathers the paths to the output files
+        specified by self.output_files.
+
+        Returns
+        -------
+        dict[pl.Path, list[pl.Path]]
+            Mapping io_path -> list of filepaths corresponding to
+            self.output_files.
+        """
+
+        output_paths: dict[pl.Path, list[pl.Path]] = {}
+
+        for io_path in self.io_paths:
+            matched_paths = []
+            seen = set()
+
+            for output_file in self.output_files or []:
+                for path in sorted(io_path.glob(output_file)):
+                    if not path.is_file():
+                        continue
+                    if path in seen:
+                        continue
+                    seen.add(path)
+                    matched_paths.append(path)
+
+            output_paths[io_path] = matched_paths
+
+        return output_paths
 
     @staticmethod
     def get_netcdf_variables(
@@ -130,28 +204,30 @@ class FlucsPostProcessing:
             if grp_number not in netcdf_variables[name]:
                 netcdf_variables[name].append(grp_number)
 
+        # Helper function to add variables from nested groups
+        def _add_nested(grp, grp_number, base_name="") -> None:
+            for var_name in grp.variables.keys():
+                _add(base_name + var_name, grp_number)
+
+            for subgrp_name, subgrp in grp.groups.items():
+                _add_nested(
+                    subgrp, grp_number, base_name=base_name + f"{subgrp_name}/"
+                )
+
         # Iterate over groups in netCDF file
         with Dataset(pl.Path(nc_path), "r", format="NETCDF4") as ds:
             for grp_name, grp in ds.groups.items():
                 grp_number = int(grp_name)
-
-                # Group variables
-                for var_name in grp.variables.keys():
-                    _add(var_name, grp_number)
-
-                # Diagnostic variables
-                for diag_name, diag_grp in grp.groups.items():
-                    for var_name in diag_grp.variables.keys():
-                        _add(f"{diag_name}/{var_name}", grp_number)
+                _add_nested(grp, grp_number)
 
         return {v: sorted(ids) for v, ids in netcdf_variables.items()}
 
     def _get_all_netcdf_variables(
         self, ignore=None
-    ) -> dict[str, dict[str, list[int]]]:
+    ) -> dict[pl.Path, dict[pl.Path, dict[str, list[int]]]]:
         """
         For each i/o directory, collect the variables present in the netCDF file
-        specified by self.output_file, and the groups that they appear in.
+        specified by self.output_files, and the groups that they appear in.
 
         Parameters
         ----------
@@ -160,25 +236,30 @@ class FlucsPostProcessing:
 
         Returns
         -------
-        dict[str, dict[str, list[int]]]
-            Mapping io_path (as a string) -> {variable: [group_ids], ... }
+        dict[pl.Path, dict[pl.Path, dict[str, list[int]]]]
+            Mapping io_path -> {nc_path -> {variable: [group_ids], ... }, ... }
         """
 
-        if self.output_file is None:
+        if self.output_files is None:
             raise ValueError(
-                "'output_file' must be set to derive netCDF paths from "
+                "'output_files' must be set to derive netCDF paths from "
                 "i/o directories."
             )
 
-        result: dict[str, dict[str, list[int]]] = {}
-        for io_path in self.io_paths:
-            nc_path = io_path / self.output_file
-            if not nc_path.exists():
-                result[str(io_path)] = {}
-                continue
-            result[str(io_path)] = FlucsPostProcessing.get_netcdf_variables(
-                nc_path, ignore=ignore
-            )
+        # Get netCDF paths from all output paths
+        netcdf_paths = {
+            io_path: [path for path in paths if path.suffix == ".nc"]
+            for io_path, paths in self._output_paths.items()
+        }
+
+        result: dict[pl.Path, dict[pl.Path, dict[str, list[int]]]] = {}
+        for io_path, nc_paths in netcdf_paths.items():
+            result[io_path] = {}
+
+            for nc_path in nc_paths:
+                result[io_path][nc_path] = self.get_netcdf_variables(
+                    nc_path, ignore=ignore
+                )
 
         return result
 
@@ -192,10 +273,28 @@ class FlucsPostProcessing:
 
         print("Available netCDF variables:")
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
-        for io_path, variables_dict in netcdf_variables.items():
-            print(rf"{self._indent}{io_path}: {sorted(variables_dict.keys())}")
+        for io_path, file_map in netcdf_variables.items():
+            all_variables = set()
 
-    def get_valid_files(self, variable: str) -> list[pl.Path]:
+            for variables_dict in file_map.values():
+                all_variables.update(variables_dict.keys())
+
+            listed_variables = []
+            unique_variables = set()
+
+            for variable in sorted(all_variables):
+                if variable.startswith(("realspace_data/", "fourier_data/")):
+                    variable = variable.rsplit("/", 1)[0]
+
+                if variable in unique_variables:
+                    continue
+
+                unique_variables.add(variable)
+                listed_variables.append(variable)
+
+            print(rf"{self._indent}{io_path}: {listed_variables}")
+
+    def get_valid_netcdf_paths(self, variable: str) -> list[pl.Path]:
         """
         Return the netCDF filepaths that contain a given variable.
 
@@ -211,13 +310,17 @@ class FlucsPostProcessing:
         found = []
         missing = []
 
-        for io_path, variables in mapping.items():
-            nc_path = pl.Path(io_path) / self.output_file
-            if variables.get(variable):
-                found.append(nc_path)
-            else:
-                missing.append(nc_path)
-        # Report files that are missing the variable
+        for io_path, file_map in mapping.items():
+            io_found = False
+
+            for nc_path, variables in file_map.items():
+                if variables.get(variable):
+                    found.append(nc_path)
+                    io_found = True
+
+            if not io_found:
+                missing.extend(file_map.keys())
+
         if missing:
             print(f"Variable '{variable}' not found in:")
             for path in missing:
@@ -245,11 +348,14 @@ class FlucsPostProcessing:
         Returns
         -------
         tuple
-            (values, boundary_indices) where
+            (values, boundary_indices, dims_dict) where
             - values is an np.ndarray with shape (sum(time_lengths), ...)
               after concatenation across groups
             - boundary_indices is a list of integer indices marking the
               boundaries between groups in the concatenated time axis
+            - dims_dicts is a list of ordered dictionaries of the variable's
+              dimensions and their data. The length of dims_dicts is the
+              total number of restart groups.
         """
 
         # Helper function to get variable from group
@@ -261,9 +367,9 @@ class FlucsPostProcessing:
                 return None
 
             # Diagnostic variables
-            diag, var = name.split("/", 1)
-            if diag in grp.groups and var in grp.groups[diag].variables:
-                return grp.groups[diag].variables[var]
+            subgrp, var = name.split("/", 1)
+            if subgrp in grp.groups:
+                return _get_var(grp[subgrp], var)
             return None
 
         # Read data from netCDF file
@@ -297,10 +403,12 @@ class FlucsPostProcessing:
             # Get data from each group
             group_data = []
             boundaries = []
+            dims_dicts = []
             for grp_number, grp in groups:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
 
+                dims_dicts.append(OrderedDict())
                 var_obj = _get_var(grp, variable)
                 if var_obj is not None:
                     arr = np.asarray(var_obj[:])
@@ -311,6 +419,14 @@ class FlucsPostProcessing:
                             f"(has {arr.shape} but expected {time_length})"
                         )
                     group_data.append(arr.astype(var_dtype, copy=False))
+
+                    # Add dimensions
+                    for dim in var_obj.dimensions:
+                        if dim == "time":
+                            continue
+                        dims_dicts[-1][dim] = np.asarray(
+                            var_obj.group()[dim][:]
+                        )
                 else:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
@@ -325,7 +441,7 @@ class FlucsPostProcessing:
         values = np.concatenate(group_data, axis=0)
         boundary_indices = list(np.cumsum(boundaries)[:-1])
 
-        return values, boundary_indices
+        return values, boundary_indices, dims_dicts
 
     def save(
         self,
@@ -333,7 +449,9 @@ class FlucsPostProcessing:
         *,
         name: str,
         suffix: str,
-        conflict_strategy: Literal["overwrite", "error"] = "overwrite",
+        conflict_strategy: Literal[
+            "overwrite", "preserve", "error"
+        ] = "overwrite",
         save_kwargs: dict | None = None,
     ) -> None:
         """
@@ -347,7 +465,7 @@ class FlucsPostProcessing:
             The desired filename stem (without suffix).
         suffix : str | None
             File extension.
-        conflict_strategy : {"overwrite", "error"}
+        conflict_strategy : {"overwrite", "preserve", "error"}
             Behaviour when the target save filepath already exists.
         save_kwargs : dict | None
             Arguments forwarded to the type-specific save function.
@@ -358,7 +476,7 @@ class FlucsPostProcessing:
             return None
 
         # Validate conflict strategy
-        if conflict_strategy not in ("overwrite", "error"):
+        if conflict_strategy not in ("overwrite", "preserve", "error"):
             raise ValueError("Invalid value for 'conflict_strategy'.")
 
         # Ensure directory exists
@@ -369,20 +487,28 @@ class FlucsPostProcessing:
         ext = f".{suffix.lstrip('.')}" if suffix else ""
         base_save_filepath = directory / f"{name}{ext}"
 
-        # If conflict_strategy = 'error', raise an error if any existing files
-        # match '{name}_*{ext}'.
-        if conflict_strategy == "error":
-            pattern = f"{name}_*{ext}"
-            if any(directory.glob(pattern)):
+        # Handle conflict strategies
+        if base_save_filepath.exists():
+            if conflict_strategy == "overwrite":
+                pass
+            elif conflict_strategy == "preserve":
+                return
+            elif conflict_strategy == "error":
                 raise OSError(
-                    f"Conflicting files matching '{pattern}' already "
-                    f"exist: {directory}"
+                    f"Target save path already exists: {base_save_filepath}"
                 )
 
         # Call type-specific save function
-        if isinstance(obj, (Figure, Axes)):
-            self._save_matplotlib_figures(
-                base_save_filepath=base_save_filepath,
+        if isinstance(obj, Figure):
+            self._save_matplotlib_figure(
+                fig=obj,
+                save_filepath=base_save_filepath,
+                save_kwargs=save_kwargs,
+            )
+        elif isinstance(obj, Axes):
+            self._save_matplotlib_figure(
+                fig=obj.figure,
+                save_filepath=base_save_filepath,
                 save_kwargs=save_kwargs,
             )
         else:
@@ -393,35 +519,25 @@ class FlucsPostProcessing:
 
         return
 
-    def _save_matplotlib_figures(
+    def _save_matplotlib_figure(
         self,
-        base_save_filepath: pl.Path,
+        fig: Figure,
+        save_filepath: pl.Path,
         save_kwargs: dict | None,
     ) -> None:
         """
-        Save all open Matplotlib figures to self.save_directory.
+        Save a single Matplotlib figure to self.save_directory.
         """
-
-        # Get all figures to save
-        fignums = plt.get_fignums()
-        if not fignums:
-            raise RuntimeError("No Matplotlib figures available to save.")
 
         # Parse kwargs
         kwargs = dict(save_kwargs or {})
         close_fig = bool(kwargs.pop("close", False))
 
         # Save each figure
-        f = base_save_filepath
-        for fignum in fignums:
-            fig = plt.figure(fignum)
-            number = f"_{int(fig.number):03d}" if len(fignums) > 1 else ""
-            filename = f"{f.with_suffix('').name}{number}{f.suffix}"
-            save_path = f.parent / filename
+        fig.savefig(save_filepath, **kwargs)
 
-            fig.savefig(save_path, **kwargs)
-            if close_fig:
-                plt.close(fig)
+        if close_fig:
+            plt.close(fig)
 
         return
 
@@ -443,7 +559,7 @@ class FlucsPostProcessing:
             help=(
                 "Paths to the i/o directories, which must contain "
                 "'input.toml'. If no path is specified, will assume the "
-                "current working directory.",
+                "current working directory."
             ),
         )
 
@@ -468,8 +584,9 @@ class FlucsPostProcessing:
         io_paths: pl.Path | Sequence[pl.Path],
         *,
         save_directory: pl.Path | None = None,
-        output_file: str | None = None,
+        output_files: str | Sequence[str] | None = None,
         constraint: Literal["none", "solver", "system", "both"] = "none",
+        quiet: bool = False,
     ) -> None:
         """
         Given one or more i/o directories, sets up the relevant paths, and
@@ -483,14 +600,17 @@ class FlucsPostProcessing:
         save_directory : pl.Path | None
             Optional path where to save results. If None, nothing will be saved.
 
-        output_file: str | None
-            Type of output being analysed for this instance of post-processing.
+        output_files: str | Sequence[str] | None
+            Output files being analysed for this instance of post-processing.
             If None, no specific output type is assumed.
 
         constraint : {"none", "solver", "system", "both"}
             Constraint on mixing solvers/systems across provided i/o
             directories. If "solver", all solvers must match. If "system", all
             systems must match. If "both", both solvers and systems must match.
+        quiet : bool
+            Whether to suppress the short summary printed when the
+            postprocessing object is initialised.
         """
 
         # Parse io_paths input
@@ -499,15 +619,27 @@ class FlucsPostProcessing:
 
         self.io_paths = []
         for path in io_paths:
-            input_file = pl.Path(path) / "input.toml"
+            resolved_path = pl.Path(path).expanduser().resolve()
+            input_file = resolved_path / "input.toml"
             if not input_file.exists():
                 raise ValueError(f"Path {path} is not a valid i/o directory.")
-            self.io_paths.append(pl.Path(path))
+            self.io_paths.append(resolved_path)
 
-        # Set output file and save directory
-        self.output_file = output_file
+        # Set output files
+        if isinstance(output_files, str):
+            self.output_files = [output_files]
+        else:
+            self.output_files = (
+                list(output_files) if output_files is not None else None
+            )
+
+        self._output_paths = self._get_output_paths()
+
+        # Set save directory
         self.save_directory = (
-            pl.Path(save_directory).resolve() if save_directory else None
+            pl.Path(save_directory).expanduser().resolve()
+            if save_directory
+            else None
         )
 
         # Determine solver and system types across all i/o directories
@@ -531,9 +663,10 @@ class FlucsPostProcessing:
                 "system when 'constraint' is 'system' or 'both'."
             )
 
-        print(
-            f"FlucsPostProcessing "
-            f"({len(self.io_paths)}, "
-            f"{self.output_file}, "
-            f"{self.save_directory})"
-        )
+        if not quiet:
+            print(
+                f"FlucsPostProcessing "
+                f"({len(self.io_paths)}, "
+                f"{self.output_files}, "
+                f"{self.save_directory})"
+            )

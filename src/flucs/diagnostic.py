@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -43,6 +43,11 @@ class FlucsDiagnostic(ABC):
     # Name of the diagnostic
     name: str
 
+    # Default values for any options the diagnostic may have
+    # Note that all valid options must be declared here
+    # together with their defaults.
+    option_defaults: ClassVar[dict[str, object]] = {}
+
     # Parent output and system
     output: FlucsOutput
     system: FlucsSystem
@@ -54,13 +59,34 @@ class FlucsDiagnostic(ABC):
     # Output variables
     vars: dict[str, FlucsDiagnosticVariable]
 
-    def __init__(self, system: FlucsSystem, output: FlucsOutput):
+    def __init__(
+        self,
+        system: FlucsSystem,
+        output: FlucsOutput,
+        options: dict | None = None,
+    ):
         self.system = system
         self.output = output
         self.cache_len = 0
 
         self.vars = {}
+        self._load_options(options or {})
         self.init_vars()
+
+    def _load_options(self, options: dict) -> None:
+        """Loads options for the given diagnostic."""
+
+        # Validate options
+        for key in options:
+            if key not in self.option_defaults:
+                raise KeyError(
+                    f"Unknown option '{key}' for diagnostic '{self.name}'."
+                )
+
+        # Load options
+        for key, default in self.option_defaults.items():
+            value = options.get(key, default)
+            setattr(self, key, type(default)(value))  # Cast to default type
 
     def add_var(self, var: FlucsDiagnosticVariable) -> None:
         if var.name in self.vars:
@@ -77,6 +103,10 @@ class FlucsDiagnostic(ABC):
         """Clears the memory cache of the diagnostic."""
         for var in self.vars.values():
             var.data_cache.clear()
+
+    def __hash__(self):
+        """Hash diagnostics using their name."""
+        return hash(self.name)
 
     @abstractmethod
     def init_vars(self) -> None:

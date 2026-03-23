@@ -41,9 +41,9 @@ FLUCS_COMPLEX warp_sum(FLUCS_COMPLEX v)
 }
 
 // Helper function for expanding varargs into a sum
-template <int N, typename T, typename... Functors>
+template <size_t N, typename T, typename... Functors>
 __device__ __forceinline__
-T add_at(int index, Functors... array_functors)
+T add_at(size_t index, Functors... array_functors)
 {
     T values[] = { array_functors(index)... };
 
@@ -56,9 +56,9 @@ T add_at(int index, Functors... array_functors)
 }
 
 // Helper function for expanding varargs into a product
-template <int N, typename T, typename... Functors>
+template <size_t N, typename T, typename... Functors>
 __device__ __forceinline__
-T multiply_at(int index, Functors... array_functors)
+T multiply_at(size_t index, Functors... array_functors)
 {
     T values[] = { array_functors(index)... };
 
@@ -76,7 +76,7 @@ T multiply_at(int index, Functors... array_functors)
 template <typename T>
 struct NOP_Functor {
     const T* __restrict__ array;
-    __device__ __forceinline__ T operator()(int index) const {
+    __device__ __forceinline__ T operator()(size_t index) const {
         return array[index];
     }
 };
@@ -84,7 +84,7 @@ struct NOP_Functor {
 // Conjugate functor
 struct CC_Functor {
     const FLUCS_COMPLEX* __restrict__ array;
-    __device__ __forceinline__ FLUCS_COMPLEX operator()(int index) const {
+    __device__ __forceinline__ FLUCS_COMPLEX operator()(size_t index) const {
         FLUCS_COMPLEX val = array[index];
         return FLUCS_COMPLEX(val.real(), -val.imag());
     }
@@ -94,7 +94,7 @@ struct CC_Functor {
 struct Abs2_Functor {
     const FLUCS_COMPLEX* __restrict__ array;
     const FLUCS_FLOAT multiplier;
-    __device__ __forceinline__ FLUCS_FLOAT operator()(int index) const {
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
         FLUCS_COMPLEX val = array[index];
         return multiplier * (val.real()*val.real() + val.imag()*val.imag());
     }
@@ -104,7 +104,7 @@ struct Abs2_Functor {
 template <typename T, T multiplier>
 struct ConstMultiplier_Functor {
     const T* __restrict__ array;
-    __device__ __forceinline__ T operator()(int index) const {
+    __device__ __forceinline__ T operator()(size_t index) const {
         return multiplier * array[index];
     }
 };
@@ -112,9 +112,9 @@ struct ConstMultiplier_Functor {
 // d/dx functor for standard 3D Fourier space
 struct Dx_Functor {
     const FLUCS_COMPLEX* __restrict__ array;
-    __device__ __forceinline__ FLUCS_COMPLEX operator()(int index) const {
+    __device__ __forceinline__ FLUCS_COMPLEX operator()(size_t index) const {
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
-        const int ikx = indices.ikx;
+        const size_t ikx = indices.ikx;
 
         return FLUCS_COMPLEX(0, kx_from_ikx(ikx)) * array[index];
     }
@@ -123,9 +123,9 @@ struct Dx_Functor {
 // d/dy functor for standard 3D Fourier space
 struct Dy_Functor {
     const FLUCS_COMPLEX* __restrict__ array;
-    __device__ __forceinline__ FLUCS_COMPLEX operator()(int index) const {
+    __device__ __forceinline__ FLUCS_COMPLEX operator()(size_t index) const {
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
-        const int iky = indices.iky;
+        const size_t iky = indices.iky;
 
         return FLUCS_COMPLEX(0, ky_from_iky(iky)) * array[index];
     }
@@ -134,9 +134,9 @@ struct Dy_Functor {
 // d/dz functor for standard 3D Fourier space
 struct Dz_Functor {
     const FLUCS_COMPLEX* __restrict__ array;
-    __device__ __forceinline__ FLUCS_COMPLEX operator()(int index) const {
+    __device__ __forceinline__ FLUCS_COMPLEX operator()(size_t index) const {
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
-        const int ikz = indices.ikz;
+        const size_t ikz = indices.ikz;
 
         return FLUCS_COMPLEX(0, kz_from_ikz(ikz)) * array[index];
     }
@@ -145,7 +145,7 @@ struct Dz_Functor {
 // del_perp^2 functor for standard 3D Fourier space
 struct DelPerp2_Functor {
     const FLUCS_COMPLEX* __restrict__ array;
-    __device__ __forceinline__ FLUCS_COMPLEX operator()(int index) const {
+    __device__ __forceinline__ FLUCS_COMPLEX operator()(size_t index) const {
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
         const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
@@ -178,21 +178,20 @@ struct DelPerp2_Functor {
  *
  * Some examples are given below.
  */
-template <int N, bool is_half_axis, typename T, typename... Functors>
+template <size_t N, bool is_half_axis, typename T, typename... Functors>
 __device__ __forceinline__
 void multiply_and_sum_last_axis(
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
 {
-    const int ix  = blockIdx.x;
-    const int tid = threadIdx.x;
-    int index;
+    const size_t ix  = blockIdx.x;
+    const size_t tid = threadIdx.x;
 
     T sum = 0;
 
     // Grid-stride loop over contiguous axis
-    for (int iy = tid; iy < N; iy += blockDim.x) {
+    for (size_t iy = tid; iy < N; iy += blockDim.x) {
         sum += ((is_half_axis && iy > 0) ? (FLUCS_FLOAT)2.0 : (FLUCS_FLOAT)1.0) * multiply_at<N, T>(ix * N + iy, array_functors...);
     }
 
@@ -221,20 +220,20 @@ void multiply_and_sum_last_axis(
 
 // Same as the product kernel but now we add the functors
 // element-wise instead of multiplying them.
-template <int N, bool is_half_axis, typename T, typename... Functors>
+template <size_t N, bool is_half_axis, typename T, typename... Functors>
 __device__ __forceinline__
 void add_and_sum_last_axis(
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
 {
-    const int ix  = blockIdx.x;
-    const int tid = threadIdx.x;
+    const size_t ix  = blockIdx.x;
+    const size_t tid = threadIdx.x;
 
     T sum = 0;
 
     // Grid-stride loop over contiguous axis
-    for (int iy = tid; iy < N; iy += blockDim.x) {
+    for (size_t iy = tid; iy < N; iy += blockDim.x) {
         sum += ((is_half_axis && iy > 0) ? (FLUCS_FLOAT)2.0 : (FLUCS_FLOAT)1.0) * add_at<N, T>(ix * N + iy, array_functors...);
     }
 
