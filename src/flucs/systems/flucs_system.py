@@ -19,7 +19,6 @@ import cupy as cp
 import numpy as np
 from cupy.cuda import cufft
 
-import flucs
 from flucs import FlucsInput
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
@@ -106,9 +105,6 @@ class FlucsSystem(ABC):
         flucs_input : FlucsInput
             Input object that will be initialised with the defaults.
         """
-        import importlib
-        import pathlib as pl
-
         for parent_cls in reversed(cls.__mro__):
             if not issubclass(parent_cls, FlucsSystem):
                 continue
@@ -410,11 +406,24 @@ class FlucsSystem(ABC):
         }
         """
 
+    def _add_include_dirs(self) -> None:
+        """Adds the base src folder of the projects of each FlucsSystem in the
+        inheritance chain of the current instance.
+
+        """
+        for parent_cls in type(self).__mro__:
+            if not issubclass(parent_cls, FlucsSystem):
+                continue
+
+            root_name = parent_cls.__module__.split(".")[0]
+            root_mod = importlib.import_module(root_name)
+            root_src_path = pl.Path(root_mod.__file__).parent.parent
+
+            self.module_options.add_compiler_option(f"-I{root_src_path}")
+
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
         self.module_options = ModuleOptions()
-        self.module_options.add_compiler_option(
-            f"-I{pl.Path(flucs.__file__).parent.parent}"
-        )
+        self._add_include_dirs()
         self._interpret_input()
         self._set_precision()
