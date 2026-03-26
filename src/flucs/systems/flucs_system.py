@@ -19,7 +19,6 @@ import cupy as cp
 import numpy as np
 from cupy.cuda import cufft
 
-import flucs
 from flucs import FlucsInput
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
@@ -416,13 +415,11 @@ class FlucsSystem(ABC):
             if not issubclass(parent_cls, FlucsSystem):
                 continue
 
-            root_name = parent_cls.__module__.split('.')[0]
+            root_name = parent_cls.__module__.split(".")[0]
             root_mod = importlib.import_module(root_name)
             root_src_path = pl.Path(root_mod.__file__).parent.parent
 
-            self.module_options.add_compiler_option(
-                f"-I{root_src_path}"
-            )
+            self.module_options.add_compiler_option(f"-I{root_src_path}")
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
