@@ -176,7 +176,7 @@ class FlucsSystem(ABC):
 
         """
 
-        self.init_time = 0.0
+        self.init_time = self.float(0.0)
         self.init_dt = self.float(self.input["time.dt_max"])
         self.final_time = self.float(self.input["time.tfinal"])
 

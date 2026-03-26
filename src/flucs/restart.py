@@ -33,12 +33,18 @@ class FlucsRestart:
     write_path: pl.Path
     backup_path: pl.Path
     steps_until_write: int = 0
+    netcdf_precision: str
 
     # Flag to reset simulation
     reset_time: bool = False
 
     def __init__(self, system: FlucsSystem):
         self.system = system
+
+        # Set the precision for netCDF variables based on the system's float type
+        self.netcdf_precision = (
+            "f4" if self.system.float is np.float32 else "f8"
+        )
 
         self._decide_initial_path()
         self._load_restart_data()
@@ -120,7 +126,7 @@ class FlucsRestart:
             system.init_time = (
                 self.system.float(ds.variables["current_time"][...])
                 if not system.input["restart.reset_time"]
-                else 0.0
+                else self.system.float(0.0)
             )
             system.init_dt = self.system.float(ds.variables["current_dt"][...])
             system.final_time = system.init_time + self.system.float(
@@ -256,9 +262,6 @@ class FlucsRestart:
         # Get restart data
         restart_data = self.system.get_restart_data()
 
-        # Set precision for netCDF variables
-        precision = "f4" if self.system.float is np.float32 else "f8"
-
         # Write to temporary file
         with Dataset(self.write_path, "w", format="NETCDF4") as ds:
             # Set file attributes
@@ -274,11 +277,11 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable("current_time", precision, ())[...] = (
+            ds.createVariable("current_time", self.netcdf_precision, ())[...] = (
                 self.system.float(self.system.current_time)
             )
 
-            ds.createVariable("current_dt", precision, ())[...] = (
+            ds.createVariable("current_dt", self.netcdf_precision, ())[...] = (
                 self.system.float(self.system.current_dt)
             )
 
@@ -303,15 +306,15 @@ class FlucsRestart:
 
                 if np.iscomplexobj(var_data):
                     v_r = ds.createVariable(
-                        f"{var_name}_real", precision, tuple(dim_names)
+                        f"{var_name}_real", self.netcdf_precision, tuple(dim_names)
                     )
                     v_i = ds.createVariable(
-                        f"{var_name}_imag", precision, tuple(dim_names)
+                        f"{var_name}_imag", self.netcdf_precision, tuple(dim_names)
                     )
                     v_r[:] = var_data.real
                     v_i[:] = var_data.imag
                 else:
-                    v = ds.createVariable(var_name, precision, tuple(dim_names))
+                    v = ds.createVariable(var_name, self.netcdf_precision, tuple(dim_names))
                     v[:] = var_data
 
         # Remove backup file after successful write
