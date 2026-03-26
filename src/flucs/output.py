@@ -388,7 +388,9 @@ class FlucsOutputNC(FlucsOutput):
 
         # Finally, create dimension and dimension data in the appropriate group
         grp.createDimension(dim_name, dim_size)
-        dim_var = grp.createVariable(dim_name, self.netcdf_precision, (dim_name,))
+        dim_var = grp.createVariable(
+            dim_name, self.netcdf_precision, (dim_name,)
+        )
         dim_var[:] = dim_data[:]
 
     def _setup_output_file(self):
@@ -422,14 +424,20 @@ class FlucsOutputNC(FlucsOutput):
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
                         diagnostic_group.createVariable(
-                            f"{var.name}_real", self.netcdf_precision, ("time", *var.shape)
+                            f"{var.name}_real",
+                            self.netcdf_precision,
+                            ("time", *var.shape),
                         )
                         diagnostic_group.createVariable(
-                            f"{var.name}_imag", self.netcdf_precision, ("time", *var.shape)
+                            f"{var.name}_imag",
+                            self.netcdf_precision,
+                            ("time", *var.shape),
                         )
                     else:
                         diagnostic_group.createVariable(
-                            var.name, self.netcdf_precision, ("time", *var.shape)
+                            var.name,
+                            self.netcdf_precision,
+                            ("time", *var.shape),
                         )
 
     def write(self):

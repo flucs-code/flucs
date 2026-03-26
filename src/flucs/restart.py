@@ -41,7 +41,7 @@ class FlucsRestart:
     def __init__(self, system: FlucsSystem):
         self.system = system
 
-        # Set the precision for netCDF variables based on the system's float type
+        # Set the precision for netCDF variables based on system float type
         self.netcdf_precision = (
             "f4" if self.system.float is np.float32 else "f8"
         )
@@ -277,9 +277,9 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable("current_time", self.netcdf_precision, ())[...] = (
-                self.system.float(self.system.current_time)
-            )
+            ds.createVariable("current_time", self.netcdf_precision, ())[
+                ...
+            ] = self.system.float(self.system.current_time)
 
             ds.createVariable("current_dt", self.netcdf_precision, ())[...] = (
                 self.system.float(self.system.current_dt)
@@ -306,15 +306,21 @@ class FlucsRestart:
 
                 if np.iscomplexobj(var_data):
                     v_r = ds.createVariable(
-                        f"{var_name}_real", self.netcdf_precision, tuple(dim_names)
+                        f"{var_name}_real",
+                        self.netcdf_precision,
+                        tuple(dim_names),
                     )
                     v_i = ds.createVariable(
-                        f"{var_name}_imag", self.netcdf_precision, tuple(dim_names)
+                        f"{var_name}_imag",
+                        self.netcdf_precision,
+                        tuple(dim_names),
                     )
                     v_r[:] = var_data.real
                     v_i[:] = var_data.imag
                 else:
-                    v = ds.createVariable(var_name, self.netcdf_precision, tuple(dim_names))
+                    v = ds.createVariable(
+                        var_name, self.netcdf_precision, tuple(dim_names)
+                    )
                     v[:] = var_data
 
         # Remove backup file after successful write
