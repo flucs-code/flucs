@@ -54,6 +54,7 @@ class FlucsOutput(ABC):
     extension: str
     save_steps: int
     next_save: int
+    netcdf_precision: str
 
     # Associated system
     system: FlucsSystem
@@ -140,6 +141,11 @@ class FlucsOutput(ABC):
         # Setup steps and diagnostics from input file and system
         self.next_save = 0
         self.save_steps = self.system.input[f"output.{self.name}.save_steps"]
+
+        # Set the precision of the netcdf outputs
+        self.netcdf_precision = (
+            "f4" if self.system.float is np.float32 else "f8"
+        )
 
         self._add_diagnostics_from_input()
 
@@ -314,8 +320,8 @@ class FlucsOutputNC(FlucsOutput):
             self.group_name = str(group_number)
             group = dataset.createGroup(self.group_name)
             group.createDimension("time", None)
-            group.createVariable("time", "f4", ("time",))
-            group.createVariable("dt", "f4", ("time",))
+            group.createVariable("time", self.netcdf_precision, ("time",))
+            group.createVariable("dt", self.netcdf_precision, ("time",))
 
             # Set attributes
             group.setncattr(
@@ -382,7 +388,9 @@ class FlucsOutputNC(FlucsOutput):
 
         # Finally, create dimension and dimension data in the appropriate group
         grp.createDimension(dim_name, dim_size)
-        dim_var = grp.createVariable(dim_name, "f4", (dim_name,))
+        dim_var = grp.createVariable(
+            dim_name, self.netcdf_precision, (dim_name,)
+        )
         dim_var[:] = dim_data[:]
 
     def _setup_output_file(self):
@@ -416,14 +424,20 @@ class FlucsOutputNC(FlucsOutput):
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
                         diagnostic_group.createVariable(
-                            f"{var.name}_real", "f4", ("time", *var.shape)
+                            f"{var.name}_real",
+                            self.netcdf_precision,
+                            ("time", *var.shape),
                         )
                         diagnostic_group.createVariable(
-                            f"{var.name}_imag", "f4", ("time", *var.shape)
+                            f"{var.name}_imag",
+                            self.netcdf_precision,
+                            ("time", *var.shape),
                         )
                     else:
                         diagnostic_group.createVariable(
-                            var.name, "f4", ("time", *var.shape)
+                            var.name,
+                            self.netcdf_precision,
+                            ("time", *var.shape),
                         )
 
     def write(self):
