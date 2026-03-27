@@ -128,11 +128,11 @@ class FlucsSystem(ABC):
                 self.complex = np.complex128
                 self.module_options.define_flag("DOUBLE_PRECISION")
 
-        # We always use 32-bit integers
-        self.int = np.int32
+        # We always use 64-bit integers
+        self.int = np.int64
 
         # Get float error tolerance
-        self.tolerance = self.float(np.finfo(self.float).eps) * 64.0
+        self.tolerance = self.float(np.finfo(self.float).eps * 64.0)
 
     def add_output(self, output: FlucsOutput):
         if self.output_heap is None:
