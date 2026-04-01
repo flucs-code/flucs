@@ -92,8 +92,9 @@ FLUCS_FLOAT get_hyperdissipation(const size_t index) {
 }
 
 // Functor for calculating the size of the term due to perpendicular hyperdissipation for a given mode
+template<typename FunctorT>
 struct HyperdissipationPerp_Functor {
-    const FLUCS_COMPLEX* __restrict__ field;
+    const FunctorT functor;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
         
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
@@ -102,13 +103,14 @@ struct HyperdissipationPerp_Functor {
 
         const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_perp(kx, ky);
 
-        return hyperdissipation * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hyperdissipation * functor(index);
     }
 };
 
 // Functor for calculating the size of the term due to kx hyperdissipation for a given mode
+template<typename FunctorT>
 struct HyperdissipationKx_Functor {
-    const FLUCS_COMPLEX* __restrict__ field;
+    const FunctorT functor;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
@@ -116,13 +118,14 @@ struct HyperdissipationKx_Functor {
 
         const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_kx(kx);
 
-        return hyperdissipation * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hyperdissipation * functor(index);
     }
 };
 
 // Functor for calculating the size of the term due to ky hyperdissipation for a given mode
+template<typename FunctorT>
 struct HyperdissipationKy_Functor {
-    const FLUCS_COMPLEX* __restrict__ field;
+    const FunctorT functor;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
@@ -130,13 +133,14 @@ struct HyperdissipationKy_Functor {
 
         const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_ky(ky);
 
-        return hyperdissipation * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hyperdissipation * functor(index);
     }
 };
 
 // Functor for calculating the size of the term due to kz hyperdissipation for a given mode
+template<typename FunctorT>
 struct HyperdissipationKz_Functor {
-    const FLUCS_COMPLEX* __restrict__ field;
+    const FunctorT functor;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
@@ -144,56 +148,19 @@ struct HyperdissipationKz_Functor {
 
         const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_kz(kz);
 
-        return hyperdissipation * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hyperdissipation * functor(index);
     }
 };
 
 
 // Functor for calculating the total (perpendicular + directional)
 // hyperdissipation for a given mode
+template<typename FunctorT>
 struct Hyperdissipation_Functor {
-    const FLUCS_COMPLEX* __restrict__ field;
+    const FunctorT functor;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index);
-        return hyperdissipation * Abs2_Functor{field, FLOAT_ONE}(index);
+        return hyperdissipation * functor(index);
     }
 };
-
-
-// Hyperdissipation kernels
-extern "C" {
-
-// calculation of hyperdissipation losses for a given field
-__global__
-void hyperdissipation_perp_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
-    add_and_sum_last_axis<HALF_NY, true>(
-        FLOAT_ONE, output, HyperdissipationPerp_Functor{field});
-}
-
-__global__
-void hyperdissipation_kx_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
-    add_and_sum_last_axis<HALF_NY, true>(
-        FLOAT_ONE, output, HyperdissipationKx_Functor{field});
-}
-
-__global__
-void hyperdissipation_ky_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
-    add_and_sum_last_axis<HALF_NY, true>(
-        FLOAT_ONE, output, HyperdissipationKy_Functor{field});
-}
-
-__global__
-void hyperdissipation_kz_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
-    add_and_sum_last_axis<HALF_NY, true>(
-        FLOAT_ONE, output, HyperdissipationKz_Functor{field});
-}
-
-__global__
-void hyperdissipation_magnitude(const FLUCS_COMPLEX* field, FLUCS_FLOAT* output) {
-    add_and_sum_last_axis<HALF_NY, true>(
-        FLOAT_ONE, output, Hyperdissipation_Functor{field});
-}
-
-
-}

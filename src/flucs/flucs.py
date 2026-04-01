@@ -295,12 +295,13 @@ def main():
     if args.postprocess:
         from flucs.postprocessing import FlucsPostProcessing
 
-        postprocessing = FlucsPostProcessing(io_path, quiet=True)
-
+        # List the possible script paths
         if not postprocess_args:
+            postprocessing = FlucsPostProcessing(io_path, quiet=True)
             postprocessing.list_script_paths()
             return
 
+        # Forward the arguments to the selected script as a subprocess
         try:
             script_integer = int(postprocess_args[0])
         except ValueError as e:
@@ -308,10 +309,19 @@ def main():
                 "The first argument after '-p/--postprocess' must be the "
                 "integer of one of the listed postprocessing scripts."
             ) from e
+        subprocess_args = postprocess_args[1:]
+
+        io_paths = [io_path]
+        if any(arg in ("-io", "--io_path") for arg in subprocess_args):
+            parser = FlucsPostProcessing.parser()
+            args, _ = parser.parse_known_args(subprocess_args)
+            io_paths = args.io_path
+
+        postprocessing = FlucsPostProcessing(io_paths, quiet=True)
 
         script_path = postprocessing.get_script_path(script_integer)
         subprocess.run(
-            [sys.executable, str(script_path), *postprocess_args[1:]],
+            [sys.executable, str(script_path), *subprocess_args],
             check=True,
         )
         return

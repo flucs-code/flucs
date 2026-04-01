@@ -133,6 +133,12 @@ class FourierSystem(FlucsSystem):
                 )
             print("Using continuous time stepping.")
 
+        else:
+            raise InvalidFlucsInputFileError(
+                f"Invalid time.dt_method: {self.input['time.dt_method']}. "
+                "Must be either 'discrete' or 'continuous'."
+            )
+
         # Check for conflicts in hyperdissipation parameters
         if self.input["hyperdissipation.perp"] > 0.0 and (
             self.input["hyperdissipation.kx"] > 0.0
