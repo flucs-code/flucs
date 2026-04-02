@@ -309,14 +309,6 @@ class FourierSystem(FlucsSystem):
 
         return kx_broadcast, ky_broadcast, kz_broadcast
 
-    @abstractmethod
-    def compute_complex_omega(self):
-        """Returns an array of shape (nz, nx, half_ny, number_of_fields) with
-        the solutions to the linear dispersion relation. This should be
-        calculated using only CPU resources.
-
-        """
-
     def ready(self) -> None:
         # Basic setup
         self.current_step = self.int(0)
@@ -491,12 +483,22 @@ class FourierSystem(FlucsSystem):
 
         self.finish_step_kernel = self.cupy_module.get_function("finish_step")
 
-    def compute_linear_matrix(self) -> None:
-        """Computes the linear matrix using the CuPy module and stores the
-        result in self.linear_matrix"""
+    def _compute_linear_matrix(self, dt=None) -> None:
+        """
+        Computes the linear matrix used by the solver and stores it in 
+        self.linear_matrix. Note that this is not used directly in the 
+        solver loop, and so is used entirely for diagnostic purposes.
+        
+        """
+
+        # Set timestep used for the matrix calculation
+        if dt is None:
+            dt = self.current_dt
+
+        # Initialise
         self.linear_matrix = cp.zeros(
             (
-                self.number_of_fields,
+                self.number_of_fields, 
                 self.number_of_fields,
                 self.nz,
                 self.nx,
@@ -505,15 +507,34 @@ class FourierSystem(FlucsSystem):
             dtype=self.complex,
         )
 
+        # Get kernel
         compute_linear_matrix_kernel = self.cupy_module.get_function(
             "compute_linear_matrix"
         )
 
+        # Compute 
         compute_linear_matrix_kernel(
             (self.half_unpadded_cuda_grid_size,),
             (self.cuda_block_size,),
-            (self.current_dt, self.linear_matrix),
+            (dt, self.linear_matrix),
         )
+
+    def compute_linear_matrix_reference(self, dt=None) -> np.ndarray:
+        """
+        Returns a user-defined reference linear matrix that should be 
+        the same shape as self.linear_matrix. This should be calculated 
+        using only CPU resources. 
+
+        If the user does not provide a reference linear matrix, the default
+        value is None.
+
+        """
+
+        return None
+
+    def compute_linear_eigensystem(self) -> None:
+
+        return
 
     def _set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
