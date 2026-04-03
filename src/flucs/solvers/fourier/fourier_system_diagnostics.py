@@ -5,64 +5,186 @@ import cupy as cp
 import numpy as np
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
+from flucs.solvers import FlucsSolverState
 
 if TYPE_CHECKING:
     from .fourier_system import FourierSystem
 
 
-class LinearSpectrumDiag(FlucsDiagnostic):
+class LinearEigensystemDiag(FlucsDiagnostic):
     """
-    Calculates the linear frequency at the current time step by comparing with
-    the fields at the previous one.
+    to be added
 
     """
 
-    name = "linear_spectrum"
-    is_complex = True
+    name = "linear_eigensystem"
+    option_defaults: ClassVar[dict[str, object]] = {
+        "field_index": 0, 
+        "tolerance": -1.0,
+        "amplitude_overflow": 1e+16, 
+        "amplitude_underflow": 1e-16,
+        "init_only": False 
+        }
     system: "FourierSystem"
 
-    # Speficies which field to use for estimating linear frequencies
-    field_index: int = 0
-
-    def ready(self):
-        dimensions_dict = {
-            "kx": self.system.kx,
-            "ky": self.system.ky,
-            "kz": self.system.kz,
-        }
+    def init_vars(self):
+        mode = np.arange(self.system.number_of_fields)
+        field = np.arange(self.system.number_of_fields)
 
         self.add_var(
             FlucsDiagnosticVariable(
-                name="omega",
-                shape=("kz", "kx", "ky"),
-                dimensions_dict=dimensions_dict,
+                name="eigvals_solver",
+                shape=("mode", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": mode,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
                 is_complex=True,
             )
         )
 
-    def execute(self):
-        # Do not execute at first time step
-        if self.system.current_step == 0:
-            return np.zeros(
-                self.system.half_unpadded_tuple, dtype=self.system.complex
-            )
-
-        alpha = self.system.input["setup.alpha"]
-        current_field = self.system.fields[self.system.current_step % 2][
-            self.field_index, :
-        ]
-
-        previous_field = self.system.fields[self.system.current_step % 2 - 1][
-            self.field_index, :
-        ]
-
-        self.vars["omega"].data_cache.append(
-            cp.as_numpy(
-                (1j / self.system.current_dt)
-                * (current_field - previous_field)
-                / (alpha * current_field + (1 - alpha) * previous_field)
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="eigvecs_solver",
+                shape=("mode", "field", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": mode,
+                    "field": field,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
+                is_complex=True,
             )
         )
+
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="eigvals_reference",
+                shape=("mode", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": mode,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
+                is_complex=True,
+            )
+        )
+
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="eigvecs_reference",
+                shape=("mode", "field", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": mode,
+                    "field": field,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
+                is_complex=True,
+            )
+        )
+
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="eigvals",
+                shape=("mode", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": mode,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
+                is_complex=True,
+            )
+        )
+
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="eigvals_tolerance",
+                shape=("mode", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": mode,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
+                is_complex=False,
+            )
+        )
+
+    def ready(self):
+        pass
+
+    def execute(self):
+
+        # Get eigensystem from solver and save to diagnostics
+        eigensystem = self.system.compute_linear_eigensystem()
+
+        self.save_data(
+            "eigvals_solver", eigensystem["eigvals_solver"]
+        )
+        self.save_data(
+            "eigvecs_solver", eigensystem["eigvecs_solver"]
+        )
+        self.save_data(
+            "eigvals_reference", eigensystem["eigvals_reference"]
+        )
+        self.save_data(
+            "eigvecs_reference", eigensystem["eigvecs_reference"]
+        )
+
+        # Placeholder values until runtime omega diagnostics is implemented
+        nan_omega = np.full(
+            (self.system.number_of_fields, *self.system.half_unpadded_tuple),
+            np.nan + 1j * np.nan,
+            dtype=self.system.complex,
+        )
+        nan_tol = np.full(
+            (self.system.number_of_fields, *self.system.half_unpadded_tuple),
+            np.nan,
+            dtype=self.system.float,
+        )
+
+        self.save_data("eigvals", nan_omega)
+        self.save_data("eigvals_tolerance", nan_tol)
+
+        # Interrupt the solver if it is actually running and the user only wants
+        # to inspect the eigensystem associated with the CUDA matrix, and not 
+        # how it is reproduced by the timestepping scheme. 
+        if (
+            self.init_only
+            and self.system.solver.state == FlucsSolverState.RUNNING
+        ):
+            self.system.solver.interrupted = True
+
+    # def execute(self):
+    #     # Do not execute at first time step
+    #     if self.system.current_step == 0:
+    #         return np.zeros(
+    #             self.system.half_unpadded_tuple, dtype=self.system.complex
+    #         )
+
+    #     alpha = self.system.input["setup.alpha"]
+    #     current_field = self.system.fields[self.system.current_step % 2][
+    #         self.field_index, :
+    #     ]
+
+    #     previous_field = self.system.fields[self.system.current_step % 2 - 1][
+    #         self.field_index, :
+    #     ]
+
+    #     self.vars["eigvals"].data_cache.append(
+    #         cp.as_numpy(
+    #             (1j / self.system.current_dt)
+    #             * (current_field - previous_field)
+    #             / (alpha * current_field + (1 - alpha) * previous_field)
+    #         )
+    #     )
 
 
 class FourierDataDiag(FlucsDiagnostic):

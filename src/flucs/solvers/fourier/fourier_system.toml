@@ -104,3 +104,8 @@ type = "netcdf4"
 save_steps = -1
 diags = []
 type = "netcdf4"
+
+[output.eigensystem]
+save_steps = -1
+diags = []
+type = "netcdf4"

@@ -16,7 +16,7 @@ from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,
-    LinearSpectrumDiag,
+    LinearEigensystemDiag,
     RealspaceDataDiag,
 )
 
@@ -113,7 +113,7 @@ class FourierSystem(FlucsSystem):
 
     # Diagnostics available to all FourierSystems
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
-        LinearSpectrumDiag,
+        LinearEigensystemDiag,
         FourierDataDiag,
         RealspaceDataDiag,
     }
@@ -483,17 +483,13 @@ class FourierSystem(FlucsSystem):
 
         self.finish_step_kernel = self.cupy_module.get_function("finish_step")
 
-    def _compute_linear_matrix(self, dt=None) -> None:
+    def _compute_linear_matrix(self) -> None:
         """
         Computes the linear matrix used by the solver and stores it in 
         self.linear_matrix. Note that this is not used directly in the 
         solver loop, and so is used entirely for diagnostic purposes.
         
         """
-
-        # Set timestep used for the matrix calculation
-        if dt is None:
-            dt = self.current_dt
 
         # Initialise
         self.linear_matrix = cp.zeros(
@@ -516,14 +512,16 @@ class FourierSystem(FlucsSystem):
         compute_linear_matrix_kernel(
             (self.half_unpadded_cuda_grid_size,),
             (self.cuda_block_size,),
-            (dt, self.linear_matrix),
+            (self.current_dt, self.linear_matrix),
         )
 
-    def compute_linear_matrix_reference(self, dt=None) -> np.ndarray:
+    def compute_linear_matrix_reference(self) -> np.ndarray:
         """
         Returns a user-defined reference linear matrix that should be 
         the same shape as self.linear_matrix. This should be calculated 
-        using only CPU resources. 
+        using only CPU resources, and should be of shape
+
+        (nfields, nfields, nz, nx, half_ny)
 
         If the user does not provide a reference linear matrix, the default
         value is None.
@@ -534,7 +532,109 @@ class FourierSystem(FlucsSystem):
 
     def compute_linear_eigensystem(self) -> None:
 
-        return
+        """
+        Computes the linear eigensystem associated with the linear matrix 
+        used by the solver, as well as the reference matrix provided by the 
+        user, if applicable. Note that the returned eigvals are complex
+        frequencies. TODO: change naming?
+
+        """
+
+        # Handle matrix from solver
+        self._compute_linear_matrix()
+
+        matrix_solver = cp.asnumpy(self.linear_matrix).copy()
+        matrix_solver = np.moveaxis(matrix_solver, (0, 1), (-2, -1))
+
+        eigvals_solver, eigvecs_solver = np.linalg.eig(matrix_solver)
+
+        eigvals_solver = (-1j * eigvals_solver).transpose(3, 0, 1, 2)
+        eigvecs_solver = eigvecs_solver.transpose(4, 3, 0, 1, 2)
+
+        # Handle reference matrix from user
+        matrix_reference = self.compute_linear_matrix_reference()
+
+        # If none is provided, fill with nans for downstream
+        if matrix_reference is None:
+
+            eigvals_reference = np.full(
+                (
+                    self.number_of_fields, 
+                    self.nz, 
+                    self.nx, 
+                    self.half_ny
+                ),
+                np.nan + 1j * np.nan,
+                dtype=self.complex,
+            )
+            eigvecs_reference = np.full(
+                (
+                    self.number_of_fields,
+                    self.number_of_fields,
+                    self.nz,
+                    self.nx,
+                    self.half_ny,
+                ),
+                np.nan + 1j * np.nan,
+                dtype=self.complex,
+            )
+
+        else:
+            # Ensure typing
+            matrix_reference = np.asarray(
+                matrix_reference, dtype=self.complex
+                ).copy()
+            
+            # Check for correct shape
+            expected_shape = (
+                self.number_of_fields,  
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            )
+
+            if matrix_reference.shape != expected_shape:
+                raise ValueError(
+                    f"Reference linear matrix has incorrect shape: "
+                    f"{matrix_reference.shape}, expected: {expected_shape}"
+                )
+
+            # Add hyperdissipation if present
+            kx, ky, kz = self.get_broadcast_wavenumbers()
+            hyperdissipation = np.zeros(self.half_unpadded_tuple, dtype=self.float)
+
+            for component, ks in [
+                ("perp", kx**2 + ky**2),
+                ("kx", kx**2),
+                ("ky", ky**2),
+                ("kz", kz**2),
+            ]:
+                coeff = self.input[f"hyperdissipation.{component}"]
+                if coeff > 0.0:
+                    hyperdissipation += (
+                        coeff * 
+                        (
+                        ks ** self.input[f"hyperdissipation.{component}_power"]
+                        )
+                    )
+
+            diag = np.arange(self.number_of_fields)
+            matrix_reference[diag, diag, :, :, :] += hyperdissipation
+
+            # Calculate eigensystem
+            matrix_reference = np.moveaxis(matrix_reference, (0, 1), (-2, -1))
+            eigvals_reference, eigvecs_reference = np.linalg.eig(matrix_reference)
+
+            eigvals_reference = (-1j * eigvals_reference).transpose(3, 0, 1, 2)
+            eigvecs_reference = eigvecs_reference.transpose(4, 3, 0, 1, 2)
+
+        return {
+            "eigvals_solver": eigvals_solver,
+            "eigvecs_solver": eigvecs_solver,
+            "eigvals_reference": eigvals_reference,
+            "eigvecs_reference": eigvecs_reference,
+        }
 
     def _set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
