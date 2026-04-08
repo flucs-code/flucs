@@ -531,7 +531,7 @@ class FourierSystem(FlucsSystem):
 
         return None
 
-    def compute_linear_eigensystem(self) -> None:
+    def compute_linear_eigensystem(self) -> dict[str, np.ndarray]:
 
         """
         Computes the linear eigensystem associated with the linear matrix 
@@ -626,13 +626,38 @@ class FourierSystem(FlucsSystem):
             diag = np.arange(self.number_of_fields)
             matrix_reference[diag, diag, :, :, :] += hyperdissipation
 
-            # Calculate eigensystem
+            # Calculate eigensystem. 
+            # Note that we have to perform the following shape manipulations to
+            # put the data in the correct format for np.linalg.eig:
+            # (fields, fields, ...) -> (..., fields, fields)
+            # (kz, kx, ky,        mode) -> (mode,        kz, kx, ky)
+            # (kz, kx, ky, field, mode) -> (mode, field, kz, kx, ky)
             matrix_reference = np.moveaxis(matrix_reference, (0, 1), (-2, -1))
             eigvals_reference, eigvecs_reference = np.linalg.eig(matrix_reference)
 
             eigvals_reference = (-1j * eigvals_reference).transpose(3, 0, 1, 2)
             eigvecs_reference = eigvecs_reference.transpose(4, 3, 0, 1, 2)
 
+        # Normalise eigenvectors
+        for eigvecs in [eigvecs_solver, eigvecs_reference]:
+
+            if np.isnan(eigvecs).all():
+                continue
+
+            # Normalise to unit norm
+            eigvecs /= np.linalg.norm(eigvecs, axis=1, keepdims=True)
+
+            # Find field component with largest amplitude for each mode
+            indices = np.abs(eigvecs).argmax(axis=1, keepdims=True)
+            components = np.take_along_axis(eigvecs, indices, axis=1)
+
+            # Normalise by phase
+            phase = np.where(
+                np.abs(components) > 0, np.sign(components), 1.0 + 0.0j
+                )
+            eigvecs *= np.conj(phase)
+
+        # Assign class variable
         self.linear_eigensystem = {
             "eigvals_solver": eigvals_solver,
             "eigvecs_solver": eigvecs_solver,
