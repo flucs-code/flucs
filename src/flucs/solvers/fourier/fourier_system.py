@@ -45,8 +45,9 @@ class FourierSystem(FlucsSystem):
     # time step
     dft_bits: cp.ndarray
 
-    # Linear matrix (used for linear postprocessing)
+    # Linear quantities (used for linear postprocessing)
     linear_matrix: cp.ndarray
+    linear_eigensystem: dict[str, np.ndarray] = None
 
     # Iteration matrices (used for precomputing)
     rhs: cp.ndarray
@@ -540,6 +541,9 @@ class FourierSystem(FlucsSystem):
 
         """
 
+        if self.linear_eigensystem is not None:
+            return self.linear_eigensystem
+
         # Handle matrix from solver
         self._compute_linear_matrix()
 
@@ -629,12 +633,14 @@ class FourierSystem(FlucsSystem):
             eigvals_reference = (-1j * eigvals_reference).transpose(3, 0, 1, 2)
             eigvecs_reference = eigvecs_reference.transpose(4, 3, 0, 1, 2)
 
-        return {
+        self.linear_eigensystem = {
             "eigvals_solver": eigvals_solver,
             "eigvecs_solver": eigvecs_solver,
             "eigvals_reference": eigvals_reference,
             "eigvecs_reference": eigvecs_reference,
         }
+
+        return self.linear_eigensystem
 
     def _set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""
