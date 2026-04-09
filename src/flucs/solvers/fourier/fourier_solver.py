@@ -92,6 +92,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         end_time = time.time()
 
         # One final write
+        self.system.execute_diagnostics(force=True)
         self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
 

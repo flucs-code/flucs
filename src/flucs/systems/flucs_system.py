@@ -146,8 +146,8 @@ class FlucsSystem(ABC):
         Parameters
         ----------
         force: bool
-            If force is True, then all diagnostics are executed
-            regardless of their next save time.
+            If force is True, then all diagnostics not already due on the 
+            current step are executed regardless of their next save time.
 
         """
         if self.output_heap is None:
@@ -155,6 +155,12 @@ class FlucsSystem(ABC):
 
         if force:
             for output_to_execute in self.output_heap:
+                if output_to_execute.save_steps <= 0:
+                    continue
+
+                if self.current_step % output_to_execute.save_steps == 0:
+                    continue
+
                 output_to_execute.execute()
 
             # Reset heap for the next save
