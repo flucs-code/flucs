@@ -534,10 +534,10 @@ class FourierSystem(FlucsSystem):
     def compute_linear_eigensystem(self) -> dict[str, np.ndarray]:
 
         """
-        Computes the linear eigensystem associated with the linear matrix 
-        used by the solver, as well as the reference matrix provided by the 
-        user, if applicable. Note that the returned eigvals are complex
-        frequencies. TODO: change naming?
+        Computes both the eigenvalues and (normalised) eigenvectors associated 
+        with the linear matrix used by the solver, as well as for the reference
+        matrix provided by the user, if present. Note that the returned 
+        eigenvalues are complex frequencies. 
 
         """
 
@@ -549,11 +549,14 @@ class FourierSystem(FlucsSystem):
 
         matrix_solver = cp.asnumpy(self.linear_matrix).copy()
         matrix_solver = np.moveaxis(matrix_solver, (0, 1), (-2, -1))
+        # (nfields, nfields, nz, nx, half_ny) -> (..., nfields, nfields)
 
         eigvals_solver, eigvecs_solver = np.linalg.eig(matrix_solver)
 
         eigvals_solver = (-1j * eigvals_solver).transpose(3, 0, 1, 2)
         eigvecs_solver = eigvecs_solver.transpose(4, 3, 0, 1, 2)
+        # (nz, nx, half_ny,          mode) -> (mode,          ...)
+        # (nz, nx, half_ny, nfields, mode) -> (mode, nfields, ...)
 
         # Handle reference matrix from user
         matrix_reference = self.compute_linear_matrix_reference()
@@ -627,11 +630,6 @@ class FourierSystem(FlucsSystem):
             matrix_reference[diag, diag, :, :, :] += hyperdissipation
 
             # Calculate eigensystem. 
-            # Note that we have to perform the following shape manipulations to
-            # put the data in the correct format for np.linalg.eig:
-            # (fields, fields, ...) -> (..., fields, fields)
-            # (kz, kx, ky,        mode) -> (mode,        kz, kx, ky)
-            # (kz, kx, ky, field, mode) -> (mode, field, kz, kx, ky)
             matrix_reference = np.moveaxis(matrix_reference, (0, 1), (-2, -1))
             eigvals_reference, eigvecs_reference = np.linalg.eig(matrix_reference)
 
@@ -657,10 +655,16 @@ class FourierSystem(FlucsSystem):
                 )
             eigvecs *= np.conj(phase)
 
+        # Compute inverse of solver eigenvectors for projection
+        eigvecs_solver_inverse = np.linalg.inv(
+            eigvecs_solver.transpose(2, 3, 4, 1, 0)
+        ).transpose(3, 4, 0, 1, 2)
+
         # Assign class variable
         self.linear_eigensystem = {
             "eigvals_solver": eigvals_solver,
             "eigvecs_solver": eigvecs_solver,
+            "eigvecs_solver_inverse": eigvecs_solver_inverse,
             "eigvals_reference": eigvals_reference,
             "eigvecs_reference": eigvecs_reference,
         }

@@ -19,16 +19,13 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
     name = "linear_eigensystem"
     option_defaults: ClassVar[dict[str, object]] = {
-        "field_index": 0, 
         "tolerance": -1.0,
-        "amplitude_overflow": 1e+16, 
-        "amplitude_underflow": 1e-16,
-        "init_only": False 
+        "init_only": False, 
+        "save_eigvecs": False,
         }
     system: "FourierSystem"
 
     def init_vars(self):
-        mode = np.arange(self.system.number_of_fields)
         field = np.arange(self.system.number_of_fields)
 
         self.add_var(
@@ -36,22 +33,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 name="eigvals_solver",
                 shape=("mode", "kz", "kx", "ky"),
                 dimensions={
-                    "mode": mode,
-                    "kz": self.system.kz,
-                    "kx": self.system.kx,
-                    "ky": self.system.ky,
-                },
-                is_complex=True,
-            )
-        )
-
-        self.add_var(
-            FlucsDiagnosticVariable(
-                name="eigvecs_solver",
-                shape=("mode", "field", "kz", "kx", "ky"),
-                dimensions={
-                    "mode": mode,
-                    "field": field,
+                    "mode": field,
                     "kz": self.system.kz,
                     "kx": self.system.kx,
                     "ky": self.system.ky,
@@ -65,22 +47,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 name="eigvals_reference",
                 shape=("mode", "kz", "kx", "ky"),
                 dimensions={
-                    "mode": mode,
-                    "kz": self.system.kz,
-                    "kx": self.system.kx,
-                    "ky": self.system.ky,
-                },
-                is_complex=True,
-            )
-        )
-
-        self.add_var(
-            FlucsDiagnosticVariable(
-                name="eigvecs_reference",
-                shape=("mode", "field", "kz", "kx", "ky"),
-                dimensions={
-                    "mode": mode,
-                    "field": field,
+                    "mode": field,
                     "kz": self.system.kz,
                     "kx": self.system.kx,
                     "ky": self.system.ky,
@@ -94,7 +61,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 name="eigvals",
                 shape=("mode", "kz", "kx", "ky"),
                 dimensions={
-                    "mode": mode,
+                    "mode": field,
                     "kz": self.system.kz,
                     "kx": self.system.kx,
                     "ky": self.system.ky,
@@ -108,7 +75,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 name="eigvals_tolerance",
                 shape=("mode", "kz", "kx", "ky"),
                 dimensions={
-                    "mode": mode,
+                    "mode": field,
                     "kz": self.system.kz,
                     "kx": self.system.kx,
                     "ky": self.system.ky,
@@ -117,74 +84,158 @@ class LinearEigensystemDiag(FlucsDiagnostic):
             )
         )
 
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name="eigvals_amplitude",
+                shape=("mode", "kz", "kx", "ky"),
+                dimensions={
+                    "mode": field,
+                    "kz": self.system.kz,
+                    "kx": self.system.kx,
+                    "ky": self.system.ky,
+                },
+                is_complex=False,
+            )
+        )
+
+        # Optionally save eigenvectors
+        if self.save_eigvecs:
+            for name in ["eigvecs_solver", "eigvecs_reference"]:
+                self.add_var(
+                    FlucsDiagnosticVariable(
+                        name=name,
+                        shape=("mode", "field", "kz", "kx", "ky"),
+                        dimensions={
+                            "mode": field,
+                            "field": field,
+                            "kz": self.system.kz,
+                            "kx": self.system.kx,
+                            "ky": self.system.ky,
+                        },
+                        is_complex=True,
+                    )
+                )
+
     def ready(self):
-        pass
+        
+        # Cache inverses for mode projection
+        eigensystem = self.system.compute_linear_eigensystem()
+
+        self.eigvecs_inverse = cp.asarray(
+            eigensystem["eigvecs_solver_inverse"]
+        )
+
+        # Initialise fill values
+        shape = (self.system.number_of_fields, *self.system.half_unpadded_tuple)
+        fill_value = cp.nan 
+
+        self.eigvals_fill = cp.full(
+            shape, fill_value + 1j * fill_value, dtype=self.system.complex
+        )
+        self.eigvals_tolerance_fill = cp.full(
+            shape, fill_value, dtype=self.system.float
+        )
+
+        # Runtime diagnostic variables
+        self.previous_amplitude = None
+        self.previous_eigvals = None
+        self.previous_execute_time = None
+        self.amplitude_overflow = float(
+            1e-1 * np.sqrt(np.finfo(self.system.float).max)
+        )
 
     def execute(self):
 
-        # Get eigensystem from solver and save to diagnostics
+        # Get eigensystem from solver
         eigensystem = self.system.compute_linear_eigensystem()
 
-        self.save_data(
-            "eigvals_solver", eigensystem["eigvals_solver"]
-        )
-        self.save_data(
-            "eigvecs_solver", eigensystem["eigvecs_solver"]
-        )
-        self.save_data(
-            "eigvals_reference", eigensystem["eigvals_reference"]
-        )
-        self.save_data(
-            "eigvecs_reference", eigensystem["eigvecs_reference"]
+        # Project onto solver eigenvectors
+        current_fields = self.system.fields[
+            self.system.current_step % self.system.fields_history_size
+        ]
+
+        amplitude = cp.einsum(
+            "mfzxy,fzxy->mzxy",
+            self.eigvecs_inverse,
+            current_fields,
         )
 
-        # Placeholder values until runtime omega diagnostics is implemented
-        nan_omega = np.full(
-            (self.system.number_of_fields, *self.system.half_unpadded_tuple),
-            np.nan + 1j * np.nan,
-            dtype=self.system.complex,
+        abs_amplitude = cp.abs(amplitude)
+        
+        # Get previous time data
+        initial_execution = self.previous_execute_time is None
+
+        previous_amplitude = amplitude if initial_execution else self.previous_amplitude
+        previous_eigvals = self.eigvals_fill if initial_execution else self.previous_eigvals
+        time_interval = 1.0 if initial_execution else (
+            float(self.system.current_time) - float(self.previous_execute_time)
         )
-        nan_tol = np.full(
-            (self.system.number_of_fields, *self.system.half_unpadded_tuple),
-            np.nan,
-            dtype=self.system.float,
+
+        # Compute eigenvalues and tolerance
+        eigvals = self.eigvals_fill.copy()
+        valid = (
+            (abs_amplitude > 0.0) & (cp.abs(previous_amplitude) > 0.0)
+        )
+        eigvals[valid] = (
+            1j / time_interval
+        ) * cp.log(amplitude[valid] / previous_amplitude[valid])
+
+
+        eigvals_tolerance = self.eigvals_tolerance_fill.copy()
+        valid_tolerance = (
+            valid & cp.isfinite(previous_eigvals) & (cp.abs(eigvals) > 0.0)
         )
 
-        self.save_data("eigvals", nan_omega)
-        self.save_data("eigvals_tolerance", nan_tol)
+        eigvals_tolerance[valid_tolerance] = (
+            cp.abs(
+                           eigvals[valid_tolerance]
+                - previous_eigvals[valid_tolerance]
+            )
+            / cp.abs(eigvals[valid_tolerance])
+        )
 
-        # Interrupt the solver if it is actually running and the user only wants
-        # to inspect the eigensystem associated with the CUDA matrix, and not 
-        # how it is reproduced by the timestepping scheme. 
-        if (
-            self.init_only
-            and self.system.solver.state == FlucsSolverState.RUNNING
-        ):
-            self.system.solver.interrupted = True
+        # Save data
+        self.save_data("eigvals_solver", eigensystem["eigvals_solver"])
+        self.save_data("eigvals_reference", eigensystem["eigvals_reference"])
 
-    # def execute(self):
-    #     # Do not execute at first time step
-    #     if self.system.current_step == 0:
-    #         return np.zeros(
-    #             self.system.half_unpadded_tuple, dtype=self.system.complex
-    #         )
+        self.save_data("eigvals", cp.asnumpy(eigvals))
+        self.save_data("eigvals_tolerance",cp.asnumpy(eigvals_tolerance))
+        self.save_data("eigvals_amplitude", cp.asnumpy(abs_amplitude))
 
-    #     alpha = self.system.input["setup.alpha"]
-    #     current_field = self.system.fields[self.system.current_step % 2][
-    #         self.field_index, :
-    #     ]
+        if self.save_eigvecs:
+            self.save_data("eigvecs_solver", eigensystem["eigvecs_solver"])
+            self.save_data("eigvecs_reference", eigensystem["eigvecs_reference"])
 
-    #     previous_field = self.system.fields[self.system.current_step % 2 - 1][
-    #         self.field_index, :
-    #     ]
+        # Reset previous time data
+        self.previous_amplitude = amplitude.copy()
+        self.previous_eigvals = eigvals.copy()
+        self.previous_execute_time = float(self.system.current_time)
 
-    #     self.vars["eigvals"].data_cache.append(
-    #         cp.as_numpy(
-    #             (1j / self.system.current_dt)
-    #             * (current_field - previous_field)
-    #             / (alpha * current_field + (1 - alpha) * previous_field)
-    #         )
-    #     )
+        # Exit conditions
+        if self.system.solver.state == FlucsSolverState.RUNNING:
+            overflow = bool(
+                cp.any(abs_amplitude > self.amplitude_overflow).get()
+            )
+
+            converged = (
+                self.tolerance > 0.0
+                and bool(cp.any(valid_tolerance).get())
+                and bool(
+                    cp.all(
+                        eigvals_tolerance[valid_tolerance] < self.tolerance
+                    ).get()
+                )
+            )
+
+            if self.init_only or overflow or converged:
+                if self.init_only:
+                    print("LinearEigensystemDiag: init_only")
+                if overflow:
+                    print("LinearEigensystemDiag: amplitude overflow")
+                if converged:
+                    print("LinearEigensystemDiag: converged")
+
+                self.system.solver.interrupted = True
 
 
 class FourierDataDiag(FlucsDiagnostic):
