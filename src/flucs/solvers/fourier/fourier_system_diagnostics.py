@@ -229,12 +229,13 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
             if self.init_only or overflow or converged:
                 if self.init_only:
-                    print("LinearEigensystemDiag: init_only")
+                    message = "init only"
                 if overflow:
-                    print("LinearEigensystemDiag: amplitude overflow")
+                    message = "amplitude overflow"
                 if converged:
-                    print("LinearEigensystemDiag: converged")
+                    message = "converged"
 
+                print(f"[{type(self).__name__}] {message}")
                 self.system.solver.interrupted = True
 
 
