@@ -443,6 +443,61 @@ class FlucsPostProcessing:
 
         return values, boundary_indices, dims_dicts
 
+    def load_netcdf_variable_complex(
+        self,
+        nc_path: pl.Path,
+        variable: str,
+        fill_value: complex = np.nan + 1j * np.nan,
+    ):
+        """
+        Load a complex variable stored as '<variable>_real' and
+        '<variable>_imag' across all groups in a netCDF file.
+
+        Parameters
+        ----------
+        nc_path : pathlib.Path
+            Path to the netCDF file to read.
+        variable : str
+            Base name of the complex variable.
+        fill_value : complex
+            Value to use for groups that do not contain the variable.
+
+        Returns
+        -------
+        tuple
+            (values, boundary_indices, dims_dicts), matching the return
+            signature of load_netcdf_variable.
+        """
+
+        # Load data
+        real, boundary_indices_real, dims_dicts_real = self.load_netcdf_variable(
+            nc_path,
+            f"{variable}_real",
+            fill_value=np.real(fill_value),
+        )
+
+        imag, boundary_indices_imag, dims_dicts_imag = self.load_netcdf_variable(
+            nc_path,
+            f"{variable}_imag",
+            fill_value=np.imag(fill_value),
+        )
+
+        # Quick consistency check
+        if (
+                (boundary_indices_real != boundary_indices_imag) 
+                or 
+                (len(dims_dicts_real) != len(dims_dicts_imag))
+            ):
+            raise ValueError(
+                f"Real and imaginary parts of complex variable "
+                f"'{variable}' have mismatched dimensions."
+            )
+
+        # Combine into complex object
+        values = real + 1j * imag
+
+        return values, boundary_indices_real, dims_dicts_real
+
     def save(
         self,
         obj,
