@@ -13,7 +13,30 @@ if TYPE_CHECKING:
 
 class LinearEigensystemDiag(FlucsDiagnostic):
     """
-    to be added
+    Outputs the linear eigensystem of a given FourierSystem. This includes the
+    eigenvalues and eigenvectors computed directly from the linear matrix used 
+    by the solver, as well as a reference matrix if provided by the user. 
+    
+    The runtime diagnostic calculates the eigenvalues directly from the time-
+    evolution of the fields by projecting the solutions onto the precomputed
+    eigenvectors. This diagnostic will exit early if any amplitudes reach an 
+    overflow threshold, or if the eigenvalues converge within a specified 
+    tolerance, defined as:
+
+        tolerance := abs(eigvals_{n} - eigvals_{n-1}) / abs(eigvals_{n})
+
+    where eigvals_{n} are the eigenvalues calculated from the current time step.
+    If tolerance is set to be negative, this exit condition is disabled.
+
+    Options
+    ----------
+    tolerance : float
+        Tolerance for the eigenvalue calculation.
+    init_only : bool
+        If True, the diagnostic will execute for a single timestep to load the
+        solver/reference linear eigensystem. 
+    save_eigvecs : bool
+        Whether to save the eigenvectors of the solver/reference eigensystems. 
 
     """
 
