@@ -15,7 +15,7 @@ def plot_eigensystem(post):
     )
 
     # Initialise plotting
-    fig, axs = plt.subplots(2, 1, layout="constrained", sharex=True)
+    fig, axs = plt.subplots(3, 1, layout="constrained", sharex=True)
 
     figure_name = f"linear_eigensystem"
     fig.canvas.manager.set_window_title(figure_name)
@@ -33,6 +33,12 @@ def plot_eigensystem(post):
         )
         eigvals_ref = post.load_netcdf_variable_complex(
             nc_path, "linear_eigensystem/eigvals_reference"
+        )[0]
+        eigvals_run = post.load_netcdf_variable_complex(
+            nc_path, "linear_eigensystem/eigvals"
+        )[0]
+        eigvals_tol = post.load_netcdf_variable(
+            nc_path, "linear_eigensystem/eigvals_tolerance"
         )[0]
 
         dims = next(d for d in reversed(dims_dicts) if d)
@@ -63,13 +69,15 @@ def plot_eigensystem(post):
             f"({sim_label})"
         )
 
-        # Select data to plot
+        # Look at data at final time
         it = -1
         ikz = int(np.argmin(np.abs(kz - 0.0)))
         ikx = int(np.argmin(np.abs(kx - 0.0)))
 
         eigvals_sol_plot = eigvals_sol[it, :, ikz, ikx, :]
         eigvals_ref_plot = eigvals_ref[it, :, ikz, ikx, :]
+        eigvals_run_plot = eigvals_run[it, :, ikz, ikx, :]
+        eigvals_tol_plot = eigvals_tol[it, :, ikz, ikx, :]
 
         gammas_sol = eigvals_sol_plot.imag
         gammas_max = np.max(gammas_sol, axis=0)
@@ -87,18 +95,23 @@ def plot_eigensystem(post):
         eigvals_ref_plot = np.take_along_axis(
             eigvals_ref_plot, selected_mode, axis=0
         )[0]
+        eigvals_run_plot = np.take_along_axis(
+            eigvals_run_plot, selected_mode, axis=0
+        )[0]
+        eigvals_tol_plot = np.take_along_axis(
+            eigvals_tol_plot, selected_mode, axis=0
+        )[0]
 
         # Plotting
-        data_to_plot = (eigvals_sol_plot, eigvals_ref_plot)
-        labels = (sim_label, None)
-        markers = ("o", "s")
+        data_to_plot = (eigvals_sol_plot, eigvals_ref_plot, eigvals_run_plot)
+        markers = ("o", "s", "x")
 
-        for data, label, marker in zip(data_to_plot, labels, markers):
+        for data, marker in zip(data_to_plot, markers):
 
             axs[0].plot(
                 ky,
                 data.imag,
-                label=label,
+                label=None,
                 color=sim_color,
                 linestyle="none",
                 marker=marker,
@@ -108,22 +121,34 @@ def plot_eigensystem(post):
             axs[1].plot(
                 ky,
                 data.real,
-                label=label,
+                label=None,
                 color=sim_color,
                 linestyle="none",
                 marker=marker,
                 markerfacecolor="none",
             )
 
+        axs[2].plot(
+            ky,
+            eigvals_tol_plot,
+            label=sim_label,
+            color=sim_color,
+            linestyle="none",
+            marker=markers[-1],
+            markerfacecolor="none",
+        )
+    
     # Setting plot options
     axs[0].set_ylabel(r"$\mathrm{Im}(\omega)$")
     axs[1].set_ylabel(r"$\mathrm{Re}(\omega)$")
-    axs[1].set_xlabel(r"$k_y$")
+    axs[2].set_ylabel(r"$\mathrm{Tolerance}$")
 
-    for ax in axs:
-        ax.axhline(y=0.0, color="gray", linewidth=1.0)
-        
-    axs[1].legend()
+    for i in [0, 1]:
+        axs[i].axhline(y=0.0, color="gray", linewidth=1.0)
+
+    axs[-1].set_xlabel(r"$k_y$")
+    axs[-1].set_yscale("log")
+    axs[-1].legend()
 
     # Save figures if required
     post.save(fig, name=figure_name, suffix="png", save_kwargs={"dpi": 300})

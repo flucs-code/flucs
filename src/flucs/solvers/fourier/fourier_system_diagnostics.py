@@ -42,7 +42,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
     name = "linear_eigensystem"
     option_defaults: ClassVar[dict[str, object]] = {
-        "tolerance": -1.0,
+        "tolerance": 1e-3,
         "init_only": False, 
         "save_eigvecs": False,
         }
