@@ -28,10 +28,10 @@ class FlucsPostProcessing:
     _script_paths: list[tuple[int, str, pl.Path]]
 
     # Solver and system for the outputs
-    _solver_names: dict[pl.Path, str]
-    _system_names: dict[pl.Path, str]
-    _solver_types: dict[pl.Path, type]
-    _system_types: dict[pl.Path, type]
+    solver_names: dict[pl.Path, str]
+    system_names: dict[pl.Path, str]
+    solver_types: dict[pl.Path, type]
+    system_types: dict[pl.Path, type]
 
     # Formatting for printing
     _indent = 3 * " "
@@ -42,10 +42,10 @@ class FlucsPostProcessing:
         on its corresponding input file.
         """
 
-        self._solver_names = {}
-        self._system_names = {}
-        self._solver_types = {}
-        self._system_types = {}
+        self.solver_names = {}
+        self.system_names = {}
+        self.solver_types = {}
+        self.system_types = {}
 
         for io_path in self.io_paths:
             input_file_dict = toml.load(io_path / "input.toml")
@@ -53,11 +53,11 @@ class FlucsPostProcessing:
             solver_name = input_file_dict["setup"]["solver"]
             system_name = input_file_dict["setup"]["system"]
 
-            self._solver_names[io_path] = solver_name
-            self._system_names[io_path] = system_name
+            self.solver_names[io_path] = solver_name
+            self.system_names[io_path] = system_name
 
-            self._solver_types[io_path] = flucs.get_solver_type(solver_name)
-            self._system_types[io_path] = flucs.get_system_type(system_name)
+            self.solver_types[io_path] = flucs.get_solver_type(solver_name)
+            self.system_types[io_path] = flucs.get_system_type(system_name)
 
     def _get_script_paths(self) -> list[tuple[int, str, pl.Path]]:
         """
@@ -71,8 +71,8 @@ class FlucsPostProcessing:
         # Keep solver scripts ahead of system scripts in the printed order.
         ordered_types = []
         for flucs_types in (
-            self._solver_types.values(),
-            self._system_types.values(),
+            self.solver_types.values(),
+            self.system_types.values(),
         ):
             for flucs_type in sorted(
                 set(flucs_types), key=lambda f: f.__name__.lower()
@@ -704,8 +704,8 @@ class FlucsPostProcessing:
         if constraint not in ("none", "solver", "system", "both"):
             raise ValueError("Invalid value for 'constraint'.")
 
-        solver_types = set(self._solver_types.values())
-        system_types = set(self._system_types.values())
+        solver_types = set(self.solver_types.values())
+        system_types = set(self.system_types.values())
 
         if constraint in ("solver", "both") and len(solver_types) > 1:
             raise ValueError(

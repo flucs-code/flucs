@@ -14,8 +14,17 @@ def plot_eigensystem(post):
         "linear_eigensystem/eigvals_solver_real"
     )
 
+    # Extract number of modes
+    system_type = post.system_types[post.io_paths[0]]
+    n_modes = system_type.number_of_fields
+
     # Initialise plotting
-    fig, axs = plt.subplots(3, 1, layout="constrained", sharex=True)
+    fig, axs = plt.subplots(
+        3, n_modes, 
+        layout="constrained", 
+        sharex=True, sharey="row",
+        figsize=(6 * n_modes, 8)
+    )
 
     figure_name = f"linear_eigensystem"
     fig.canvas.manager.set_window_title(figure_name)
@@ -58,7 +67,7 @@ def plot_eigensystem(post):
                 abs_diff, 
                 rel_norm, 
                 out=np.zeros_like(abs_diff), 
-                where=rel_norm!=0
+                where=(rel_norm != 0.0)
             )
         else:
             abs_diff = eigvals_ref[0]
@@ -69,7 +78,7 @@ def plot_eigensystem(post):
             f"({sim_label})"
         )
 
-        # Look at data at final time
+        # Get data at final time
         it = -1
         ikz = int(np.argmin(np.abs(kz - 0.0)))
         ikx = int(np.argmin(np.abs(kx - 0.0)))
@@ -79,76 +88,55 @@ def plot_eigensystem(post):
         eigvals_run_plot = eigvals_run[it, :, ikz, ikx, :]
         eigvals_tol_plot = eigvals_tol[it, :, ikz, ikx, :]
 
-        gammas_sol = eigvals_sol_plot.imag
-        gammas_max = np.max(gammas_sol, axis=0)
-        most_unstable_mode = np.argmax(gammas_sol, axis=0) 
-
-        selected_mode = np.where(
-            gammas_max > 0.0,
-            most_unstable_mode,
-            0,
-        )[None, :]
-
-        eigvals_sol_plot = np.take_along_axis(
-            eigvals_sol_plot, selected_mode, axis=0
-        )[0]
-        eigvals_ref_plot = np.take_along_axis(
-            eigvals_ref_plot, selected_mode, axis=0
-        )[0]
-        eigvals_run_plot = np.take_along_axis(
-            eigvals_run_plot, selected_mode, axis=0
-        )[0]
-        eigvals_tol_plot = np.take_along_axis(
-            eigvals_tol_plot, selected_mode, axis=0
-        )[0]
-
         # Plotting
         data_to_plot = (eigvals_sol_plot, eigvals_ref_plot, eigvals_run_plot)
         markers = ("o", "s", "x")
 
-        for data, marker in zip(data_to_plot, markers):
+        for mode in range(n_modes):
+            for data, marker in zip(data_to_plot, markers):
 
-            axs[0].plot(
+                axs[0, mode].plot(
+                    ky,
+                    data[mode, :].imag,
+                    label=None,
+                    color=sim_color,
+                    linestyle="none",
+                    marker=marker,
+                    markerfacecolor="none",
+                )
+                
+                axs[1, mode].plot(
+                    ky,
+                    data[mode, :].real,
+                    label=None,
+                    color=sim_color,
+                    linestyle="none",
+                    marker=marker,
+                    markerfacecolor="none",
+                )
+
+            axs[2, mode].plot(
                 ky,
-                data.imag,
-                label=None,
+                eigvals_tol_plot[mode, :],
+                label=sim_label,
                 color=sim_color,
                 linestyle="none",
-                marker=marker,
+                marker=markers[-1],
                 markerfacecolor="none",
             )
-            
-            axs[1].plot(
-                ky,
-                data.real,
-                label=None,
-                color=sim_color,
-                linestyle="none",
-                marker=marker,
-                markerfacecolor="none",
-            )
-
-        axs[2].plot(
-            ky,
-            eigvals_tol_plot,
-            label=sim_label,
-            color=sim_color,
-            linestyle="none",
-            marker=markers[-1],
-            markerfacecolor="none",
-        )
-    
+        
     # Setting plot options
-    axs[0].set_ylabel(r"$\mathrm{Im}(\omega)$")
-    axs[1].set_ylabel(r"$\mathrm{Re}(\omega)$")
-    axs[2].set_ylabel(r"$\mathrm{Tolerance}$")
+    axs[0, 0].set_ylabel(r"$\mathrm{Im}(\omega)$")
+    axs[1, 0].set_ylabel(r"$\mathrm{Re}(\omega)$")
+    axs[2, 0].set_ylabel(r"$\mathrm{Tolerance}$")
 
     for i in [0, 1]:
-        axs[i].axhline(y=0.0, color="gray", linewidth=1.0)
+        for j in range(n_modes):
+            axs[i, j].axhline(y=0.0, color="gray", linewidth=1.0)
+        axs[-1, i].set_xlabel(r"$k_y$")
+        axs[-1, i].set_yscale("log")
 
-    axs[-1].set_xlabel(r"$k_y$")
-    axs[-1].set_yscale("log")
-    axs[-1].legend()
+    axs[-1, 1].legend()
 
     # Save figures if required
     post.save(fig, name=figure_name, suffix="png", save_kwargs={"dpi": 300})
