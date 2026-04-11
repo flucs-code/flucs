@@ -42,7 +42,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
     name = "linear_eigensystem"
     option_defaults: ClassVar[dict[str, object]] = {
-        "tolerance": 1e-3,
+        "tolerance": 1e-6,
         "init_only": False, 
         "save_eigvecs": False,
         }
@@ -163,7 +163,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         self.previous_amplitude = None
         self.previous_eigvals = None
         self.previous_execute_time = None
-        self.amplitude_overflow = float(
+        self.amplitude_overflow = self.system.float(
             1e-1 * np.sqrt(np.finfo(self.system.float).max)
         )
 
@@ -190,14 +190,16 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
         previous_amplitude = amplitude if initial_execution else self.previous_amplitude
         previous_eigvals = self.eigvals_fill if initial_execution else self.previous_eigvals
-        time_interval = 1.0 if initial_execution else (
-            float(self.system.current_time) - float(self.previous_execute_time)
+        time_interval = self.system.float(1.0) if initial_execution else (
+            self.system.current_time - self.previous_execute_time
         )
 
         # Compute eigenvalues and tolerance
         eigvals = self.eigvals_fill.copy()
         valid = (
-            (abs_amplitude > 0.0) & (cp.abs(previous_amplitude) > 0.0)
+            (abs_amplitude > self.system.float(0.0)) 
+            & 
+            (cp.abs(previous_amplitude) > self.system.float(0.0))
         )
         eigvals[valid] = (
             1j / time_interval
@@ -206,7 +208,9 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
         eigvals_tolerance = self.eigvals_tolerance_fill.copy()
         valid_tolerance = (
-            valid & cp.isfinite(previous_eigvals) & (cp.abs(eigvals) > 0.0)
+            valid & cp.isfinite(previous_eigvals) 
+            & 
+            (cp.abs(eigvals) > self.system.float(0.0))
         )
 
         eigvals_tolerance[valid_tolerance] = (
@@ -241,11 +245,14 @@ class LinearEigensystemDiag(FlucsDiagnostic):
             )
 
             converged = (
-                self.tolerance > 0.0
+                self.system.float(self.tolerance) > self.system.float(0.0)
+                and self.system.current_time > self.system.float(10.0)
                 and bool(cp.any(valid_tolerance).get())
                 and bool(
                     cp.all(
-                        eigvals_tolerance[valid_tolerance] < self.tolerance
+                        eigvals_tolerance[valid_tolerance] 
+                        < 
+                        self.system.float(self.tolerance)
                     ).get()
                 )
             )
