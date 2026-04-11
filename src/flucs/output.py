@@ -389,22 +389,25 @@ class FlucsOutputNC(FlucsOutput):
         # Reuse existing variables if compatible
         if dim_name in grp.dimensions:
             existing_dim = grp.dimensions[dim_name]
-            existing_dim_size = None if existing_dim.isunlimited() else len(existing_dim)
+            existing_dim_size = (
+                None if existing_dim.isunlimited() else len(existing_dim)
+            )
 
             if dim_size is not None and existing_dim_size is not None:
                 if existing_dim_size != dim_size:
                     raise ValueError(
-                    f"Dimension '{dim_name}' already exists in group "
-                    f"'{grp.path}' with size {existing_dim_size}, not {dim_size}."
-                )
+                        f"Dimension '{dim_name}' already exists in group "
+                        f"'{grp.path}' with size {existing_dim_size}, "
+                        f"not {dim_size}."
+                    )
 
             if dim_name in grp.variables:
                 existing_dim_data = np.asarray(grp.variables[dim_name][:])
                 if not np.allclose(existing_dim_data, dim_data, equal_nan=True):
                     raise ValueError(
-                    f"Dimension variable '{dim_name}' already exists in group "
-                    f"'{grp.path}' with different values."
-                )
+                        f"Dimension variable '{dim_name}' already exists in "
+                        f"group '{grp.path}' with different values."
+                    )
 
             return
 

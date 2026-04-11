@@ -14,13 +14,13 @@ if TYPE_CHECKING:
 class LinearEigensystemDiag(FlucsDiagnostic):
     """
     Outputs the linear eigensystem of a given FourierSystem. This includes the
-    eigenvalues and eigenvectors computed directly from the linear matrix used 
-    by the solver, as well as a reference matrix if provided by the user. 
-    
+    eigenvalues and eigenvectors computed directly from the linear matrix used
+    by the solver, as well as a reference matrix if provided by the user.
+
     The runtime diagnostic calculates the eigenvalues directly from the time-
     evolution of the fields by projecting the solutions onto the precomputed
-    eigenvectors. This diagnostic will exit early if any amplitudes reach an 
-    overflow threshold, or if the eigenvalues converge within a specified 
+    eigenvectors. This diagnostic will exit early if any amplitudes reach an
+    overflow threshold, or if the eigenvalues converge within a specified
     tolerance, defined as:
 
         tolerance := abs(eigvals_{n} - eigvals_{n-1}) / abs(eigvals_{n})
@@ -34,18 +34,18 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         Tolerance for the eigenvalue calculation.
     init_only : bool
         If True, the diagnostic will execute for a single timestep to load the
-        solver/reference linear eigensystem. 
+        solver/reference linear eigensystem.
     save_eigvecs : bool
-        Whether to save the eigenvectors of the solver/reference eigensystems. 
+        Whether to save the eigenvectors of the solver/reference eigensystems.
 
     """
 
     name = "linear_eigensystem"
     option_defaults: ClassVar[dict[str, object]] = {
         "tolerance": 1e-6,
-        "init_only": False, 
+        "init_only": False,
         "save_eigvecs": False,
-        }
+    }
     system: "FourierSystem"
 
     def init_vars(self):
@@ -140,17 +140,14 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 )
 
     def ready(self):
-        
         # Cache inverses for mode projection
         eigensystem = self.system.compute_linear_eigensystem()
 
-        self.eigvecs_inverse = cp.asarray(
-            eigensystem["eigvecs_solver_inverse"]
-        )
+        self.eigvecs_inverse = cp.asarray(eigensystem["eigvecs_solver_inverse"])
 
         # Initialise fill values
         shape = (self.system.number_of_fields, *self.system.half_unpadded_tuple)
-        fill_value = cp.nan 
+        fill_value = cp.nan
 
         self.eigvals_fill = cp.full(
             shape, fill_value + 1j * fill_value, dtype=self.system.complex
@@ -168,7 +165,6 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         )
 
     def execute(self):
-
         # Get eigensystem from solver
         eigensystem = self.system.compute_linear_eigensystem()
 
@@ -184,54 +180,55 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         )
 
         abs_amplitude = cp.abs(amplitude)
-        
+
         # Get previous time data
         initial_execution = self.previous_execute_time is None
 
-        previous_amplitude = amplitude if initial_execution else self.previous_amplitude
-        previous_eigvals = self.eigvals_fill if initial_execution else self.previous_eigvals
-        time_interval = self.system.float(1.0) if initial_execution else (
-            self.system.current_time - self.previous_execute_time
+        previous_amplitude = (
+            amplitude if initial_execution else self.previous_amplitude
+        )
+        previous_eigvals = (
+            self.eigvals_fill if initial_execution else self.previous_eigvals
+        )
+        time_interval = (
+            self.system.float(1.0)
+            if initial_execution
+            else (self.system.current_time - self.previous_execute_time)
         )
 
         # Compute eigenvalues and tolerance
         eigvals = self.eigvals_fill.copy()
-        valid = (
-            (abs_amplitude > self.system.float(0.0)) 
-            & 
-            (cp.abs(previous_amplitude) > self.system.float(0.0))
+        valid = (abs_amplitude > self.system.float(0.0)) & (
+            cp.abs(previous_amplitude) > self.system.float(0.0)
         )
-        eigvals[valid] = (
-            1j / time_interval
-        ) * cp.log(amplitude[valid] / previous_amplitude[valid])
-
+        eigvals[valid] = (1j / time_interval) * cp.log(
+            amplitude[valid] / previous_amplitude[valid]
+        )
 
         eigvals_tolerance = self.eigvals_tolerance_fill.copy()
         valid_tolerance = (
-            valid & cp.isfinite(previous_eigvals) 
-            & 
-            (cp.abs(eigvals) > self.system.float(0.0))
+            valid
+            & cp.isfinite(previous_eigvals)
+            & (cp.abs(eigvals) > self.system.float(0.0))
         )
 
-        eigvals_tolerance[valid_tolerance] = (
-            cp.abs(
-                           eigvals[valid_tolerance]
-                - previous_eigvals[valid_tolerance]
-            )
-            / cp.abs(eigvals[valid_tolerance])
-        )
+        eigvals_tolerance[valid_tolerance] = cp.abs(
+            eigvals[valid_tolerance] - previous_eigvals[valid_tolerance]
+        ) / cp.abs(eigvals[valid_tolerance])
 
         # Save data
         self.save_data("eigvals_solver", eigensystem["eigvals_solver"])
         self.save_data("eigvals_reference", eigensystem["eigvals_reference"])
 
         self.save_data("eigvals", cp.asnumpy(eigvals))
-        self.save_data("eigvals_tolerance",cp.asnumpy(eigvals_tolerance))
+        self.save_data("eigvals_tolerance", cp.asnumpy(eigvals_tolerance))
         self.save_data("eigvals_amplitude", cp.asnumpy(abs_amplitude))
 
         if self.save_eigvecs:
             self.save_data("eigvecs_solver", eigensystem["eigvecs_solver"])
-            self.save_data("eigvecs_reference", eigensystem["eigvecs_reference"])
+            self.save_data(
+                "eigvecs_reference", eigensystem["eigvecs_reference"]
+            )
 
         # Reset previous time data
         self.previous_amplitude = amplitude.copy()
@@ -250,9 +247,8 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 and bool(cp.any(valid_tolerance).get())
                 and bool(
                     cp.all(
-                        eigvals_tolerance[valid_tolerance] 
-                        < 
-                        self.system.float(self.tolerance)
+                        eigvals_tolerance[valid_tolerance]
+                        < self.system.float(self.tolerance)
                     ).get()
                 )
             )

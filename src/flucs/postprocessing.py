@@ -470,24 +470,26 @@ class FlucsPostProcessing:
         """
 
         # Load data
-        real, boundary_indices_real, dims_dicts_real = self.load_netcdf_variable(
-            nc_path,
-            f"{variable}_real",
-            fill_value=np.real(fill_value),
+        real, boundary_indices_real, dims_dicts_real = (
+            self.load_netcdf_variable(
+                nc_path,
+                f"{variable}_real",
+                fill_value=np.real(fill_value),
+            )
         )
 
-        imag, boundary_indices_imag, dims_dicts_imag = self.load_netcdf_variable(
-            nc_path,
-            f"{variable}_imag",
-            fill_value=np.imag(fill_value),
+        imag, boundary_indices_imag, dims_dicts_imag = (
+            self.load_netcdf_variable(
+                nc_path,
+                f"{variable}_imag",
+                fill_value=np.imag(fill_value),
+            )
         )
 
         # Quick consistency check
-        if (
-                (boundary_indices_real != boundary_indices_imag) 
-                or 
-                (len(dims_dicts_real) != len(dims_dicts_imag))
-            ):
+        if (boundary_indices_real != boundary_indices_imag) or (
+            len(dims_dicts_real) != len(dims_dicts_imag)
+        ):
             raise ValueError(
                 f"Real and imaginary parts of complex variable "
                 f"'{variable}' have mismatched dimensions."

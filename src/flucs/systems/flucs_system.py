@@ -146,7 +146,7 @@ class FlucsSystem(ABC):
         Parameters
         ----------
         force: bool
-            If force is True, then all diagnostics not already due on the 
+            If force is True, then all diagnostics not already due on the
             current step are executed regardless of their next save time.
 
         """

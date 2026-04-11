@@ -486,16 +486,16 @@ class FourierSystem(FlucsSystem):
 
     def _compute_linear_matrix(self) -> None:
         """
-        Computes the linear matrix used by the solver and stores it in 
-        self.linear_matrix. Note that this is not used directly in the 
+        Computes the linear matrix used by the solver and stores it in
+        self.linear_matrix. Note that this is not used directly in the
         solver loop, and so is used entirely for diagnostic purposes.
-        
+
         """
 
         # Initialise
         self.linear_matrix = cp.zeros(
             (
-                self.number_of_fields, 
+                self.number_of_fields,
                 self.number_of_fields,
                 self.nz,
                 self.nx,
@@ -509,7 +509,7 @@ class FourierSystem(FlucsSystem):
             "compute_linear_matrix"
         )
 
-        # Compute 
+        # Compute
         compute_linear_matrix_kernel(
             (self.half_unpadded_cuda_grid_size,),
             (self.cuda_block_size,),
@@ -518,8 +518,8 @@ class FourierSystem(FlucsSystem):
 
     def compute_linear_matrix_reference(self) -> np.ndarray:
         """
-        Returns a user-defined reference linear matrix that should be 
-        the same shape as self.linear_matrix. This should be calculated 
+        Returns a user-defined reference linear matrix that should be
+        the same shape as self.linear_matrix. This should be calculated
         using only CPU resources, and should be of shape
 
         (nfields, nfields, nz, nx, half_ny)
@@ -532,12 +532,11 @@ class FourierSystem(FlucsSystem):
         return None
 
     def compute_linear_eigensystem(self) -> dict[str, np.ndarray]:
-
         """
-        Computes both the eigenvalues and (normalised) eigenvectors associated 
+        Computes both the eigenvalues and (normalised) eigenvectors associated
         with the linear matrix used by the solver, as well as for the reference
-        matrix provided by the user, if present. Note that the returned 
-        eigenvalues are complex frequencies. 
+        matrix provided by the user, if present. Note that the returned
+        eigenvalues are complex frequencies.
 
         """
 
@@ -563,14 +562,8 @@ class FourierSystem(FlucsSystem):
 
         # If none is provided, fill with nans for downstream
         if matrix_reference is None:
-
             eigvals_reference = np.full(
-                (
-                    self.number_of_fields, 
-                    self.nz, 
-                    self.nx, 
-                    self.half_ny
-                ),
+                (self.number_of_fields, self.nz, self.nx, self.half_ny),
                 np.nan + 1j * np.nan,
                 dtype=self.complex,
             )
@@ -590,11 +583,11 @@ class FourierSystem(FlucsSystem):
             # Ensure typing
             matrix_reference = np.asarray(
                 matrix_reference, dtype=self.complex
-                ).copy()
-            
+            ).copy()
+
             # Check for correct shape
             expected_shape = (
-                self.number_of_fields,  
+                self.number_of_fields,
                 self.number_of_fields,
                 self.nz,
                 self.nx,
@@ -609,7 +602,9 @@ class FourierSystem(FlucsSystem):
 
             # Add hyperdissipation if present
             kx, ky, kz = self.get_broadcast_wavenumbers()
-            hyperdissipation = np.zeros(self.half_unpadded_tuple, dtype=self.float)
+            hyperdissipation = np.zeros(
+                self.half_unpadded_tuple, dtype=self.float
+            )
 
             for component, ks in [
                 ("perp", kx**2 + ky**2),
@@ -619,26 +614,24 @@ class FourierSystem(FlucsSystem):
             ]:
                 coeff = self.input[f"hyperdissipation.{component}"]
                 if coeff > 0.0:
-                    hyperdissipation += (
-                        coeff * 
-                        (
+                    hyperdissipation += coeff * (
                         ks ** self.input[f"hyperdissipation.{component}_power"]
-                        )
                     )
 
             diag = np.arange(self.number_of_fields)
             matrix_reference[diag, diag, :, :, :] += hyperdissipation
 
-            # Calculate eigensystem. 
+            # Calculate eigensystem.
             matrix_reference = np.moveaxis(matrix_reference, (0, 1), (-2, -1))
-            eigvals_reference, eigvecs_reference = np.linalg.eig(matrix_reference)
+            eigvals_reference, eigvecs_reference = np.linalg.eig(
+                matrix_reference
+            )
 
             eigvals_reference = (-1j * eigvals_reference).transpose(3, 0, 1, 2)
             eigvecs_reference = eigvecs_reference.transpose(4, 3, 0, 1, 2)
 
         # Normalise eigenvectors
         for eigvecs in [eigvecs_solver, eigvecs_reference]:
-
             if np.isnan(eigvecs).all():
                 continue
 
@@ -652,7 +645,7 @@ class FourierSystem(FlucsSystem):
             # Normalise by phase
             phase = np.where(
                 np.abs(components) > 0, np.sign(components), 1.0 + 0.0j
-                )
+            )
             eigvecs *= np.conj(phase)
 
         # Compute inverse of solver eigenvectors for projection
