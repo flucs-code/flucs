@@ -78,10 +78,12 @@ def plot_eigensystem(post):
             f"({sim_label})"
         )
 
-        # Get data at final time
+        # Get data at final time and user-specified indices
         it = -1
-        ikz = int(np.argmin(np.abs(kz - 0.0)))
-        ikx = int(np.argmin(np.abs(kx - 0.0)))
+        ikz, ikx = args.indices
+
+        if kz.size == 1: # Default to ikz=0 if the system is 2D
+            ikz = 0
 
         eigvals_sol_plot = eigvals_sol[it, :, ikz, ikx, :]
         eigvals_ref_plot = eigvals_ref[it, :, ikz, ikx, :]
@@ -152,6 +154,16 @@ if __name__ == "__main__":
         parents=[FlucsPostProcessing.parser()],
         description=(
             "Plots the linear eigensystem from `output.eigensystem.nc`."
+        ),
+    )
+
+    parser.add_argument(
+        "--indices", "-idx",
+        nargs=2,
+        type=int,
+        default=(1, 0),
+        help=(
+            "Indices (ikz, ikx) to plot. Default is (1, 0)"
         ),
     )
 
