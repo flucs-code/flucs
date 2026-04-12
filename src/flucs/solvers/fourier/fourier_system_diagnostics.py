@@ -175,7 +175,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
             self.system.current_step % self.system.fields_history_size - 1
         ]
 
-        #Project onto solver eigenvectors
+        # Project onto solver eigenvectors
         current_amplitude = cp.einsum(
             "mfzxy,fzxy->mzxy",
             self.eigvecs_inverse,
@@ -185,7 +185,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         abs_current_amplitude = cp.abs(current_amplitude)
 
         # Get previous time data
-        initial_execution = (self.system.current_step == 0)
+        initial_execution = self.system.current_step == 0
 
         previous_amplitude = (
             current_amplitude
