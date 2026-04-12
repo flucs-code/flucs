@@ -157,9 +157,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         )
 
         # Runtime diagnostic variables
-        self.previous_amplitude = None
         self.previous_eigvals = None
-        self.previous_execute_time = None
         self.amplitude_overflow = self.system.float(
             1e-1 * np.sqrt(np.finfo(self.system.float).max)
         )
@@ -168,24 +166,35 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         # Get eigensystem from solver
         eigensystem = self.system.compute_linear_eigensystem()
 
-        # Project onto solver eigenvectors
+        # Get fields
         current_fields = self.system.fields[
             self.system.current_step % self.system.fields_history_size
         ]
 
-        amplitude = cp.einsum(
+        previous_fields = self.system.fields[
+            self.system.current_step % self.system.fields_history_size - 1
+        ]
+
+        #Project onto solver eigenvectors
+        current_amplitude = cp.einsum(
             "mfzxy,fzxy->mzxy",
             self.eigvecs_inverse,
             current_fields,
         )
 
-        abs_amplitude = cp.abs(amplitude)
+        abs_current_amplitude = cp.abs(current_amplitude)
 
         # Get previous time data
-        initial_execution = self.previous_execute_time is None
+        initial_execution = (self.system.current_step == 0)
 
         previous_amplitude = (
-            amplitude if initial_execution else self.previous_amplitude
+            current_amplitude
+            if initial_execution
+            else cp.einsum(
+                "mfzxy,fzxy->mzxy",
+                self.eigvecs_inverse,
+                previous_fields,
+            )
         )
         previous_eigvals = (
             self.eigvals_fill if initial_execution else self.previous_eigvals
@@ -193,36 +202,36 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         time_interval = (
             self.system.float(1.0)
             if initial_execution
-            else (self.system.current_time - self.previous_execute_time)
+            else self.system.current_dt
         )
 
         # Compute eigenvalues and tolerance
-        eigvals = self.eigvals_fill.copy()
-        valid = (abs_amplitude > self.system.float(0.0)) & (
+        current_eigvals = self.eigvals_fill.copy()
+        valid = (abs_current_amplitude > self.system.float(0.0)) & (
             cp.abs(previous_amplitude) > self.system.float(0.0)
         )
-        eigvals[valid] = (1j / time_interval) * cp.log(
-            amplitude[valid] / previous_amplitude[valid]
+        current_eigvals[valid] = (1j / time_interval) * cp.log(
+            current_amplitude[valid] / previous_amplitude[valid]
         )
 
         eigvals_tolerance = self.eigvals_tolerance_fill.copy()
         valid_tolerance = (
             valid
             & cp.isfinite(previous_eigvals)
-            & (cp.abs(eigvals) > self.system.float(0.0))
+            & (cp.abs(current_eigvals) > self.system.float(0.0))
         )
 
         eigvals_tolerance[valid_tolerance] = cp.abs(
-            eigvals[valid_tolerance] - previous_eigvals[valid_tolerance]
-        ) / cp.abs(eigvals[valid_tolerance])
+            current_eigvals[valid_tolerance] - previous_eigvals[valid_tolerance]
+        ) / cp.abs(current_eigvals[valid_tolerance])
 
         # Save data
         self.save_data("eigvals_solver", eigensystem["eigvals_solver"])
         self.save_data("eigvals_reference", eigensystem["eigvals_reference"])
 
-        self.save_data("eigvals", cp.asnumpy(eigvals))
+        self.save_data("eigvals", cp.asnumpy(current_eigvals))
         self.save_data("eigvals_tolerance", cp.asnumpy(eigvals_tolerance))
-        self.save_data("eigvals_amplitude", cp.asnumpy(abs_amplitude))
+        self.save_data("eigvals_amplitude", cp.asnumpy(abs_current_amplitude))
 
         if self.save_eigvecs:
             self.save_data("eigvecs_solver", eigensystem["eigvecs_solver"])
@@ -230,15 +239,13 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 "eigvecs_reference", eigensystem["eigvecs_reference"]
             )
 
-        # Reset previous time data
-        self.previous_amplitude = amplitude.copy()
-        self.previous_eigvals = eigvals.copy()
-        self.previous_execute_time = float(self.system.current_time)
+        # Reset previous eigval data for tolerance calculation
+        self.previous_eigvals = current_eigvals.copy()
 
         # Exit conditions
         if self.system.solver.state == FlucsSolverState.RUNNING:
             overflow = bool(
-                cp.any(abs_amplitude > self.amplitude_overflow).get()
+                cp.any(abs_current_amplitude > self.amplitude_overflow).get()
             )
 
             converged = (
