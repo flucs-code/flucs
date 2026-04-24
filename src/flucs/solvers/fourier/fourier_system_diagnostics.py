@@ -50,10 +50,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
     def init_vars(self):
         if not self.system.input["setup.linear"]:
-            print(
-                "\nWARNING:\n"
-                "Running nonlinearly with a linear-eigensystem diagnostic.\n"
-            )
+            print(f"[{type(self).__name__}] WARNING: running nonlinearly.")
 
         field = np.arange(self.system.number_of_fields)
 
