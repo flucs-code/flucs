@@ -1,7 +1,7 @@
 [time]
 dt_max = 0.01  # integration time step
 dt_min = 1e-8
-tfinal =  10  # final time
+tfinal =  10.0  # final time
 
 [setup]
 solver = ""  # name of the solver
