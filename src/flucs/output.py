@@ -467,13 +467,13 @@ class FlucsOutputNC(FlucsOutput):
 
                         # If time-independent, write data now
                         if not var.is_time_dependent:
-                            diagnostic_group[f"{var.name}_real"][:] = (
-                                np.array(var.data_cache[-1])[:].real
-                            )
+                            diagnostic_group[f"{var.name}_real"][:] = np.array(
+                                var.data_cache[-1]
+                            )[:].real
 
-                            diagnostic_group[f"{var.name}_imag"][:] = (
-                                np.array(var.data_cache[-1])[:].imag
-                            )
+                            diagnostic_group[f"{var.name}_imag"][:] = np.array(
+                                var.data_cache[-1]
+                            )[:].imag
 
                     else:
                         diagnostic_group.createVariable(
@@ -482,9 +482,9 @@ class FlucsOutputNC(FlucsOutput):
                             var_shape,
                         )
                         if not var.is_time_dependent:
-                            diagnostic_group[var.name][:] = (
-                                np.array(var.data_cache[-1])[:]
-                            )
+                            diagnostic_group[var.name][:] = np.array(
+                                var.data_cache[-1]
+                            )[:]
 
     def write(self):
         """Saves any cached diagnostic data to disk and clears the cache.

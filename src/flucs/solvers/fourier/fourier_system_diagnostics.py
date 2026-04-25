@@ -66,7 +66,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                     "ky": self.system.ky,
                 },
                 is_complex=True,
-                is_time_dependent=False
+                is_time_dependent=False,
             )
         )
 
@@ -126,7 +126,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                         "ky": self.system.ky,
                     },
                     is_complex=True,
-                    is_time_dependent=False
+                    is_time_dependent=False,
                 )
             )
 

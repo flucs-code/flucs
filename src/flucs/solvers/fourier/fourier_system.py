@@ -279,7 +279,6 @@ class FourierSystem(FlucsSystem):
             f"dt {float(self.init_dt):.3e}"
         )
 
-
     def _precompute_wavenumbers(self):
         # Check if we have already done this
         if hasattr(self, "ky"):
@@ -345,9 +344,7 @@ class FourierSystem(FlucsSystem):
 
         # Add hyperdissipation to reference matrix if present
         kx, ky, kz = self.get_broadcast_wavenumbers()
-        hyperdissipation = np.zeros(
-            self.half_unpadded_tuple, dtype=self.float
-        )
+        hyperdissipation = np.zeros(self.half_unpadded_tuple, dtype=self.float)
 
         for component, ks in [
             ("perp", kx**2 + ky**2),
@@ -364,12 +361,13 @@ class FourierSystem(FlucsSystem):
         diag = np.arange(self.number_of_fields)
         matrix_reference[diag, diag, :, :, :] += hyperdissipation
 
-        if (matrix_reference is not None
-                and not np.allclose(matrix_reference, matrix_solver)):
+        if matrix_reference is not None and not np.allclose(
+            matrix_reference, matrix_solver
+        ):
             raise ValueError(
                 "The linear matrix computed by CUDA disagrees "
                 "with provided reference matrix."
-                )
+            )
 
         # Print out information for the max linear frequencies
         # and compare with dt_max
@@ -391,13 +389,13 @@ class FourierSystem(FlucsSystem):
         tol = 2.0
         if self.dt_max * max_growth > tol:
             raise InvalidFlucsInputFileError(
-                    "dt_max * max growth rate is too large."
-                )
+                "dt_max * max growth rate is too large."
+            )
 
         if self.dt_max * max_real_frequency > tol:
             raise InvalidFlucsInputFileError(
-                    "dt_max * max frequency is too large."
-                )
+                "dt_max * max frequency is too large."
+            )
 
     def ready(self) -> None:
         # Reset time counters
@@ -540,7 +538,7 @@ class FourierSystem(FlucsSystem):
         self.finish_step_kernel = self.cupy_module.get_function("finish_step")
 
     def setup_cuda_grids(self) -> None:
-        """ Sets up the grids and blocks for CUDA kernels.
+        """Sets up the grids and blocks for CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
         As it stands, this is sysem-specific.

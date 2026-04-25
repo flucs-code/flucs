@@ -260,7 +260,7 @@ class FlucsSystem(ABC):
 
     @abstractmethod
     def setup_cuda_grids(self) -> None:
-        """ Sets up the grids and blocks for CUDA kernels.
+        """Sets up the grids and blocks for CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
         As it stands, this is sysem-specific.
