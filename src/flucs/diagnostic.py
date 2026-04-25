@@ -34,7 +34,10 @@ class FlucsDiagnosticVariable:
     data_cache: list[np.ndarray] = field(default_factory=list, init=False)
 
     # Complex-number variables are handled separately
-    is_complex: bool = False
+    is_complex: bool
+
+    # Time-dependent variables are calculated at every diagnostic execution
+    is_time_dependent: bool = field(default=True)
 
 
 class FlucsDiagnostic(ABC):

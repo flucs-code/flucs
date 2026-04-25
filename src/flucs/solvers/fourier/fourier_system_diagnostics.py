@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
 
@@ -8,7 +9,7 @@ from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 from flucs.solvers import FlucsSolverState
 
 if TYPE_CHECKING:
-    from .fourier_system import FourierSystem
+    from flucs.solvers.fourier.fourier_system import FourierSystem
 
 
 class LinearEigensystemDiag(FlucsDiagnostic):
@@ -46,7 +47,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         "init_only": False,
         "save_eigvecs": False,
     }
-    system: "FourierSystem"
+    system: FourierSystem
 
     def init_vars(self):
         if not self.system.input["setup.linear"]:
@@ -65,20 +66,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                     "ky": self.system.ky,
                 },
                 is_complex=True,
-            )
-        )
-
-        self.add_var(
-            FlucsDiagnosticVariable(
-                name="eigvals_reference",
-                shape=("mode", "kz", "kx", "ky"),
-                dimensions={
-                    "mode": field,
-                    "kz": self.system.kz,
-                    "kx": self.system.kx,
-                    "ky": self.system.ky,
-                },
-                is_complex=True,
+                is_time_dependent=False
             )
         )
 
@@ -126,27 +114,30 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
         # Optionally save eigenvectors
         if self.save_eigvecs:
-            for name in ["eigvecs_solver", "eigvecs_reference"]:
-                self.add_var(
-                    FlucsDiagnosticVariable(
-                        name=name,
-                        shape=("mode", "field", "kz", "kx", "ky"),
-                        dimensions={
-                            "mode": field,
-                            "field": field,
-                            "kz": self.system.kz,
-                            "kx": self.system.kx,
-                            "ky": self.system.ky,
-                        },
-                        is_complex=True,
-                    )
+            self.add_var(
+                FlucsDiagnosticVariable(
+                    name="eigvecs_solver",
+                    shape=("mode", "field", "kz", "kx", "ky"),
+                    dimensions={
+                        "mode": field,
+                        "field": field,
+                        "kz": self.system.kz,
+                        "kx": self.system.kx,
+                        "ky": self.system.ky,
+                    },
+                    is_complex=True,
+                    is_time_dependent=False
                 )
+            )
 
     def ready(self):
         # Cache inverses for mode projection
         eigensystem = self.system.compute_linear_eigensystem()
+        self.eigvecs_inverse = cp.asarray(eigensystem["eigvecs_inverse"])
 
-        self.eigvecs_inverse = cp.asarray(eigensystem["eigvecs_solver_inverse"])
+        self.save_data("eigvals_solver", eigensystem["eigvals"])
+        if self.save_eigvecs:
+            self.save_data("eigvecs_solver", eigensystem["eigvecs"])
 
         # Initialise fill values
         shape = (self.system.number_of_fields, *self.system.half_unpadded_tuple)
@@ -166,9 +157,6 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         )
 
     def execute(self):
-        # Get eigensystem from solver
-        eigensystem = self.system.compute_linear_eigensystem()
-
         # Get fields
         current_fields = self.system.fields[
             self.system.current_step % self.system.fields_history_size
@@ -229,18 +217,9 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         ) / cp.abs(current_eigvals[valid_tolerance])
 
         # Save data
-        self.save_data("eigvals_solver", eigensystem["eigvals_solver"])
-        self.save_data("eigvals_reference", eigensystem["eigvals_reference"])
-
         self.save_data("eigvals", cp.asnumpy(current_eigvals))
         self.save_data("eigvals_tolerance", cp.asnumpy(eigvals_tolerance))
         self.save_data("eigvals_amplitude", cp.asnumpy(abs_current_amplitude))
-
-        if self.save_eigvecs:
-            self.save_data("eigvecs_solver", eigensystem["eigvecs_solver"])
-            self.save_data(
-                "eigvecs_reference", eigensystem["eigvecs_reference"]
-            )
 
         # Reset previous eigval data for tolerance calculation
         self.previous_eigvals = current_eigvals.copy()
@@ -253,7 +232,6 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
             converged = (
                 self.system.float(self.tolerance) > self.system.float(0.0)
-                and self.system.current_time > self.system.float(10.0)
                 and bool(cp.any(valid_tolerance).get())
                 and bool(
                     cp.all(

@@ -256,6 +256,16 @@ class FlucsSystem(ABC):
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)
+        self.setup_cuda_grids()
+
+    @abstractmethod
+    def setup_cuda_grids(self) -> None:
+        """ Sets up the grids and blocks for CUDA kernels.
+
+        In the future, this may be the place to do some automatic optimisation.
+        As it stands, this is sysem-specific.
+        """
+        pass
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """

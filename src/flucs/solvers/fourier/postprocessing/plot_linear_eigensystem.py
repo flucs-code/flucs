@@ -40,9 +40,6 @@ def plot_eigensystem(post):
         eigvals_sol, _, dims_dicts = post.load_netcdf_variable_complex(
             nc_path, "linear_eigensystem/eigvals_solver"
         )
-        eigvals_ref = post.load_netcdf_variable_complex(
-            nc_path, "linear_eigensystem/eigvals_reference"
-        )[0]
         eigvals_run = post.load_netcdf_variable_complex(
             nc_path, "linear_eigensystem/eigvals"
         )[0]
@@ -54,28 +51,6 @@ def plot_eigensystem(post):
         kz = np.asarray(dims["kz"])
         ky = np.asarray(dims["ky"])
 
-        # Calculate and report errors between solver and reference eigenvalues
-        finite = np.isfinite(eigvals_sol) & np.isfinite(eigvals_ref)
-
-        if np.any(finite):
-            abs_diff = np.abs(eigvals_sol[finite] - eigvals_ref[finite])
-            rel_norm = np.maximum(
-                np.abs(eigvals_sol[finite]), np.abs(eigvals_ref[finite])
-            )
-            rel_diff = np.divide(
-                abs_diff,
-                rel_norm,
-                out=np.zeros_like(abs_diff),
-                where=(rel_norm != 0.0),
-            )
-        else:
-            abs_diff = eigvals_ref[0]
-            rel_diff = eigvals_ref[0]
-
-        print(
-            f"{np.max(rel_diff):>9.3e}, {np.max(abs_diff):>9.3e} ({sim_label})"
-        )
-
         # Get data at final time and user-specified indices
         it = -1
         ikz, ikx = args.indices
@@ -83,14 +58,13 @@ def plot_eigensystem(post):
         if kz.size == 1:  # Default to ikz=0 if the system is 2D
             ikz = 0
 
-        eigvals_sol_plot = eigvals_sol[it, :, ikz, ikx, :]
-        eigvals_ref_plot = eigvals_ref[it, :, ikz, ikx, :]
+        eigvals_sol_plot = eigvals_sol[:, ikz, ikx, :]
         eigvals_run_plot = eigvals_run[it, :, ikz, ikx, :]
         eigvals_tol_plot = eigvals_tol[it, :, ikz, ikx, :]
 
         # Plotting
-        data_to_plot = (eigvals_sol_plot, eigvals_ref_plot, eigvals_run_plot)
-        markers = ("o", "s", "x")
+        data_to_plot = (eigvals_sol_plot, eigvals_run_plot)
+        markers = ("s", "x")
 
         for mode in range(n_modes):
             for data, marker in zip(data_to_plot, markers):

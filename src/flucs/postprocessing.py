@@ -412,12 +412,6 @@ class FlucsPostProcessing:
                 var_obj = _get_var(grp, variable)
                 if var_obj is not None:
                     arr = np.asarray(var_obj[:])
-                    if arr.shape[0] != time_length:
-                        raise ValueError(
-                            "Time dimension mistmatch for variable "
-                            f"'{variable}' in group {grp_number} "
-                            f"(has {arr.shape} but expected {time_length})"
-                        )
                     group_data.append(arr.astype(var_dtype, copy=False))
 
                     # Add dimensions
