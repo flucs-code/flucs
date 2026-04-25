@@ -329,12 +329,21 @@ class FlucsPostProcessing:
         return found
 
     def load_netcdf_variable(
-        self, nc_path: pl.Path, variable: str, fill_value: float = np.nan
+        self, 
+        nc_path: pl.Path, 
+        variable: str, 
+        fill_value: float = np.nan,
+        group: int | None = None,
     ):
         """
-        Load a variable across all groups in a netCDF file and concatenate
+        Load a variable from a netCDF file.
+
+        Time-dependent variables are (by defualt) concatenated across all groups
         along time (zeroth axis). Groups missing the variable are filled with
         'fill_value'.
+
+        Time-independent variables are (by default) loaded from the latest non-
+        empty group. 
 
         Parameters
         ----------
@@ -344,6 +353,11 @@ class FlucsPostProcessing:
             Name of the variable to load.
         fill_value : float
             Value to use for groups that do not contain 'variable'.
+        group : int | None
+            If specified, load data only from this output group. If None, 
+            time-dependent variables are concatenated across all groups, while 
+            time-independent variables are loaded from the latest non-empty
+            group.
 
         Returns
         -------
@@ -384,19 +398,57 @@ class FlucsPostProcessing:
                     "Output groups are not in order; check netCDF file"
                 )
 
-            # Determine residual shape and dtype of output variable
-            var_iter = (
-                (grp_number, var_obj)
-                for grp_number, grp in groups
-                if (var_obj := _get_var(grp, variable)) is not None
-            )
-            try:
-                grp_number, var = next(var_iter)
-            except StopIteration:
+            # Determine whether the variable is time-dependent
+            var = None
+            for _, grp in groups:
+                var = _get_var(grp, variable)
+                if var is not None:
+                    break
+
+            if var is None:
                 raise ValueError(
                     f"Variable '{variable}' not found in any group of {nc_path}"
                 )
 
+            is_time_dependent = (
+                len(var.dimensions) > 0
+                and var.dimensions[0] == "time"
+            )
+
+            # Get groups to read
+            if group is not None:
+                groups_to_read = [(group, ds.groups[str(group)])]
+            elif is_time_dependent:
+                groups_to_read = groups
+            else:
+                groups_to_read = [
+                    next(
+                        (grp_number, grp)
+                        for grp_number, grp in reversed(groups)
+                        if grp.variables["time"].shape[0] > 0
+                    )
+                ]
+
+            # Time-independent variables
+            if not is_time_dependent:
+                _, grp = groups_to_read[0]
+                var_obj = _get_var(grp, variable)
+
+                dims_dicts = [OrderedDict()]
+                if var_obj is None:
+                    values = np.full(
+                        var.shape,
+                        fill_value,
+                        dtype=var.dtype,
+                    )
+                else:
+                    values = np.asarray(var_obj[:])
+                    for dim in var_obj.dimensions:
+                        dims_dicts[0][dim] = np.asarray(var_obj.group()[dim][:])
+
+                return values, [], dims_dicts
+
+            # Time-dependent variables
             res_shape = var.shape[1:]
             var_dtype = var.dtype
 
@@ -404,7 +456,7 @@ class FlucsPostProcessing:
             group_data = []
             boundaries = []
             dims_dicts = []
-            for grp_number, grp in groups:
+            for grp_number, grp in groups_to_read:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
 
@@ -442,10 +494,14 @@ class FlucsPostProcessing:
         nc_path: pl.Path,
         variable: str,
         fill_value: complex = np.nan + 1j * np.nan,
+        group: int | None = None,
     ):
         """
         Load a complex variable stored as '<variable>_real' and
-        '<variable>_imag' across all groups in a netCDF file.
+        '<variable>_imag' from a netCDF file.
+
+        This is a thin wrapper around load_netcdf_variable and follows the same
+        group-selection rules.
 
         Parameters
         ----------
@@ -455,6 +511,9 @@ class FlucsPostProcessing:
             Base name of the complex variable.
         fill_value : complex
             Value to use for groups that do not contain the variable.
+        group : int | None
+            If specified, load data only from this output group. If None,
+            behaviour matches load_netcdf_variable.
 
         Returns
         -------
@@ -469,6 +528,7 @@ class FlucsPostProcessing:
                 nc_path,
                 f"{variable}_real",
                 fill_value=np.real(fill_value),
+                group=group
             )
         )
 
@@ -477,6 +537,7 @@ class FlucsPostProcessing:
                 nc_path,
                 f"{variable}_imag",
                 fill_value=np.imag(fill_value),
+                group=group
             )
         )
 
