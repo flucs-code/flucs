@@ -273,12 +273,6 @@ class FourierSystem(FlucsSystem):
         elif self.input["time.dt_method"] == "continuous":
             self._compute_current_dt = self._compute_current_dt_continuous
 
-        # Print starting message
-        print(
-            f"Starting at time {float(self.init_time):.3e}, "
-            f"dt {float(self.init_dt):.3e}"
-        )
-
     def _precompute_wavenumbers(self):
         # Check if we have already done this
         if hasattr(self, "ky"):
@@ -369,32 +363,38 @@ class FourierSystem(FlucsSystem):
                 "with provided reference matrix."
             )
 
-        # Print out information for the max linear frequencies
-        # and compare with dt_max
+        # Compare relevant linear frequencies to dt_max
         eigvals = self.compute_linear_eigensystem()["eigvals"]
         max_growth = np.max(eigvals.imag)
         max_damping = np.max(-eigvals.imag)
         max_real_frequency = np.max(np.abs(eigvals.real))
 
         print(
-            f"Max growth rate    = {max_growth:.3e} "
-            f"-> times dt_max = {max_growth * self.dt_max:.3e}\n"
-            f"Max damping rate   = {max_damping:.3e} "
-            f"-> times dt_max = {max_damping * self.dt_max:.3e}\n"
-            f"Max real frequency = {max_real_frequency:.3e} "
-            f"-> times dt_max = {max_real_frequency * self.dt_max:.3e}\n"
-        )
+            "Linear rates (max.):          "
+            f"(growth, damping, frequency) = "
+            f"({max_growth:.3e}, "
+            f"{max_damping:.3e}, "
+            f"{max_real_frequency:+.3e})"
+            )
 
-        # Check dt against growth rate and real frequency
+        print(
+            "Linear rates (max.): dt_max * "
+            f"(growth, damping, frequency) = "
+            f"({self.dt_max * max_growth:.3e}, "
+            f"{self.dt_max * max_damping:.3e}, "
+            f"{self.dt_max * max_real_frequency:+.3e})"
+            )
+
+        # Check whether dt_max is appropriate given the linear properties
         tol = 2.0
         if self.dt_max * max_growth > tol:
             raise InvalidFlucsInputFileError(
-                "dt_max * max growth rate is too large."
+                "(dt_max * max growth rate) is too large."
             )
 
         if self.dt_max * max_real_frequency > tol:
             raise InvalidFlucsInputFileError(
-                "dt_max * max frequency is too large."
+                "(dt_max * max frequency) is too large."
             )
 
     def ready(self) -> None:
@@ -408,6 +408,12 @@ class FourierSystem(FlucsSystem):
             [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
+
+        # Print starting message
+        print(
+            f"Starting at time {float(self.init_time):.3e}, "
+            f"dt {float(self.init_dt):.3e}"
+        )
 
         # Reset CFL
         self.current_cfl = 0.0

@@ -33,7 +33,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Timing
         self.system.ready()
 
-        print(f"Timing {self.system.input['setup.timing_steps']:.3e} steps...")
         time_taken = self._solver_loop()
         print(
             f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
