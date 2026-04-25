@@ -329,9 +329,9 @@ class FlucsPostProcessing:
         return found
 
     def load_netcdf_variable(
-        self, 
-        nc_path: pl.Path, 
-        variable: str, 
+        self,
+        nc_path: pl.Path,
+        variable: str,
         fill_value: float = np.nan,
         group: int | None = None,
     ):
@@ -343,7 +343,7 @@ class FlucsPostProcessing:
         'fill_value'.
 
         Time-independent variables are (by default) loaded from the latest non-
-        empty group. 
+        empty group.
 
         Parameters
         ----------
@@ -354,8 +354,8 @@ class FlucsPostProcessing:
         fill_value : float
             Value to use for groups that do not contain 'variable'.
         group : int | None
-            If specified, load data only from this output group. If None, 
-            time-dependent variables are concatenated across all groups, while 
+            If specified, load data only from this output group. If None,
+            time-dependent variables are concatenated across all groups, while
             time-independent variables are loaded from the latest non-empty
             group.
 
@@ -411,8 +411,7 @@ class FlucsPostProcessing:
                 )
 
             is_time_dependent = (
-                len(var.dimensions) > 0
-                and var.dimensions[0] == "time"
+                len(var.dimensions) > 0 and var.dimensions[0] == "time"
             )
 
             # Get groups to read
@@ -528,7 +527,7 @@ class FlucsPostProcessing:
                 nc_path,
                 f"{variable}_real",
                 fill_value=np.real(fill_value),
-                group=group
+                group=group,
             )
         )
 
@@ -537,7 +536,7 @@ class FlucsPostProcessing:
                 nc_path,
                 f"{variable}_imag",
                 fill_value=np.imag(fill_value),
-                group=group
+                group=group,
             )
         )
 
