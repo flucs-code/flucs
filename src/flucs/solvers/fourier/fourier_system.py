@@ -429,6 +429,10 @@ class FourierSystem(FlucsSystem):
             np.reshape(self.fields_initial, self.fields[0].shape)
         )
 
+        # Reset AB3 nonlinear history
+        if not self.input["setup.linear"]:
+            self.multistep_nonlinear_terms.fill(self.float(0.0))
+
         super().ready()
 
         # Allocate precomputation matrices
