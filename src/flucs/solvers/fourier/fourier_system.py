@@ -28,6 +28,11 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
+    # Number of fields whose equations contain nonlinear terms. This is 
+    # typically the same as number_of_fields, but can be smaller for some
+    # systems
+    number_of_fields_nonlinear: int
+
     # Total number of time steps for which we hold field data in memory
     # This is typically 2 (previous time step +
     # the current one we are solving for)
@@ -477,6 +482,10 @@ class FourierSystem(FlucsSystem):
         # FourierSystem specific constants
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
+        )
+
+        self.module_options.define_int(
+            "NUMBER_OF_FIELDS_NONLINEAR", self.number_of_fields_nonlinear
         )
 
         self.module_options.define_dimension(
