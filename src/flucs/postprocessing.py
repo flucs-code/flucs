@@ -410,7 +410,7 @@ class FlucsPostProcessing:
                     f"Variable '{variable}' not found in any group of {nc_path}"
                 )
 
-            time_dependent = (sample_var.dimensions[:1] == ("time",))
+            time_dependent = sample_var.dimensions[:1] == ("time",)
             res_shape = tuple(
                 size
                 for dim, size in zip(sample_var.dimensions, sample_var.shape)
@@ -419,7 +419,7 @@ class FlucsPostProcessing:
             var_dtype = sample_var.dtype
 
             # Either read specified group, or all of them
-            groups_to_read = ([groups[group]]if group is not None else groups)
+            groups_to_read = [groups[group]] if group is not None else groups
 
             # Set up lists
             group_data = []
@@ -433,9 +433,7 @@ class FlucsPostProcessing:
                 dims_dicts.append(OrderedDict())
 
                 fill_shape = (
-                    (time_length, *res_shape)
-                    if time_dependent
-                    else res_shape
+                    (time_length, *res_shape) if time_dependent else res_shape
                 )
 
                 var_obj = _get_var(grp, variable)
@@ -463,13 +461,13 @@ class FlucsPostProcessing:
         # Determine how to handle time axis, if present
         if group is not None:
             return group_data[0], [], dims_dicts
-        
+
         elif time_dependent:
             values = np.concatenate(group_data, axis=0)
             boundary_indices = list(np.cumsum(boundaries)[:-1])
 
             return values, boundary_indices, dims_dicts
-    
+
         else:
             latest = next(
                 i
@@ -477,7 +475,6 @@ class FlucsPostProcessing:
                 if boundaries[i] > 0
             )
             return group_data[latest], [], [dims_dicts[latest]]
-
 
     def load_netcdf_variable_complex(
         self,
