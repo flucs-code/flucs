@@ -360,16 +360,16 @@ class FlucsPostProcessing:
             identifiers (matching the group numbers). If None, all groups are
             loaded.
         concatenate : bool
-            If True, time-dependent variables are concatenated across groups, 
-            and time-independent variables are loaded from the latest non-empty 
+            If True, time-dependent variables are concatenated across groups,
+            and time-independent variables are loaded from the latest non-empty
             group.
 
         Returns
         -------
         tuple
             (values, boundary_indices, dims_dict) where
-            - values is either a list of np.ndarrays, or a single np.ndarray 
-              with shape (sum(time_lengths), ...) after concatenation across 
+            - values is either a list of np.ndarrays, or a single np.ndarray
+              with shape (sum(time_lengths), ...) after concatenation across
               groups
             - boundary_indices is a list of integer indices marking the
               boundaries between groups in the concatenated time axis. This list
@@ -499,7 +499,7 @@ class FlucsPostProcessing:
         # If not concatenating, return list of group data and dims_dicts
         if not concatenate:
             return group_data, [], dims_dicts
-        
+
         else:
             if time_dependent:
                 values = np.concatenate(group_data, axis=0)
