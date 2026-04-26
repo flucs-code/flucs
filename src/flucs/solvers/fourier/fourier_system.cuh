@@ -6,10 +6,12 @@
 #ifdef DOUBLE_PRECISION
     #define FLUCS_FLOAT double
     #define flucs_fabs(x) fabs(x)
+    #define flucs_fmax(x, y) fmax(x, y)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
+    #define flucs_fmax(x, y) fmaxf(x, y)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
 #endif
 
