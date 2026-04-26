@@ -6,7 +6,7 @@ __device__ float atomicMaxFloat(float* addr, float value) {
     do {
         assumed = old;
         old = atomicCAS(address_as_int, assumed,
-                        __float_as_int(flucs_fmax(value, __int_as_float(assumed))));
+                        __float_as_int(fmaxf(value, __int_as_float(assumed))));
     } while (assumed != old);
     return __int_as_float(old);
 }
