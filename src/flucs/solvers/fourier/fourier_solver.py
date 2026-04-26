@@ -25,8 +25,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         # Get the system ready
         self.system.setup()
-        self.system.setup_output()
         self.system.compile_cupy_module()
+        self.system.check_health()
+        self.system.setup_output()
         self.system.get_memory_usage()
 
         # Timing
@@ -92,6 +93,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         end_time = time.time()
 
         # One final write
+        self.system.execute_diagnostics(force=True)
         self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
 

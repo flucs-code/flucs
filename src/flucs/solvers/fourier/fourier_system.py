@@ -16,7 +16,7 @@ from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,
-    LinearSpectrumDiag,
+    LinearEigensystemDiag,
     RealspaceDataDiag,
 )
 
@@ -45,8 +45,9 @@ class FourierSystem(FlucsSystem):
     # time step
     dft_bits: cp.ndarray
 
-    # Linear matrix (used for linear postprocessing)
-    linear_matrix: cp.ndarray
+    # Linear quantities (used for linear postprocessing)
+    linear_matrix: np.ndarray | None = None
+    linear_eigensystem: dict[str, np.ndarray] | None = None
 
     # Iteration matrices (used for precomputing)
     rhs: cp.ndarray
@@ -113,7 +114,7 @@ class FourierSystem(FlucsSystem):
 
     # Diagnostics available to all FourierSystems
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
-        LinearSpectrumDiag,
+        LinearEigensystemDiag,
         FourierDataDiag,
         RealspaceDataDiag,
     }
@@ -256,6 +257,22 @@ class FourierSystem(FlucsSystem):
         self._set_initial_conditions()
         self._check_initial_conditions()
 
+        # Timestep setup
+        self.dt_max = self.input["time.dt_max"]
+        self.dt_min = self.input["time.dt_min"]
+        self.max_cfl = self.input["time.max_cfl"]
+        self.dt_mult_increase = self.input["time.dt_mult_increase"]
+        self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
+
+        # Determine the time stepping method
+        if self.input["time.dt_method"] == "discrete":
+            self.sub_cfl_steps = self.int(0)
+            self.dt_mult_steps = self.input["time.dt_mult_steps"]
+            self._compute_current_dt = self._compute_current_dt_discrete
+
+        elif self.input["time.dt_method"] == "continuous":
+            self._compute_current_dt = self._compute_current_dt_continuous
+
     def _precompute_wavenumbers(self):
         # Check if we have already done this
         if hasattr(self, "ky"):
@@ -309,62 +326,98 @@ class FourierSystem(FlucsSystem):
 
         return kx_broadcast, ky_broadcast, kz_broadcast
 
-    @abstractmethod
-    def compute_complex_omega(self):
-        """Returns an array of shape (nz, nx, half_ny, number_of_fields) with
-        the solutions to the linear dispersion relation. This should be
-        calculated using only CPU resources.
+    def check_health(self) -> None:
+        """Basic consistency/health checks before running.
+        Alerts the user if anything needs their attention.
 
         """
 
+        # Check consistency of linear matrices
+        matrix_solver = self.compute_linear_matrix()
+        matrix_reference = self.compute_linear_matrix_reference()
+
+        # Check against the reference linear matrix if provided by the user
+        if matrix_reference is not None:
+            kx, ky, kz = self.get_broadcast_wavenumbers()
+            hyperdissipation = np.zeros(
+                self.half_unpadded_tuple, dtype=self.float
+            )
+
+            for component, ks in [
+                ("perp", kx**2 + ky**2),
+                ("kx", kx**2),
+                ("ky", ky**2),
+                ("kz", kz**2),
+            ]:
+                coeff = self.input[f"hyperdissipation.{component}"]
+                if coeff > 0.0:
+                    hyperdissipation += coeff * (
+                        ks ** self.input[f"hyperdissipation.{component}_power"]
+                    )
+
+            diag = np.arange(self.number_of_fields)
+            matrix_reference[diag, diag, :, :, :] += hyperdissipation
+
+            if not np.allclose(matrix_reference, matrix_solver):
+                raise ValueError(
+                    "The linear matrix computed by CUDA disagrees "
+                    "with provided reference matrix."
+                )
+
+        # Compare relevant linear frequencies to dt_max
+        eigvals = self.compute_linear_eigensystem()["eigvals"]
+        max_growth = np.max(eigvals.imag)
+        max_damping = np.max(-eigvals.imag)
+        max_real_frequency = np.max(np.abs(eigvals.real))
+
+        print(
+            "Linear rates (max.):          "
+            f"(growth, damping, frequency) = "
+            f"({max_growth:.3e}, "
+            f"{max_damping:.3e}, "
+            f"{max_real_frequency:.3e})"
+        )
+
+        print(
+            "Linear rates (max.): dt_max * "
+            f"(growth, damping, frequency) = "
+            f"({self.dt_max * max_growth:.3e}, "
+            f"{self.dt_max * max_damping:.3e}, "
+            f"{self.dt_max * max_real_frequency:.3e})"
+        )
+
+        # Check whether dt_max is appropriate given the linear properties
+        tol = 2.0
+        if self.dt_max * max_growth > tol:
+            raise InvalidFlucsInputFileError(
+                "(dt_max * max growth rate) is too large."
+            )
+
+        if self.dt_max * max_real_frequency > tol:
+            raise InvalidFlucsInputFileError(
+                "(dt_max * max frequency) is too large."
+            )
+
     def ready(self) -> None:
-        # Basic setup
+        # Reset time counters
         self.current_step = self.int(0)
         self.current_time = self.init_time
+
+        # Reset time step
         self.current_dt = self.init_dt
-
-        self.dt_max = self.input["time.dt_max"]
-        self.dt_min = self.input["time.dt_min"]
-
-        # Setup kernel parameters (grid, block, shared memory)
-        self.half_unpadded_cuda_grid_size = (
-            self.half_unpadded_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        self.half_padded_cuda_grid_size = (
-            self.half_padded_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        self.full_padded_cuda_grid_size = (
-            self.full_padded_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        # CFL setup
-        self.current_cfl = 0.0
-        self.max_cfl = self.input["time.max_cfl"]
-
-        # Timestep setup
-        self.dt_mult_increase = self.input["time.dt_mult_increase"]
-        self.dt_mult_decrease = self.input["time.dt_mult_decrease"]
         self.dt_array = np.array(
             [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
 
-        # Determine the time stepping method
-        if self.input["time.dt_method"] == "discrete":
-            self.sub_cfl_steps = self.int(0)
-            self.dt_mult_steps = self.input["time.dt_mult_steps"]
-            self._compute_current_dt = self._compute_current_dt_discrete
-
-        elif self.input["time.dt_method"] == "continuous":
-            self._compute_current_dt = self._compute_current_dt_continuous
-
-        # Print message.
+        # Print starting message
         print(
-            f"Starting at time {float(self.current_time):.3e}, "
-            f"dt {float(self.current_dt):.3e}"
+            f"Starting at time {float(self.init_time):.3e}, "
+            f"dt {float(self.init_dt):.3e}"
         )
+
+        # Reset CFL
+        self.current_cfl = 0.0
 
         # Copy initial condition
         self.fields[0][:] = cp.array(
@@ -491,10 +544,39 @@ class FourierSystem(FlucsSystem):
 
         self.finish_step_kernel = self.cupy_module.get_function("finish_step")
 
-    def compute_linear_matrix(self) -> None:
-        """Computes the linear matrix using the CuPy module and stores the
-        result in self.linear_matrix"""
-        self.linear_matrix = cp.zeros(
+    def setup_cuda_grids(self) -> None:
+        """Sets up the grids and blocks for CUDA kernels.
+
+        In the future, this may be the place to do some automatic optimisation.
+        As it stands, this is sysem-specific.
+        """
+
+        # Setup kernel parameters (grid, block, shared memory)
+        self.half_unpadded_cuda_grid_size = (
+            self.half_unpadded_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
+        self.half_padded_cuda_grid_size = (
+            self.half_padded_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
+        self.full_padded_cuda_grid_size = (
+            self.full_padded_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
+    def compute_linear_matrix(self) -> np.ndarray:
+        """
+        Computes the linear matrix used by the solver and stores it in
+        self.linear_matrix. Note that this is not used directly in the
+        solver loop, and so is used entirely for diagnostic purposes.
+
+        """
+
+        if self.linear_matrix is not None:
+            return self.linear_matrix
+
+        # Linear matrix in GPU memory
+        linear_matrix_cupy = cp.zeros(
             (
                 self.number_of_fields,
                 self.number_of_fields,
@@ -505,15 +587,90 @@ class FourierSystem(FlucsSystem):
             dtype=self.complex,
         )
 
+        # Get kernel
         compute_linear_matrix_kernel = self.cupy_module.get_function(
             "compute_linear_matrix"
         )
 
+        # Compute
         compute_linear_matrix_kernel(
             (self.half_unpadded_cuda_grid_size,),
             (self.cuda_block_size,),
-            (self.current_dt, self.linear_matrix),
+            (self.init_dt, linear_matrix_cupy),
         )
+
+        self.linear_matrix = cp.asnumpy(linear_matrix_cupy)
+
+        return self.linear_matrix
+
+    def compute_linear_matrix_reference(self) -> np.ndarray | None:
+        """
+        Returns a user-defined reference linear matrix that should be
+        the same shape as self.linear_matrix. This should be calculated
+        using only CPU resources, and should be of shape
+
+        (nfields, nfields, nz, nx, half_ny)
+
+        If the user does not provide a reference linear matrix, the default
+        value is None.
+
+        """
+
+        return None
+
+    def compute_linear_eigensystem(self) -> dict[str, np.ndarray]:
+        """
+        Computes both the eigenvalues and (normalised) eigenvectors
+        of the linear matrix used by the solver.
+
+        The eigenvalues are the complex frequencies of
+        Fourier modes of the form exp(-i*omega*t).
+
+        The eigenvectors are normalised to unit L2 norm and a phase
+        where the component with largest absolute value is real and positive.
+        """
+
+        if self.linear_eigensystem is not None:
+            return self.linear_eigensystem
+
+        # Handle matrix from solver
+        linear_matrix = cp.asnumpy(self.compute_linear_matrix()).copy()
+        linear_matrix = np.moveaxis(linear_matrix, (0, 1), (-2, -1))
+        # (nfields, nfields, nz, nx, half_ny) -> (..., nfields, nfields)
+
+        eigvals, eigvecs = np.linalg.eig(linear_matrix)
+
+        eigvals = (-1j * eigvals).transpose(3, 0, 1, 2)
+        eigvecs = eigvecs.transpose(4, 3, 0, 1, 2)
+        # (nz, nx, half_ny,          mode) -> (mode,          ...)
+        # (nz, nx, half_ny, nfields, mode) -> (mode, nfields, ...)
+
+        # Normalise to unit norm
+        eigvecs /= np.linalg.norm(eigvecs, axis=1, keepdims=True)
+
+        # Find field component with largest amplitude for each mode
+        indices = np.abs(eigvecs).argmax(axis=1, keepdims=True)
+        components = np.take_along_axis(eigvecs, indices, axis=1)
+
+        # Normalise by phase
+        phase = np.where(
+            np.abs(components) > 0, np.sign(components), 1.0 + 0.0j
+        )
+        eigvecs *= np.conj(phase)
+
+        # Compute inverse of solver eigenvectors for projection
+        eigvecs_inverse = np.linalg.inv(
+            eigvecs.transpose(2, 3, 4, 1, 0)
+        ).transpose(3, 4, 0, 1, 2)
+
+        # Assign class variable
+        self.linear_eigensystem = {
+            "eigvals": eigvals,
+            "eigvecs": eigvecs,
+            "eigvecs_inverse": eigvecs_inverse,
+        }
+
+        return self.linear_eigensystem
 
     def _set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""

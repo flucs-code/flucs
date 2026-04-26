@@ -146,8 +146,8 @@ class FlucsSystem(ABC):
         Parameters
         ----------
         force: bool
-            If force is True, then all diagnostics are executed
-            regardless of their next save time.
+            If force is True, then all diagnostics not already due on the
+            current step are executed regardless of their next save time.
 
         """
         if self.output_heap is None:
@@ -155,6 +155,12 @@ class FlucsSystem(ABC):
 
         if force:
             for output_to_execute in self.output_heap:
+                if output_to_execute.save_steps <= 0:
+                    continue
+
+                if self.current_step % output_to_execute.save_steps == 0:
+                    continue
+
                 output_to_execute.execute()
 
             # Reset heap for the next save
@@ -250,6 +256,16 @@ class FlucsSystem(ABC):
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)
+        self.setup_cuda_grids()
+
+    @abstractmethod
+    def setup_cuda_grids(self) -> None:
+        """Sets up the grids and blocks for CUDA kernels.
+
+        In the future, this may be the place to do some automatic optimisation.
+        As it stands, this is sysem-specific.
+        """
+        pass
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """

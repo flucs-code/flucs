@@ -276,9 +276,10 @@ class FlucsOutputText(FlucsOutput):
 
                 for diag in self.diagnostics:
                     for var in diag.vars.values():
-                        row_to_write.append(
-                            self.format_data(var.data_cache[save_index])
-                        )
+                        if var.is_time_dependent:
+                            row_to_write.append(
+                                self.format_data(var.data_cache[save_index])
+                            )
 
                 file.write(self.column_pad.join(row_to_write))
                 file.write("\n")
@@ -386,6 +387,31 @@ class FlucsOutputNC(FlucsOutput):
         # The last piece left in name_pieces should be the dim name
         dim_name = name_pieces.pop()
 
+        # Reuse existing variables if compatible
+        if dim_name in grp.dimensions:
+            existing_dim = grp.dimensions[dim_name]
+            existing_dim_size = (
+                None if existing_dim.isunlimited() else len(existing_dim)
+            )
+
+            if dim_size is not None and existing_dim_size is not None:
+                if existing_dim_size != dim_size:
+                    raise ValueError(
+                        f"Dimension '{dim_name}' already exists in group "
+                        f"'{grp.path}' with size {existing_dim_size}, "
+                        f"not {dim_size}."
+                    )
+
+            if dim_name in grp.variables:
+                existing_dim_data = np.asarray(grp.variables[dim_name][:])
+                if not np.allclose(existing_dim_data, dim_data, equal_nan=True):
+                    raise ValueError(
+                        f"Dimension variable '{dim_name}' already exists in "
+                        f"group '{grp.path}' with different values."
+                    )
+
+            return
+
         # Finally, create dimension and dimension data in the appropriate group
         grp.createDimension(dim_name, dim_size)
         dim_var = grp.createVariable(
@@ -418,6 +444,11 @@ class FlucsOutputNC(FlucsOutput):
                             diagnostic_group, dim_name, dim_size, dim_data
                         )
 
+                    if var.is_time_dependent:
+                        var_shape = ("time", *var.shape)
+                    else:
+                        var_shape = var.shape
+
                     # Create variable
                     if var.is_complex:
                         # Complex variables are stored as two separate netCDF4
@@ -426,19 +457,34 @@ class FlucsOutputNC(FlucsOutput):
                         diagnostic_group.createVariable(
                             f"{var.name}_real",
                             self.netcdf_precision,
-                            ("time", *var.shape),
+                            var_shape,
                         )
                         diagnostic_group.createVariable(
                             f"{var.name}_imag",
                             self.netcdf_precision,
-                            ("time", *var.shape),
+                            var_shape,
                         )
+
+                        # If time-independent, write data now
+                        if not var.is_time_dependent:
+                            diagnostic_group[f"{var.name}_real"][:] = np.array(
+                                var.data_cache[-1]
+                            )[:].real
+
+                            diagnostic_group[f"{var.name}_imag"][:] = np.array(
+                                var.data_cache[-1]
+                            )[:].imag
+
                     else:
                         diagnostic_group.createVariable(
                             var.name,
                             self.netcdf_precision,
-                            ("time", *var.shape),
+                            var_shape,
                         )
+                        if not var.is_time_dependent:
+                            diagnostic_group[var.name][:] = np.array(
+                                var.data_cache[-1]
+                            )[:]
 
     def write(self):
         """Saves any cached diagnostic data to disk and clears the cache.
@@ -475,6 +521,10 @@ class FlucsOutputNC(FlucsOutput):
                 diagnostic_group = self.group[diag.name]
 
                 for var in diag.vars.values():
+                    # Time-independent vars were already written
+                    if not var.is_time_dependent:
+                        continue
+
                     # If scalar diagnostic, this is much easier
                     if len(var.shape) == 0:
                         if var.is_complex:

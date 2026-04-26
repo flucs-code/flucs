@@ -28,10 +28,10 @@ class FlucsPostProcessing:
     _script_paths: list[tuple[int, str, pl.Path]]
 
     # Solver and system for the outputs
-    _solver_names: dict[pl.Path, str]
-    _system_names: dict[pl.Path, str]
-    _solver_types: dict[pl.Path, type]
-    _system_types: dict[pl.Path, type]
+    solver_names: dict[pl.Path, str]
+    system_names: dict[pl.Path, str]
+    solver_types: dict[pl.Path, type]
+    system_types: dict[pl.Path, type]
 
     # Formatting for printing
     _indent = 3 * " "
@@ -42,10 +42,10 @@ class FlucsPostProcessing:
         on its corresponding input file.
         """
 
-        self._solver_names = {}
-        self._system_names = {}
-        self._solver_types = {}
-        self._system_types = {}
+        self.solver_names = {}
+        self.system_names = {}
+        self.solver_types = {}
+        self.system_types = {}
 
         for io_path in self.io_paths:
             input_file_dict = toml.load(io_path / "input.toml")
@@ -53,11 +53,11 @@ class FlucsPostProcessing:
             solver_name = input_file_dict["setup"]["solver"]
             system_name = input_file_dict["setup"]["system"]
 
-            self._solver_names[io_path] = solver_name
-            self._system_names[io_path] = system_name
+            self.solver_names[io_path] = solver_name
+            self.system_names[io_path] = system_name
 
-            self._solver_types[io_path] = flucs.get_solver_type(solver_name)
-            self._system_types[io_path] = flucs.get_system_type(system_name)
+            self.solver_types[io_path] = flucs.get_solver_type(solver_name)
+            self.system_types[io_path] = flucs.get_system_type(system_name)
 
     def _get_script_paths(self) -> list[tuple[int, str, pl.Path]]:
         """
@@ -71,8 +71,8 @@ class FlucsPostProcessing:
         # Keep solver scripts ahead of system scripts in the printed order.
         ordered_types = []
         for flucs_types in (
-            self._solver_types.values(),
-            self._system_types.values(),
+            self.solver_types.values(),
+            self.system_types.values(),
         ):
             for flucs_type in sorted(
                 set(flucs_types), key=lambda f: f.__name__.lower()
@@ -329,12 +329,21 @@ class FlucsPostProcessing:
         return found
 
     def load_netcdf_variable(
-        self, nc_path: pl.Path, variable: str, fill_value: float = np.nan
+        self,
+        nc_path: pl.Path,
+        variable: str,
+        fill_value: float = np.nan,
+        group: int | None = None,
     ):
         """
-        Load a variable across all groups in a netCDF file and concatenate
+        Load a variable from a netCDF file.
+
+        Time-dependent variables are (by default) concatenated across all groups
         along time (zeroth axis). Groups missing the variable are filled with
         'fill_value'.
+
+        Time-independent variables are (by default) loaded from the latest non-
+        empty group.
 
         Parameters
         ----------
@@ -344,6 +353,11 @@ class FlucsPostProcessing:
             Name of the variable to load.
         fill_value : float
             Value to use for groups that do not contain 'variable'.
+        group : int | None
+            If specified, load data only from this output group. If None,
+            time-dependent variables are concatenated across all groups, while
+            time-independent variables are loaded from the latest non-empty
+            group.
 
         Returns
         -------
@@ -384,41 +398,48 @@ class FlucsPostProcessing:
                     "Output groups are not in order; check netCDF file"
                 )
 
-            # Determine residual shape and dtype of output variable
-            var_iter = (
-                (grp_number, var_obj)
-                for grp_number, grp in groups
-                if (var_obj := _get_var(grp, variable)) is not None
-            )
-            try:
-                grp_number, var = next(var_iter)
-            except StopIteration:
+            # Get variable shapes to determine fill values
+            sample_var = None
+            for _, grp in groups:
+                sample_var = _get_var(grp, variable)
+                if sample_var is not None:
+                    break
+
+            if sample_var is None:
                 raise ValueError(
                     f"Variable '{variable}' not found in any group of {nc_path}"
                 )
 
-            res_shape = var.shape[1:]
-            var_dtype = var.dtype
+            time_dependent = sample_var.dimensions[:1] == ("time",)
+            res_shape = tuple(
+                size
+                for dim, size in zip(sample_var.dimensions, sample_var.shape)
+                if dim != "time"
+            )
+            var_dtype = sample_var.dtype
 
-            # Get data from each group
+            # Either read specified group, or all of them
+            groups_to_read = [groups[group]] if group is not None else groups
+
+            # Set up lists
             group_data = []
             boundaries = []
             dims_dicts = []
-            for grp_number, grp in groups:
+
+            # Get data from each group
+            for grp_number, grp in groups_to_read:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
-
                 dims_dicts.append(OrderedDict())
+
+                fill_shape = (
+                    (time_length, *res_shape) if time_dependent else res_shape
+                )
+
                 var_obj = _get_var(grp, variable)
                 if var_obj is not None:
-                    arr = np.asarray(var_obj[:])
-                    if arr.shape[0] != time_length:
-                        raise ValueError(
-                            "Time dimension mistmatch for variable "
-                            f"'{variable}' in group {grp_number} "
-                            f"(has {arr.shape} but expected {time_length})"
-                        )
-                    group_data.append(arr.astype(var_dtype, copy=False))
+                    arr = np.asarray(var_obj[:]).astype(var_dtype, copy=False)
+                    group_data.append(arr)
 
                     # Add dimensions
                     for dim in var_obj.dimensions:
@@ -431,17 +452,95 @@ class FlucsPostProcessing:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
                         np.full(
-                            (time_length, *res_shape),
+                            fill_shape,
                             fill_value,
                             dtype=var_dtype,
                         )
                     )
 
-        # Concatenate along time (zeroth axis)
-        values = np.concatenate(group_data, axis=0)
-        boundary_indices = list(np.cumsum(boundaries)[:-1])
+        # Determine how to handle time axis, if present
+        if group is not None:
+            return group_data[0], [], dims_dicts
 
-        return values, boundary_indices, dims_dicts
+        elif time_dependent:
+            values = np.concatenate(group_data, axis=0)
+            boundary_indices = list(np.cumsum(boundaries)[:-1])
+
+            return values, boundary_indices, dims_dicts
+
+        else:
+            latest = next(
+                i
+                for i in range(len(groups_to_read) - 1, -1, -1)
+                if boundaries[i] > 0
+            )
+            return group_data[latest], [], [dims_dicts[latest]]
+
+    def load_netcdf_variable_complex(
+        self,
+        nc_path: pl.Path,
+        variable: str,
+        fill_value: complex = np.nan + 1j * np.nan,
+        group: int | None = None,
+    ):
+        """
+        Load a complex variable stored as '<variable>_real' and
+        '<variable>_imag' from a netCDF file.
+
+        This is a thin wrapper around load_netcdf_variable and follows the same
+        group-selection rules.
+
+        Parameters
+        ----------
+        nc_path : pathlib.Path
+            Path to the netCDF file to read.
+        variable : str
+            Base name of the complex variable.
+        fill_value : complex
+            Value to use for groups that do not contain the variable.
+        group : int | None
+            If specified, load data only from this output group. If None,
+            behaviour matches load_netcdf_variable.
+
+        Returns
+        -------
+        tuple
+            (values, boundary_indices, dims_dicts), matching the return
+            signature of load_netcdf_variable.
+        """
+
+        # Load data
+        real, boundary_indices_real, dims_dicts_real = (
+            self.load_netcdf_variable(
+                nc_path,
+                f"{variable}_real",
+                fill_value=np.real(fill_value),
+                group=group,
+            )
+        )
+
+        imag, boundary_indices_imag, dims_dicts_imag = (
+            self.load_netcdf_variable(
+                nc_path,
+                f"{variable}_imag",
+                fill_value=np.imag(fill_value),
+                group=group,
+            )
+        )
+
+        # Quick consistency check
+        if (boundary_indices_real != boundary_indices_imag) or (
+            len(dims_dicts_real) != len(dims_dicts_imag)
+        ):
+            raise ValueError(
+                f"Real and imaginary parts of complex variable "
+                f"'{variable}' have mismatched dimensions."
+            )
+
+        # Combine into complex object
+        values = real + 1j * imag
+
+        return values, boundary_indices_real, dims_dicts_real
 
     def save(
         self,
@@ -649,8 +748,8 @@ class FlucsPostProcessing:
         if constraint not in ("none", "solver", "system", "both"):
             raise ValueError("Invalid value for 'constraint'.")
 
-        solver_types = set(self._solver_types.values())
-        system_types = set(self._system_types.values())
+        solver_types = set(self.solver_types.values())
+        system_types = set(self.system_types.values())
 
         if constraint in ("solver", "both") and len(solver_types) > 1:
             raise ValueError(
