@@ -336,32 +336,33 @@ class FourierSystem(FlucsSystem):
         matrix_solver = self.compute_linear_matrix()
         matrix_reference = self.compute_linear_matrix_reference()
 
-        # Add hyperdissipation to reference matrix if present
-        kx, ky, kz = self.get_broadcast_wavenumbers()
-        hyperdissipation = np.zeros(self.half_unpadded_tuple, dtype=self.float)
-
-        for component, ks in [
-            ("perp", kx**2 + ky**2),
-            ("kx", kx**2),
-            ("ky", ky**2),
-            ("kz", kz**2),
-        ]:
-            coeff = self.input[f"hyperdissipation.{component}"]
-            if coeff > 0.0:
-                hyperdissipation += coeff * (
-                    ks ** self.input[f"hyperdissipation.{component}_power"]
-                )
-
-        diag = np.arange(self.number_of_fields)
-        matrix_reference[diag, diag, :, :, :] += hyperdissipation
-
-        if matrix_reference is not None and not np.allclose(
-            matrix_reference, matrix_solver
-        ):
-            raise ValueError(
-                "The linear matrix computed by CUDA disagrees "
-                "with provided reference matrix."
+        # Check against the reference linear matrix if provided by the user
+        if matrix_reference is not None:
+            kx, ky, kz = self.get_broadcast_wavenumbers()
+            hyperdissipation = np.zeros(
+                self.half_unpadded_tuple, dtype=self.float
             )
+
+            for component, ks in [
+                ("perp", kx**2 + ky**2),
+                ("kx", kx**2),
+                ("ky", ky**2),
+                ("kz", kz**2),
+            ]:
+                coeff = self.input[f"hyperdissipation.{component}"]
+                if coeff > 0.0:
+                    hyperdissipation += coeff * (
+                        ks ** self.input[f"hyperdissipation.{component}_power"]
+                    )
+
+            diag = np.arange(self.number_of_fields)
+            matrix_reference[diag, diag, :, :, :] += hyperdissipation
+
+            if not np.allclose(matrix_reference, matrix_solver):
+                raise ValueError(
+                    "The linear matrix computed by CUDA disagrees "
+                    "with provided reference matrix."
+                )
 
         # Compare relevant linear frequencies to dt_max
         eigvals = self.compute_linear_eigensystem()["eigvals"]
