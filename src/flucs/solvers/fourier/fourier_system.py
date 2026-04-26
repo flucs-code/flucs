@@ -374,16 +374,16 @@ class FourierSystem(FlucsSystem):
             f"(growth, damping, frequency) = "
             f"({max_growth:.3e}, "
             f"{max_damping:.3e}, "
-            f"{max_real_frequency:+.3e})"
-        )
+            f"{max_real_frequency:.3e})"
+            )
 
         print(
             "Linear rates (max.): dt_max * "
             f"(growth, damping, frequency) = "
             f"({self.dt_max * max_growth:.3e}, "
             f"{self.dt_max * max_damping:.3e}, "
-            f"{self.dt_max * max_real_frequency:+.3e})"
-        )
+            f"{self.dt_max * max_real_frequency:.3e})"
+            )
 
         # Check whether dt_max is appropriate given the linear properties
         tol = 2.0

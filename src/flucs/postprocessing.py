@@ -338,7 +338,7 @@ class FlucsPostProcessing:
         """
         Load a variable from a netCDF file.
 
-        Time-dependent variables are (by defualt) concatenated across all groups
+        Time-dependent variables are (by default) concatenated across all groups
         along time (zeroth axis). Groups missing the variable are filled with
         'fill_value'.
 
@@ -398,72 +398,50 @@ class FlucsPostProcessing:
                     "Output groups are not in order; check netCDF file"
                 )
 
-            # Determine whether the variable is time-dependent
-            var = None
+            # Get variable shapes to determine fill values
+            sample_var = None
             for _, grp in groups:
-                var = _get_var(grp, variable)
-                if var is not None:
+                sample_var = _get_var(grp, variable)
+                if sample_var is not None:
                     break
 
-            if var is None:
+            if sample_var is None:
                 raise ValueError(
                     f"Variable '{variable}' not found in any group of {nc_path}"
                 )
 
-            is_time_dependent = (
-                len(var.dimensions) > 0 and var.dimensions[0] == "time"
+            time_dependent = (sample_var.dimensions[:1] == ("time",))
+            res_shape = tuple(
+                size
+                for dim, size in zip(sample_var.dimensions, sample_var.shape)
+                if dim != "time"
             )
+            var_dtype = sample_var.dtype
 
-            # Get groups to read
-            if group is not None:
-                groups_to_read = [(group, ds.groups[str(group)])]
-            elif is_time_dependent:
-                groups_to_read = groups
-            else:
-                groups_to_read = [
-                    next(
-                        (grp_number, grp)
-                        for grp_number, grp in reversed(groups)
-                        if grp.variables["time"].shape[0] > 0
-                    )
-                ]
+            # Either read specified group, or all of them
+            groups_to_read = ([groups[group]]if group is not None else groups)
 
-            # Time-independent variables
-            if not is_time_dependent:
-                _, grp = groups_to_read[0]
-                var_obj = _get_var(grp, variable)
-
-                dims_dicts = [OrderedDict()]
-                if var_obj is None:
-                    values = np.full(
-                        var.shape,
-                        fill_value,
-                        dtype=var.dtype,
-                    )
-                else:
-                    values = np.asarray(var_obj[:])
-                    for dim in var_obj.dimensions:
-                        dims_dicts[0][dim] = np.asarray(var_obj.group()[dim][:])
-
-                return values, [], dims_dicts
-
-            # Time-dependent variables
-            res_shape = var.shape[1:]
-            var_dtype = var.dtype
-
-            # Get data from each group
+            # Set up lists
             group_data = []
             boundaries = []
             dims_dicts = []
+
+            # Get data from each group
             for grp_number, grp in groups_to_read:
                 time_length = int(grp.variables["time"].shape[0])
                 boundaries.append(time_length)
-
                 dims_dicts.append(OrderedDict())
+
+                fill_shape = (
+                    (time_length, *res_shape)
+                    if time_dependent
+                    else res_shape
+                )
+
                 var_obj = _get_var(grp, variable)
                 if var_obj is not None:
-                    arr = np.asarray(var_obj[:])
-                    group_data.append(arr.astype(var_dtype, copy=False))
+                    arr = np.asarray(var_obj[:]).astype(var_dtype, copy=False)
+                    group_data.append(arr)
 
                     # Add dimensions
                     for dim in var_obj.dimensions:
@@ -476,17 +454,30 @@ class FlucsPostProcessing:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
                         np.full(
-                            (time_length, *res_shape),
+                            fill_shape,
                             fill_value,
                             dtype=var_dtype,
                         )
                     )
 
-        # Concatenate along time (zeroth axis)
-        values = np.concatenate(group_data, axis=0)
-        boundary_indices = list(np.cumsum(boundaries)[:-1])
+        # Determine how to handle time axis, if present
+        if group is not None:
+            return group_data[0], [], dims_dicts
+        
+        elif time_dependent:
+            values = np.concatenate(group_data, axis=0)
+            boundary_indices = list(np.cumsum(boundaries)[:-1])
 
-        return values, boundary_indices, dims_dicts
+            return values, boundary_indices, dims_dicts
+    
+        else:
+            latest = next(
+                i
+                for i in range(len(groups_to_read) - 1, -1, -1)
+                if boundaries[i] > 0
+            )
+            return group_data[latest], [], [dims_dicts[latest]]
+
 
     def load_netcdf_variable_complex(
         self,
