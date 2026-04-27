@@ -4,12 +4,15 @@ FLUCS_FLOAT get_hyperdissipation_perp(const FLUCS_FLOAT kx, const FLUCS_FLOAT ky
 
 #ifdef HYPERDISSIPATION_PERP
 
+    const FLUCS_FLOAT kx_max = kx_from_ikx(HALF_NX - 1);
+    const FLUCS_FLOAT ky_max = ky_from_iky(HALF_NY - 1);
     const FLUCS_FLOAT kperp2 = kx * kx + ky * ky;
+    const FLUCS_FLOAT kperp2_norm = kperp2 / (kx_max * kx_max + ky_max * ky_max);
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_PERP;
 
     #pragma unroll
     for (int i = 0; i < HYPERDISSIPATION_PERP_POWER; i++)
-        hyperdissipation *= kperp2;
+        hyperdissipation *= kperp2_norm;
 
     return hyperdissipation;
 
@@ -24,12 +27,14 @@ FLUCS_FLOAT get_hyperdissipation_kx(const FLUCS_FLOAT kx) {
 
 #ifdef HYPERDISSIPATION_KX
 
+    const FLUCS_FLOAT kx_max = kx_from_ikx(HALF_NX - 1);
     const FLUCS_FLOAT kx2 = kx * kx;
+    const FLUCS_FLOAT kx2_norm = kx2 / (kx_max * kx_max);
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KX;
 
     #pragma unroll
     for (int i = 0; i < HYPERDISSIPATION_KX_POWER; i++)
-        hyperdissipation *= kx2;
+        hyperdissipation *= kx2_norm;
 
     return hyperdissipation;
 #else
@@ -43,12 +48,14 @@ FLUCS_FLOAT get_hyperdissipation_ky(const FLUCS_FLOAT ky) {
 
 #ifdef HYPERDISSIPATION_KY
 
+    const FLUCS_FLOAT ky_max = ky_from_iky(HALF_NY - 1);
     const FLUCS_FLOAT ky2 = ky * ky;
+    const FLUCS_FLOAT ky2_norm = ky2 / (ky_max * ky_max);
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KY;
 
     #pragma unroll
     for (int i = 0; i < HYPERDISSIPATION_KY_POWER; i++)
-        hyperdissipation *= ky2;
+        hyperdissipation *= ky2_norm;
 
     return hyperdissipation;
 #else
@@ -62,12 +69,14 @@ FLUCS_FLOAT get_hyperdissipation_kz(const FLUCS_FLOAT kz) {
 
 #ifdef HYPERDISSIPATION_KZ
 
+    const FLUCS_FLOAT kz_max = kz_from_ikz(HALF_NZ - 1);
     const FLUCS_FLOAT kz2 = kz * kz;
+    const FLUCS_FLOAT kz2_norm = kz2 / (kz_max * kz_max);
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KZ;
 
     #pragma unroll
     for (int i = 0; i < HYPERDISSIPATION_KZ_POWER; i++)
-        hyperdissipation *= kz2;
+        hyperdissipation *= kz2_norm;
 
     return hyperdissipation;
 #else

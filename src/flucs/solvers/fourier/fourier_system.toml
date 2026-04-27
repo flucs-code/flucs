@@ -28,9 +28,9 @@ padded_ny = -1
 padded_nz = -1
 
 # Box dimensions must be specified
-Lx = -1
-Ly = -1
-Lz = -1
+Lx = -1.0
+Ly = -1.0
+Lz = -1.0
 
 
 # Finding optimal padded resolutions
@@ -51,7 +51,8 @@ alpha = 0.5
 precompute_linear_matrix = false
 
 # Generic hyperdissipation that is added to the linear matrix of any system
-# The form of the hyperdissipative terms is coefficient * (wavenumber^2)^perp_power
+# The form of the hyperdissipative terms is 
+# coefficient * (k/kmax)**(2 * power)
 # Set the coefficient to a negative number to turn off
 [hyperdissipation]
 perp = -1.0

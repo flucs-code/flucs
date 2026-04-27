@@ -343,7 +343,7 @@ class FourierSystem(FlucsSystem):
                 self.half_unpadded_tuple, dtype=self.float
             )
 
-            for component, ks in [
+            for component, k2 in [
                 ("perp", kx**2 + ky**2),
                 ("kx", kx**2),
                 ("ky", ky**2),
@@ -351,8 +351,9 @@ class FourierSystem(FlucsSystem):
             ]:
                 coeff = self.input[f"hyperdissipation.{component}"]
                 if coeff > 0.0:
+                    k2_max = np.max(np.abs(k2))
                     hyperdissipation += coeff * (
-                        ks ** self.input[f"hyperdissipation.{component}_power"]
+                        (k2 / k2_max) ** self.input[f"hyperdissipation.{component}_power"]
                     )
 
             diag = np.arange(self.number_of_fields)
