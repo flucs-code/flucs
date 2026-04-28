@@ -64,7 +64,7 @@ void get_linear_matrix_wrapped(const size_t index,
     return;
 #endif
 
-    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index);
+    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index, dt);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++)

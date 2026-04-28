@@ -352,9 +352,13 @@ class FourierSystem(FlucsSystem):
                 coeff = self.input[f"hyperdissipation.{component}"]
                 if coeff > 0.0:
                     k2_max = np.max(np.abs(k2))
-                    hyperdissipation += coeff * (
+                    contribution = coeff * (
                         (k2 / k2_max) ** self.input[f"hyperdissipation.{component}_power"]
                     )
+                    if self.input[f"hyperdissipation.{component}_adaptive"]:
+                        contribution /= self.init_dt
+
+                    hyperdissipation += contribution
 
             diag = np.arange(self.number_of_fields)
             matrix_reference[diag, diag, :, :, :] += hyperdissipation
@@ -520,7 +524,7 @@ class FourierSystem(FlucsSystem):
         # Hyperdissipation
         for component in ["perp", "kx", "ky", "kz"]:
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                print(f"Using hyperdissipation in {component}.")
+                message = f"Using hyperdissipation in {component:<4}."
 
                 self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
@@ -530,6 +534,13 @@ class FourierSystem(FlucsSystem):
                     f"HYPERDISSIPATION_{component.upper()}_POWER",
                     self.input[f"hyperdissipation.{component}_power"],
                 )
+                if self.input[f"hyperdissipation.{component}_adaptive"]:
+                    self.module_options.define_flag(
+                        f"HYPERDISSIPATION_{component.upper()}_ADAPTIVE"
+                    )
+                    message += " (adaptive)"
+
+                print(message)
 
         # Setup
         self.module_options.define_float("ALPHA", self.input["setup.alpha"])
