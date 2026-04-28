@@ -354,11 +354,14 @@ class FlucsPostProcessing:
             Name of the variable to load.
         fill_value : float
             Value to use for groups that do not contain 'variable'.
-        groups : list[int | str] | None
+        groups : list[int | str] | str | int | None
             If specified, load data only from this set of output groups. The
             list can contain either integer group indices, or string group
-            identifiers (matching the group numbers). If None, all groups are
-            loaded.
+            identifiers (matching the group numbers).
+
+            A single group can be specified as a single int or string.
+
+            If None, all groups are loaded.
         concatenate : bool
             If True, time-dependent variables are concatenated across groups,
             and time-independent variables are loaded from the latest non-empty
@@ -393,6 +396,10 @@ class FlucsPostProcessing:
                 return _get_var(grp[subgrp], var)
             return None
 
+        # Handle a single group
+        if isinstance(groups, (int, str)):
+            groups = [groups]
+
         # Read data from netCDF file
         with Dataset(str(nc_path), "r", format="NETCDF4") as ds:
             # Get output groups sorted by group id
@@ -404,7 +411,7 @@ class FlucsPostProcessing:
             grp_numbers = [grp_number for grp_number, _ in netcdf_groups]
             if grp_numbers != sorted(grp_numbers):
                 raise ValueError(
-                    "Output groups are not in order; check netCDF file"
+                    f"Output groups are not in order for {nc_path}"
                 )
 
             # Get variable shapes to determine fill values
@@ -519,7 +526,7 @@ class FlucsPostProcessing:
         nc_path: pl.Path,
         variable: str,
         fill_value: complex = np.nan + 1j * np.nan,
-        groups: list[int | str] | None = None,
+        groups: list[int | str] | int | str | None = None,
         concatenate: bool = True,
     ):
         """
