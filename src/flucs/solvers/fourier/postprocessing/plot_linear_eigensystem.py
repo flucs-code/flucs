@@ -39,13 +39,13 @@ def plot_eigensystem(post):
         # Get eigenvalues and grids from final output group
         group = -1
         eigvals_sol, _, dims_dicts = post.load_netcdf_variable_complex(
-            nc_path, "linear_eigensystem/eigvals_solver", group=group
+            nc_path, "linear_eigensystem/eigvals_solver", groups=group
         )
         eigvals_run = post.load_netcdf_variable_complex(
-            nc_path, "linear_eigensystem/eigvals", group=group
+            nc_path, "linear_eigensystem/eigvals", groups=group
         )[0]
         eigvals_tol = post.load_netcdf_variable(
-            nc_path, "linear_eigensystem/eigvals_tolerance", group=group
+            nc_path, "linear_eigensystem/eigvals_tolerance", groups=group
         )[0]
 
         dims = next(d for d in reversed(dims_dicts) if d)

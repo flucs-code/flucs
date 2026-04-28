@@ -333,7 +333,8 @@ class FlucsPostProcessing:
         nc_path: pl.Path,
         variable: str,
         fill_value: float = np.nan,
-        group: int | None = None,
+        groups: list[int | str] | None = None,
+        concatenate: bool = True,
     ):
         """
         Load a variable from a netCDF file.
@@ -353,23 +354,29 @@ class FlucsPostProcessing:
             Name of the variable to load.
         fill_value : float
             Value to use for groups that do not contain 'variable'.
-        group : int | None
-            If specified, load data only from this output group. If None,
-            time-dependent variables are concatenated across all groups, while
-            time-independent variables are loaded from the latest non-empty
+        groups : list[int | str] | str | int | None
+            If specified, load data only from this set of output groups. The
+            list can contain either integer group indices, or string group
+            identifiers (matching the group numbers). A single group can be
+            specified as a single int or string. If None, all groups are loaded.
+        concatenate : bool
+            If True, time-dependent variables are concatenated across groups,
+            and time-independent variables are loaded from the latest non-empty
             group.
 
         Returns
         -------
         tuple
             (values, boundary_indices, dims_dict) where
-            - values is an np.ndarray with shape (sum(time_lengths), ...)
-              after concatenation across groups
+            - values is either a list of np.ndarrays, or a single np.ndarray
+              with shape (sum(time_lengths), ...) after concatenation across
+              groups
             - boundary_indices is a list of integer indices marking the
-              boundaries between groups in the concatenated time axis
+              boundaries between groups in the concatenated time axis. This list
+              will be empty if 'concatenate' is False.
             - dims_dicts is a list of ordered dictionaries of the variable's
               dimensions and their data. The length of dims_dicts is the
-              total number of restart groups.
+              total number of loaded groups.
         """
 
         # Helper function to get variable from group
@@ -386,21 +393,27 @@ class FlucsPostProcessing:
                 return _get_var(grp[subgrp], var)
             return None
 
+        # Handle a single group
+        if isinstance(groups, (int, str)):
+            groups = [groups]
+
         # Read data from netCDF file
         with Dataset(str(nc_path), "r", format="NETCDF4") as ds:
             # Get output groups sorted by group id
-            groups = [(int(name), grp) for name, grp in ds.groups.items()]
+            netcdf_groups = [
+                (int(name), grp) for name, grp in ds.groups.items()
+            ]
 
             # Check whether the groups are in the correct order
-            grp_numbers = [grp_number for grp_number, _ in groups]
+            grp_numbers = [grp_number for grp_number, _ in netcdf_groups]
             if grp_numbers != sorted(grp_numbers):
                 raise ValueError(
-                    "Output groups are not in order; check netCDF file"
+                    f"Output groups are not in order for {nc_path}"
                 )
 
             # Get variable shapes to determine fill values
             sample_var = None
-            for _, grp in groups:
+            for _, grp in netcdf_groups:
                 sample_var = _get_var(grp, variable)
                 if sample_var is not None:
                     break
@@ -418,8 +431,37 @@ class FlucsPostProcessing:
             )
             var_dtype = sample_var.dtype
 
-            # Either read specified group, or all of them
-            groups_to_read = [groups[group]] if group is not None else groups
+            # Either read specified groups, or all of them
+            if groups is None:
+                groups_to_read = netcdf_groups
+            else:
+                group_mapping = {
+                    grp_number: (grp_number, grp)
+                    for grp_number, grp in netcdf_groups
+                }
+                groups_to_read = []
+                for group in groups:
+                    if isinstance(group, int):
+                        # Integers are positional selectors, so -1 is the last
+                        # available output group.
+                        try:
+                            groups_to_read.append(netcdf_groups[group])
+                        except IndexError:
+                            raise IndexError(
+                                f"Invalid group index {group} for {nc_path} "
+                            )
+                    elif isinstance(group, str):
+                        # Strings are explicit netCDF group identifiers.
+                        try:
+                            groups_to_read.append(group_mapping[int(group)])
+                        except ValueError:
+                            raise ValueError(
+                                f"Invalid group str {group} for {nc_path} "
+                            ) from None
+                    else:
+                        raise ValueError(
+                            f"Invalid group identifier: {group} for {nc_path}. "
+                        )
 
             # Set up lists
             group_data = []
@@ -458,30 +500,31 @@ class FlucsPostProcessing:
                         )
                     )
 
-        # Determine how to handle time axis, if present
-        if group is not None:
-            return group_data[0], [], dims_dicts
-
-        elif time_dependent:
-            values = np.concatenate(group_data, axis=0)
-            boundary_indices = list(np.cumsum(boundaries)[:-1])
-
-            return values, boundary_indices, dims_dicts
+        # If not concatenating, return list of group data and dims_dicts
+        if not concatenate:
+            return group_data, [], dims_dicts
 
         else:
-            latest = next(
-                i
-                for i in range(len(groups_to_read) - 1, -1, -1)
-                if boundaries[i] > 0
-            )
-            return group_data[latest], [], [dims_dicts[latest]]
+            if time_dependent:
+                values = np.concatenate(group_data, axis=0)
+                boundary_indices = list(np.cumsum(boundaries)[:-1])
+
+                return values, boundary_indices, dims_dicts
+            else:
+                latest = next(
+                    i
+                    for i in range(len(groups_to_read) - 1, -1, -1)
+                    if boundaries[i] > 0
+                )
+                return group_data[latest], [], [dims_dicts[latest]]
 
     def load_netcdf_variable_complex(
         self,
         nc_path: pl.Path,
         variable: str,
         fill_value: complex = np.nan + 1j * np.nan,
-        group: int | None = None,
+        groups: list[int | str] | int | str | None = None,
+        concatenate: bool = True,
     ):
         """
         Load a complex variable stored as '<variable>_real' and
@@ -498,9 +541,13 @@ class FlucsPostProcessing:
             Base name of the complex variable.
         fill_value : complex
             Value to use for groups that do not contain the variable.
-        group : int | None
-            If specified, load data only from this output group. If None,
+        groups : list[int | str] | None
+            If specified, load data only from these output groups. If None,
             behaviour matches load_netcdf_variable.
+        concatenate : bool
+            If True, time-dependent variables are concatenated across groups,
+            and time-independent variables are loaded from the latest non-empty
+            group.
 
         Returns
         -------
@@ -515,7 +562,8 @@ class FlucsPostProcessing:
                 nc_path,
                 f"{variable}_real",
                 fill_value=np.real(fill_value),
-                group=group,
+                groups=groups,
+                concatenate=concatenate,
             )
         )
 
@@ -524,7 +572,8 @@ class FlucsPostProcessing:
                 nc_path,
                 f"{variable}_imag",
                 fill_value=np.imag(fill_value),
-                group=group,
+                groups=groups,
+                concatenate=concatenate,
             )
         )
 
@@ -538,7 +587,10 @@ class FlucsPostProcessing:
             )
 
         # Combine into complex object
-        values = real + 1j * imag
+        if concatenate:
+            values = real + 1j * imag
+        else:
+            values = [r + 1j * i for r, i in zip(real, imag, strict=True)]
 
         return values, boundary_indices_real, dims_dicts_real
 
