@@ -357,11 +357,8 @@ class FlucsPostProcessing:
         groups : list[int | str] | str | int | None
             If specified, load data only from this set of output groups. The
             list can contain either integer group indices, or string group
-            identifiers (matching the group numbers).
-
-            A single group can be specified as a single int or string.
-
-            If None, all groups are loaded.
+            identifiers (matching the group numbers). A single group can be 
+            specified as a single int or string. If None, all groups are loaded.
         concatenate : bool
             If True, time-dependent variables are concatenated across groups,
             and time-independent variables are loaded from the latest non-empty
