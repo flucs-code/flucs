@@ -195,15 +195,6 @@ class FlucsSystem(ABC):
             self.fft_c2r_plan_type = cufft.CUFFT_Z2D
             self.fft_r2c_plan_type = cufft.CUFFT_D2Z
 
-        self._setup_system()
-
-    @abstractmethod
-    def _setup_system(self) -> None:
-        """
-        System-specific setup (allocate, set initial conditions, etc.).
-        """
-        pass
-
     def write_output(self, force=False):
         self.steps_until_next_write -= 1
         if self.steps_until_next_write > 0 and not force:
