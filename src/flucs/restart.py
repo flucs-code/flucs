@@ -37,7 +37,7 @@ class FlucsRestart:
     # Handling backup files
     backup_temp: pl.Path
     backup_count: int = 0
-    backup_paths: list[pl.Path] = []
+    backup_paths: list[pl.Path]
 
     # Flag to reset simulation
     reset_time: bool = False
@@ -202,8 +202,10 @@ class FlucsRestart:
                 "restart.backup_count must be an integer between 0 and 100."
             )
         if self.backup_count > 10:
-            print(f"[{type(self).__name__}] WARNING: restart.backup_count "
-                  f"= {self.backup_count} may lead to large disk usage.")
+            print(
+                f"[{type(self).__name__}] WARNING: restart.backup_count "
+                f"= {self.backup_count} may lead to large disk usage."
+            )
 
         self.backup_temp = system_input.io_path / "restart.temp.nc"
         self.backup_paths = [
@@ -211,12 +213,9 @@ class FlucsRestart:
             for i in range(self.backup_count)
         ]
 
-        if (
-            self.write_path.exists()
-            and not (
-                system_input["restart.restart_if_exists"] or
-                len(system_input["restart.restart_from"]) > 0
-            )
+        if self.write_path.exists() and not (
+            system_input["restart.restart_if_exists"]
+            or len(system_input["restart.restart_from"]) > 0
         ):
             raise InvalidFlucsInputFileError(
                 "You must remove existing 'restart.nc' manually if "
@@ -288,7 +287,7 @@ class FlucsRestart:
             self.backup_temp.unlink()
             return
 
-        # Rotate backup files. 
+        # Rotate backup files.
         for i in range(self.backup_count - 1, 0, -1):
             src = self.backup_paths[i - 1]
             dst = self.backup_paths[i]
@@ -306,7 +305,6 @@ class FlucsRestart:
             newest_backup.unlink()
 
         shutil.move(self.backup_temp, newest_backup)
-
 
     def _write_restart_data(self) -> None:
         """
