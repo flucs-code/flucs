@@ -32,6 +32,9 @@ extern "C" {
 __constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
 __constant__ FLUCS_COMPLEX* inverse_lhs_precomp = NULL;
 
+// Multistep nonlinear terms stored in global memory
+extern __constant__ FLUCS_COMPLEX* multistep_nonlinear_terms;
+
 
 // Gets the linear matrix for a single mode.
 // This must be implemented by the user.
@@ -39,17 +42,53 @@ __device__ void get_linear_matrix(const size_t index,
                                   const FLUCS_FLOAT dt,
                                   FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 
-// Finds the nonlinear terms for the current time
-// step and adds them to rhs_fields.
+// Finds the nonlinear terms for the current time.
 // Must be implemented by the user.
-__device__ void add_nonlinear_terms(const size_t index,
-                                    const FLUCS_FLOAT dt,
-                                    const long long current_step,
-                                    const FLUCS_FLOAT AB0,
-                                    const FLUCS_FLOAT AB1,
-                                    const FLUCS_FLOAT AB2,
-                                    const FLUCS_COMPLEX* dft_bits,
-                                    FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]);
+__device__ void get_nonlinear_terms(
+    const size_t index,
+    const FLUCS_COMPLEX* dft_bits,
+    FLUCS_COMPLEX nonlinear_terms[NUMBER_OF_FIELDS_NONLINEAR]);
+
+// Provides a mapping from the nonlinear term index 
+// to the field index that it contributes to.
+// Must be implemented by the user.
+__device__ __forceinline__
+int nonlinear_term_field_index(const int term_index);
+
+// Adds the nonlinear terms to the rhs and updates the AB3 nonlinear history
+__device__ void add_nonlinear_terms(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const long long current_step,
+    const FLUCS_FLOAT AB0,
+    const FLUCS_FLOAT AB1,
+    const FLUCS_FLOAT AB2,
+    const FLUCS_COMPLEX* dft_bits,
+    FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]
+)
+{
+    FLUCS_COMPLEX nonlinear_terms[NUMBER_OF_FIELDS_NONLINEAR];
+    get_nonlinear_terms(index, dft_bits, nonlinear_terms);
+
+    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS_NONLINEAR * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_1 = ((current_step + 2) % 3)          * NUMBER_OF_FIELDS_NONLINEAR * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_2 = ((current_step + 1) % 3)          * NUMBER_OF_FIELDS_NONLINEAR * HALFUNPADDEDSIZE + index;
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS_NONLINEAR; i++) {
+        const int field = nonlinear_term_field_index(i);
+        const size_t offset = i * HALFUNPADDEDSIZE;
+
+        rhs_fields[field] -= dt * (
+            + AB0 * nonlinear_terms[i]
+            + AB1 * multistep_nonlinear_terms[multistep_index_1 + offset]
+            + AB2 * multistep_nonlinear_terms[multistep_index_2 + offset]
+        );
+
+        multistep_nonlinear_terms[multistep_index_0 + offset] = nonlinear_terms[i];
+    }
+
+}
 
 // Wrapper for get_linear_matrix that adds hyperdissipation if needed
 __device__ __forceinline__

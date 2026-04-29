@@ -7,6 +7,7 @@ from typing import ClassVar
 
 import cupy as cp
 import numpy as np
+from cupy.cuda import cufft
 
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
@@ -28,6 +29,24 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
+    # Number of fields whose equations contain nonlinear terms. This is
+    # typically the same as number_of_fields, but can be smaller for some
+    # systems
+    number_of_fields_nonlinear: int
+
+    # Derivatives and bits used for the nonlinear terms
+    number_of_dft_derivatives: int
+    dft_derivatives: cp.ndarray
+    real_derivatives: cp.ndarray
+
+    number_of_dft_bits: int
+    dft_bits: cp.ndarray
+    real_bits: cp.ndarray
+
+    # DFT plans for the derivatives and bits
+    plan_derivatives_c2r: cufft.PlanNd
+    plan_bits_r2c: cufft.PlanNd
+
     # Total number of time steps for which we hold field data in memory
     # This is typically 2 (previous time step +
     # the current one we are solving for)
@@ -40,10 +59,6 @@ class FourierSystem(FlucsSystem):
 
     # Real-space fields in CPU memory, used for diagnostics
     realspace_fields: np.ndarray | None = None
-
-    # Fourier-space pieces out of which we construct the nonlinear term at each
-    # time step
-    dft_bits: cp.ndarray
 
     # Linear quantities (used for linear postprocessing)
     linear_matrix: np.ndarray | None = None
@@ -248,12 +263,14 @@ class FourierSystem(FlucsSystem):
         # Finally, precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
 
-    def _setup_system(self) -> None:
-        """Sets up the system for running the solver. Should be called *after*
-        any child class has done its setup, i.e., do not forget to do
-        super()._setup_system() in anything that inherits FourierSystem.
-
+    def setup(self) -> None:
         """
+        Sets up the system for running the solver.
+        """
+
+        # Base FlucsSystem setup
+        super().setup()
+
         self._set_initial_conditions()
         self._check_initial_conditions()
 
@@ -272,6 +289,215 @@ class FourierSystem(FlucsSystem):
 
         elif self.input["time.dt_method"] == "continuous":
             self._compute_current_dt = self._compute_current_dt_continuous
+
+        # Allocate memory
+        self._allocate_memory()
+
+    def _allocate_memory(
+        self,
+        allocate_derivatives_and_bits=True,
+        combine_derivatives_and_bits=False,
+    ) -> None:
+        """
+        Allocates any CPU/GPU memory that is needed by the solver.
+
+        Each system can implement its own version but should always
+        call the base one first.
+
+        Parameters
+        ----------
+        allocate_derivatives_and_bits : bool
+            If true, FourierSystem uses self.number_of_dft_derivatives and
+            self.number_of_dft_bits to allocate arrays and set up CuFFT plans
+            for the necessary Fourier transforms.
+        combine_derivatives_and_bits : bool
+            If true, the arrays for dft_derivatives and bits are reused
+            to save memory.
+
+        """
+
+        # Fields at the current and previous steps as required
+        self.fields = [
+            cp.zeros(
+                (self.number_of_fields, self.nz, self.nx, self.half_ny),
+                dtype=self.complex,
+            )
+            for i in range(self.fields_history_size)
+        ]
+
+        if self.input["setup.linear"]:
+            # Dummy placeholder that is passed to the kernels
+            # when running linearly
+            self.dft_bits = cp.zeros(1, dtype=self.complex)
+            return
+
+        # For the nonlinear terms, we need to keep terms at the current
+        # time step + terms from the past 2 time steps since we are
+        # using AB3.
+        # The nonlinear terms are indexed as (step, field, kz, kx, ky)
+        self.multistep_nonlinear_terms = cp.zeros(
+            (
+                3,
+                self.number_of_fields_nonlinear,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            ),
+            dtype=self.complex,
+        )
+
+        # CFL in GPU memory
+        self.cfl_rate = cp.zeros([1], dtype=self.float)
+
+        # Don't do anything if the user wants to handle this manually
+        if not allocate_derivatives_and_bits:
+            return
+
+        # Combining derivatives and bits is advisable as it saves memory
+        if combine_derivatives_and_bits:
+            combined_size = max(
+                self.number_of_dft_derivatives, self.number_of_dft_bits
+            )
+
+            self.dft_derivatives = cp.zeros(
+                (
+                    combined_size,
+                    self.padded_nz,
+                    self.padded_nx,
+                    self.half_padded_ny,
+                ),
+                dtype=self.complex,
+            )
+            self.real_derivatives = cp.zeros(
+                (combined_size, self.padded_nz, self.padded_nx, self.padded_ny),
+                dtype=self.float,
+            )
+
+            self.dft_bits = self.dft_derivatives
+            self.real_bits = self.real_derivatives
+
+        else:
+            self.dft_derivatives = cp.zeros(
+                (
+                    self.number_of_dft_derivatives,
+                    self.padded_nz,
+                    self.padded_nx,
+                    self.half_padded_ny,
+                ),
+                dtype=self.complex,
+            )
+            self.real_derivatives = cp.zeros(
+                (
+                    self.number_of_dft_derivatives,
+                    self.padded_nz,
+                    self.padded_nx,
+                    self.padded_ny,
+                ),
+                dtype=self.float,
+            )
+
+            self.dft_bits = cp.zeros(
+                (
+                    self.number_of_dft_bits,
+                    self.padded_nz,
+                    self.padded_nx,
+                    self.half_padded_ny,
+                ),
+                dtype=self.complex,
+            )
+            self.real_bits = cp.zeros(
+                (
+                    self.number_of_dft_bits,
+                    self.padded_nz,
+                    self.padded_nx,
+                    self.padded_ny,
+                ),
+                dtype=self.float,
+            )
+
+        self.plan_derivatives_c2r = self.create_standard_real_cufft_plan(
+            fft_type="c2r",
+            padded=True,
+            batch_size=self.number_of_dft_derivatives,
+        )
+
+        self.plan_bits_r2c = self.create_standard_real_cufft_plan(
+            fft_type="r2c",
+            padded=True,
+            batch_size=self.number_of_dft_bits,
+        )
+
+    def create_standard_real_cufft_plan(
+        self, fft_type: str, padded: bool, batch_size: int
+    ):
+        """
+        Returns a CuFFT plan for real-to-complex ("r2c") or
+        complex-to-real ("c2r") transforms for data of standard FourierSystem
+        shape (batch, nz, nx, ny).
+
+        Parameters
+        ----------
+        type : str
+            Type of the FFT. Can be "c2r" or "r2c".
+        padded : bool
+            If true, switch to complex arrays of shape
+                (batch, padded_nz, padded_nx, half_padded_ny)
+            that are transformed to real arrays of shape
+                (batch, padded_nz, padded_nx, padded_ny)
+        batch_size : int
+            Numbers of FFTs in the batch.
+        """
+
+        if padded:
+            nz = self.padded_nz
+            nx = self.padded_nx
+            ny = self.padded_ny
+            half_ny = self.half_padded_ny
+        else:
+            nz = self.nz
+            nx = self.nx
+            ny = self.ny
+            half_ny = self.half_ny
+
+        shape = (nz, nx, ny)
+        istride = 1
+        ostride = 1
+        compex_embed = (1, nx, half_ny)
+        compex_dist = nz * nx * half_ny
+        real_embed = (1, nx, ny)
+        real_dist = nz * nx * ny
+
+        if fft_type == "c2r":
+            inembed = compex_embed
+            onembed = real_embed
+            idist = compex_dist
+            odist = real_dist
+            fft_type = self.fft_c2r_plan_type
+            last_size = ny
+        elif fft_type == "r2c":
+            inembed = real_embed
+            onembed = compex_embed
+            idist = real_dist
+            odist = compex_dist
+            fft_type = self.fft_r2c_plan_type
+            last_size = half_ny
+        else:
+            raise ValueError("fft_type must be c2r or r2c.")
+
+        return cufft.PlanNd(
+            shape=shape,
+            istride=istride,
+            ostride=ostride,
+            inembed=inembed,
+            onembed=onembed,
+            idist=idist,
+            odist=odist,
+            fft_type=fft_type,
+            batch=batch_size,
+            order="C",
+            last_axis=3,
+            last_size=last_size,
+        )
 
     def _precompute_wavenumbers(self):
         # Check if we have already done this
@@ -429,6 +655,10 @@ class FourierSystem(FlucsSystem):
             np.reshape(self.fields_initial, self.fields[0].shape)
         )
 
+        # Reset AB3 nonlinear history
+        if not self.input["setup.linear"]:
+            self.multistep_nonlinear_terms.fill(self.float(0.0))
+
         super().ready()
 
         # Allocate precomputation matrices
@@ -482,6 +712,10 @@ class FourierSystem(FlucsSystem):
         # FourierSystem specific constants
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
+        )
+
+        self.module_options.define_int(
+            "NUMBER_OF_FIELDS_NONLINEAR", self.number_of_fields_nonlinear
         )
 
         self.module_options.define_dimension(
