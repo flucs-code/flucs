@@ -265,7 +265,7 @@ class FourierSystem(FlucsSystem):
 
     def setup(self) -> None:
         """
-        Sets up the system for running the solver. 
+        Sets up the system for running the solver.
         """
 
         # Base FlucsSystem setup
@@ -369,12 +369,7 @@ class FourierSystem(FlucsSystem):
                 dtype=self.complex,
             )
             self.real_derivatives = cp.zeros(
-                (   
-                    combined_size, 
-                    self.padded_nz, 
-                    self.padded_nx, 
-                    self.padded_ny
-                ),
+                (combined_size, self.padded_nz, self.padded_nx, self.padded_ny),
                 dtype=self.float,
             )
 
