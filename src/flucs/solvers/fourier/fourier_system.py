@@ -264,13 +264,11 @@ class FourierSystem(FlucsSystem):
         self._precompute_wavenumbers()
 
     def setup(self) -> None:
-        """Sets up the system for running the solver. Should be called *after*
-        any child class has done its setup, i.e., do not forget to do
-        super()._setup_system() in anything that inherits FourierSystem.
-
+        """
+        Sets up the system for running the solver. 
         """
 
-        # Do the base FlucsSystem setup
+        # Base FlucsSystem setup
         super().setup()
 
         self._set_initial_conditions()
@@ -292,7 +290,7 @@ class FourierSystem(FlucsSystem):
         elif self.input["time.dt_method"] == "continuous":
             self._compute_current_dt = self._compute_current_dt_continuous
 
-        # Finally, allocate memory
+        # Allocate memory
         self._allocate_memory()
 
     def _allocate_memory(
@@ -300,7 +298,8 @@ class FourierSystem(FlucsSystem):
         allocate_derivatives_and_bits=True,
         combine_derivatives_and_bits=False,
     ) -> None:
-        """Allocates any CPU/GPU memory that is needed by the solver.
+        """
+        Allocates any CPU/GPU memory that is needed by the solver.
 
         Each system can implement its own version but should always
         call the base one first.
@@ -370,7 +369,12 @@ class FourierSystem(FlucsSystem):
                 dtype=self.complex,
             )
             self.real_derivatives = cp.zeros(
-                (combined_size, self.padded_nz, self.padded_nx, self.padded_ny),
+                (   
+                    combined_size, 
+                    self.padded_nz, 
+                    self.padded_nx, 
+                    self.padded_ny
+                ),
                 dtype=self.float,
             )
 
@@ -399,7 +403,7 @@ class FourierSystem(FlucsSystem):
 
             self.dft_bits = cp.zeros(
                 (
-                    self.number_of_bits,
+                    self.number_of_dft_bits,
                     self.padded_nz,
                     self.padded_nx,
                     self.half_padded_ny,
@@ -408,7 +412,7 @@ class FourierSystem(FlucsSystem):
             )
             self.real_bits = cp.zeros(
                 (
-                    self.number_of_bits,
+                    self.number_of_dft_bits,
                     self.padded_nz,
                     self.padded_nx,
                     self.padded_ny,
@@ -431,7 +435,8 @@ class FourierSystem(FlucsSystem):
     def create_standard_real_cufft_plan(
         self, fft_type: str, padded: bool, batch_size: int
     ):
-        """Returns a CuFFT plan for real-to-complex ("r2c") or
+        """
+        Returns a CuFFT plan for real-to-complex ("r2c") or
         complex-to-real ("c2r") transforms for data of standard FourierSystem
         shape (batch, nz, nx, ny).
 
