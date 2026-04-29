@@ -136,8 +136,8 @@ class FourierSystem(FlucsSystem):
     }
 
     # Forcing methods
-    solver_forcing_methods: ClassVar[set[str]] = set() # Currently none
-    system_forcing_methods: ClassVar[set[str]] = set()
+    solver_forcing_methods: ClassVar[frozenset[str]] = frozenset() # Currently none
+    system_forcing_methods: ClassVar[frozenset[str]] = frozenset()
 
     def _interpret_input(self):
         """Validates inputs and sets up the number of lattice points."""

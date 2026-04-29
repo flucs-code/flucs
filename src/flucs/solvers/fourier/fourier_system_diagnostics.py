@@ -278,7 +278,9 @@ class FourierDataDiag(FlucsDiagnostic):
     """
 
     name = "fourier_data"
+    system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
+
     type: str
     slices: dict
     slice_calculators: list[Callable[[], None]]
@@ -381,7 +383,9 @@ class RealspaceDataDiag(FlucsDiagnostic):
     """
 
     name = "realspace_data"
+    system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
+
     type: str
     slices: dict
     slice_calculators: list[Callable[[], None]]
