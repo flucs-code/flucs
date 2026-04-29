@@ -24,6 +24,7 @@ from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
 from flucs.utilities.cupy import ModuleOptions
+from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
@@ -111,7 +112,7 @@ class FlucsSystem(ABC):
 
             p = pl.Path(importlib.import_module(parent_cls.__module__).__file__)
             defaults_path = p.with_name(f"{p.stem}.toml")
-            print(f"Loading SOLVER defaults for {defaults_path}")
+            flucsprint(f"Loading SOLVER defaults for {defaults_path}")
             with defaults_path.open("r") as f:
                 contents = f.read()
 
@@ -133,6 +134,9 @@ class FlucsSystem(ABC):
 
         # Get float error tolerance
         self.tolerance = self.float(np.finfo(self.float).eps * 64.0)
+
+        # Print precision info
+        flucsprint(f"Using {self.input['setup.precision']} precision")
 
     def add_output(self, output: FlucsOutput):
         if self.output_heap is None:
@@ -369,7 +373,7 @@ class FlucsSystem(ABC):
             global_total_gb = info["global"]["total"] / bytes_to_gb
             cupy_total_gb = info["cupy"]["total"] / bytes_to_gb
 
-            print(
+            flucsprint(
                 f"({info['id']}) {info['name']}: {global_used_gb:.3f} / "
                 f"{global_total_gb:.3f} GB "
                 f"({global_used_gb / global_total_gb * 100:.2f}%), "

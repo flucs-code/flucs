@@ -11,6 +11,7 @@ from netCDF4 import Dataset
 
 from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
+from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
@@ -95,7 +96,7 @@ class FlucsRestart:
                     "cannot be found."
                 )
 
-        print(f"Restarting from file: {self.initial_path}")
+        flucsprint(f"Restarting from file: {self.initial_path}")
 
     def _load_restart_data(self) -> None:
         """
@@ -374,4 +375,7 @@ class FlucsRestart:
             )
 
         input_file_path.write_text(input_file)
-        print(f"Reconstructed input file: {input_file_path}")
+        flucsprint(
+            f"Reconstructed input file: {input_file_path}", 
+            source=__class__
+        )

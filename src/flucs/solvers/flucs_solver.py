@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from flucs import FlucsInput
+from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem
@@ -47,7 +48,7 @@ class FlucsSolver(Generic[T_System], ABC):
 
         # Handle signals in order to exit cleanly
         def signal_handler(signum, frame):
-            print(f"\nCaught signal {signum}. Exiting cleanly.")
+            flucsprint(f"\nCaught signal {signum}. Exiting cleanly.")
             self.interrupted = True
 
         signal.signal(signal.SIGINT, signal_handler)

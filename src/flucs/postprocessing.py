@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 from netCDF4 import Dataset
 
 import flucs
+from flucs.utilities.messages import flucsprint
 
 
 class FlucsPostProcessing:
@@ -126,19 +127,19 @@ class FlucsPostProcessing:
 
         script_paths = self._get_script_paths()
 
-        print("Available postprocessing scripts:")
+        flucsprint("Available postprocessing scripts:")
         if not script_paths:
-            print(f"{self._indent}None")
+            flucsprint(f"{self._indent}None")
         else:
             integer_width = len(str(len(script_paths) - 1))
             current_type = None
             for integer, type_name, path in script_paths:
                 if type_name != current_type:
-                    print(f"{self._indent}{type_name}:")
+                    flucsprint(f"{self._indent}{type_name}:")
                     current_type = type_name
                 label = f"[{integer:>{integer_width}}]"
-                print(f"{2 * self._indent}{label} {path}")
-        print(
+                flucsprint(f"{2 * self._indent}{label} {path}")
+        flucsprint(
             "To run a specific script: 'flucs -p <integer> <script arguments>'."
         )
 
@@ -271,7 +272,7 @@ class FlucsPostProcessing:
         of the provided i/o directories given a specific output type.
         """
 
-        print("Available netCDF variables:")
+        flucsprint("Available netCDF variables:")
         netcdf_variables = self._get_all_netcdf_variables(ignore=ignore)
         for io_path, file_map in netcdf_variables.items():
             all_variables = set()
@@ -292,7 +293,7 @@ class FlucsPostProcessing:
                 unique_variables.add(variable)
                 listed_variables.append(variable)
 
-            print(rf"{self._indent}{io_path}: {listed_variables}")
+            flucsprint(rf"{self._indent}{io_path}: {listed_variables}")
 
     def get_valid_netcdf_paths(self, variable: str) -> list[pl.Path]:
         """
@@ -322,9 +323,9 @@ class FlucsPostProcessing:
                 missing.extend(file_map.keys())
 
         if missing:
-            print(f"Variable '{variable}' not found in:")
+            flucsprint(f"Variable '{variable}' not found in:")
             for path in missing:
-                print(f"{self._indent}{path}")
+                flucsprint(f"{self._indent}{path}")
 
         return found
 
@@ -815,9 +816,9 @@ class FlucsPostProcessing:
             )
 
         if not quiet:
-            print(
-                f"FlucsPostProcessing "
+            flucsprint(
                 f"({len(self.io_paths)}, "
                 f"{self.output_files}, "
-                f"{self.save_directory})"
+                f"{self.save_directory})",
+                source=self
             )

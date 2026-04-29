@@ -13,6 +13,7 @@ from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import cupy_set_device_pointer
+from flucs.utilities.messages import flucsprint
 from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
@@ -139,7 +140,7 @@ class FourierSystem(FlucsSystem):
 
         # Check for conflicts in time-stepping input parameters
         if self.input["time.dt_method"] == "discrete":
-            print("Using discrete time stepping.")
+            flucsprint("Using discrete time stepping.")
 
         elif self.input["time.dt_method"] == "continuous":
             if self.input["setup.precompute_linear_matrix"]:
@@ -147,7 +148,7 @@ class FourierSystem(FlucsSystem):
                     "Cannot have setup.precompute_linear_matrix = true if "
                     "time.dt_method = 'continuous'."
                 )
-            print("Using continuous time stepping.")
+            flucsprint("Using continuous time stepping.")
 
         else:
             raise InvalidFlucsInputFileError(
@@ -203,7 +204,9 @@ class FourierSystem(FlucsSystem):
 
                     half_padded_n = padded_n // 2 + 1
 
-                    print(f"Found padded_n{dim} = {padded_n} for n{dim} = {n}")
+                    flucsprint(
+                        f"Found padded_n{dim} = {padded_n} for n{dim} = {n}"
+                    )
 
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
@@ -219,7 +222,9 @@ class FourierSystem(FlucsSystem):
                     half_n = _x + 1
                     n = 2 * _x + 1
 
-                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}")
+                    flucsprint(
+                        f"Found n{dim} = {n} for padded_n{dim} = {padded_n}"
+                    )
 
                 case (False, False):
                     raise ValueError(
@@ -601,7 +606,7 @@ class FourierSystem(FlucsSystem):
         max_damping = np.max(-eigvals.imag)
         max_real_frequency = np.max(np.abs(eigvals.real))
 
-        print(
+        flucsprint(
             "Linear rates (max.):          "
             f"(growth, damping, frequency) = "
             f"({max_growth:.3e}, "
@@ -609,7 +614,7 @@ class FourierSystem(FlucsSystem):
             f"{max_real_frequency:.3e})"
         )
 
-        print(
+        flucsprint(
             "Linear rates (max.): dt_max * "
             f"(growth, damping, frequency) = "
             f"({self.dt_max * max_growth:.3e}, "
@@ -642,7 +647,7 @@ class FourierSystem(FlucsSystem):
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
 
         # Print starting message
-        print(
+        flucsprint(
             f"Starting at time {float(self.init_time):.3e}, "
             f"dt {float(self.init_dt):.3e}"
         )
@@ -758,7 +763,7 @@ class FourierSystem(FlucsSystem):
         # Hyperdissipation
         for component in ["perp", "kx", "ky", "kz"]:
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                message = f"Using hyperdissipation in {component:<4}."
+                message = f"Using hyperdissipation in {component:<4}"
 
                 self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
@@ -774,7 +779,7 @@ class FourierSystem(FlucsSystem):
                     )
                     message += " (adaptive)"
 
-                print(message)
+                flucsprint(message)
 
         # Setup
         self.module_options.define_float("ALPHA", self.input["setup.alpha"])
@@ -783,7 +788,7 @@ class FourierSystem(FlucsSystem):
             self.module_options.define_flag("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
-            print("Linear matrices will be precomputed.")
+            flucsprint("Linear matrices will be precomputed.")
             self.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
         super().compile_cupy_module()
@@ -999,7 +1004,7 @@ class FourierSystem(FlucsSystem):
                 fields_initial_ky0 - np.conj(fields_initial_ky0[:, ::-1, ::-1])
             )
         )
-        print(f"Init. condition reality error: {error:.3e}")
+        flucsprint(f"Init. condition reality error: {error:.3e}")
 
     def get_restart_data(self) -> dict[str, np.ndarray]:
         """
@@ -1065,7 +1070,7 @@ class FourierSystem(FlucsSystem):
         # If CFL condition is violated
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
-            print(
+            flucsprint(
                 f"dt: {self.current_dt:.3e} -> "
                 f"{new_dt:.3e} (-, {self.current_step:.3e})"
             )
@@ -1085,7 +1090,7 @@ class FourierSystem(FlucsSystem):
             )
 
             if new_dt > self.current_dt:
-                print(
+                flucsprint(
                     f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
                     f"(+, {self.current_step:.3e})"
                 )
@@ -1107,7 +1112,7 @@ class FourierSystem(FlucsSystem):
 
         self._compute_current_dt()
         if self.current_dt < self.dt_min:
-            print(
+            flucsprint(
                 f"({self.current_step}) Required time step "
                 f"{self.current_dt:.3e} is below dt_min. Exiting."
             )
