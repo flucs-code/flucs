@@ -20,10 +20,11 @@ amplitude = 1e-4
 
 [restart]
 write_restart_file = true
-restart_if_exists = false
 write_steps = 10000
+restart_if_exists = false
 restart_from = ""
 reset_time = false
+backup_count = 0
 
 [output]
 write_steps = 50000  # number of time steps between writes to the hard drive

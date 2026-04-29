@@ -919,7 +919,12 @@ class FourierSystem(FlucsSystem):
             field_data = restart_data["fields"]["data"]
 
             # TODO: remove when allowing for changing of sizes
-            expected_shape = self.fields[0].shape
+            expected_shape = (
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            )
             if field_data.shape != expected_shape:
                 raise ValueError(
                     f"Restart data has incorrect shape: "
