@@ -135,8 +135,12 @@ class FourierSystem(FlucsSystem):
         RealspaceDataDiag,
     }
 
+    # Forcing methods
+    solver_forcing_methods: ClassVar[set[str]] = set() # Currently none
+    system_forcing_methods: ClassVar[set[str]] = set()
+
     def _interpret_input(self):
-        """Validates and sets up the number of lattice points."""
+        """Validates inputs and sets up the number of lattice points."""
 
         # Check for conflicts in time-stepping input parameters
         if self.input["time.dt_method"] == "discrete":
@@ -165,6 +169,15 @@ class FourierSystem(FlucsSystem):
                 "Cannot enable both hyperdissipation.perp "
                 "and hyperdissipation.kx/ky simultaneously. "
                 "Use either perp or kx/ky. "
+            )
+
+        # Check for conflicts in forcing parameters
+        forcing_method = self.input["forcing.method"]
+        if forcing_method and forcing_method not in (
+            set(self.solver_forcing_methods) | set(self.system_forcing_methods)
+        ):
+            raise InvalidFlucsInputFileError(
+                f"Invalid forcing.method: {self.input['forcing.method']}."
             )
 
         # Set resolutions appropriately
@@ -584,7 +597,8 @@ class FourierSystem(FlucsSystem):
                 if coeff > 0.0:
                     k2_max = np.max(np.abs(k2))
                     contribution = coeff * (
-                        (k2 / k2_max) ** self.input[f"hyperdissipation.{component}_power"]
+                        (k2 / k2_max) **
+                        self.input[f"hyperdissipation.{component}_power"]
                     )
                     if self.input[f"hyperdissipation.{component}_adaptive"]:
                         contribution /= self.init_dt
@@ -635,6 +649,7 @@ class FourierSystem(FlucsSystem):
             )
 
     def ready(self) -> None:
+
         # Reset time counters
         self.current_step = self.int(0)
         self.current_time = self.init_time
@@ -645,12 +660,6 @@ class FourierSystem(FlucsSystem):
             [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
-
-        # Print starting message
-        flucsprint(
-            f"Starting at time {float(self.init_time):.3e}, "
-            f"dt {float(self.init_dt):.3e}"
-        )
 
         # Reset CFL
         self.current_cfl = 0.0
@@ -701,6 +710,12 @@ class FourierSystem(FlucsSystem):
             )
 
             self.precompute_iteration_matrices()
+
+        # Print starting message
+        flucsprint(
+            f"Starting at time {float(self.init_time):.3e}, "
+            f"dt {float(self.init_dt):.3e}"
+        )
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""
@@ -780,6 +795,18 @@ class FourierSystem(FlucsSystem):
                     message += " (adaptive)"
 
                 flucsprint(message)
+
+        # Forcing
+        if self.input["forcing.method"]:
+            flucsprint(f"Using forcing method: {self.input['forcing.method']}")
+
+            self.module_options.define_flag("FORCING")
+            self.module_options.define_flag(
+                f"FORCING_METHOD_{self.input['forcing.method'].upper()}"
+            )
+
+            if self.input["forcing.method"] in self.solver_forcing_methods:
+                self.module_options.define_flag("FORCING_FROM_SOLVER")
 
         # Setup
         self.module_options.define_float("ALPHA", self.input["setup.alpha"])

@@ -376,6 +376,6 @@ class FlucsRestart:
 
         input_file_path.write_text(input_file)
         flucsprint(
-            f"Reconstructed input file: {input_file_path}", 
+            f"Reconstructed input file: {input_file_path}",
             source=__class__
         )

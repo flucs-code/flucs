@@ -71,6 +71,9 @@ kz = -1.0
 kz_power = 2
 kz_adaptive = false
 
+[forcing]
+method = ""
+
 [output]
 
 [output.0d]
