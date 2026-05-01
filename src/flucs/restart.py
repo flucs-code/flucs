@@ -31,9 +31,13 @@ class FlucsRestart:
     # Writing a restart file
     write_restart_file: bool = False
     write_path: pl.Path
-    backup_path: pl.Path
     steps_until_write: int = 0
     netcdf_precision: str
+
+    # Handling backup files
+    backup_temp: pl.Path
+    backup_count: int = 0
+    backup_paths: list[pl.Path]
 
     # Flag to reset simulation
     reset_time: bool = False
@@ -183,23 +187,40 @@ class FlucsRestart:
 
         system_input = self.system.input
 
+        # Return if not writing restart files
         self.write_restart_file = system_input["restart.write_restart_file"]
-
         if not self.write_restart_file:
-            # Nothing to do here
             return
 
         self.write_path = system_input.io_path / "restart.nc"
-        self.backup_path = system_input.io_path / "restart.backup.nc"
 
-        if (
-            self.write_path.exists()
-            and not system_input["restart.restart_if_exists"]
+        # Parse and setup backup files
+        self.backup_count = int(system_input["restart.backup_count"])
+
+        if self.backup_count < 0 or self.backup_count > 100:
+            raise InvalidFlucsInputFileError(
+                "restart.backup_count must be an integer between 0 and 100."
+            )
+        if self.backup_count > 10:
+            print(
+                f"[{type(self).__name__}] WARNING: restart.backup_count "
+                f"= {self.backup_count} may lead to large disk usage."
+            )
+
+        self.backup_temp = system_input.io_path / "restart.temp.nc"
+        self.backup_paths = [
+            system_input.io_path / f"restart.backup.{i:02d}.nc"
+            for i in range(self.backup_count)
+        ]
+
+        if self.write_path.exists() and not (
+            system_input["restart.restart_if_exists"]
+            or len(system_input["restart.restart_from"]) > 0
         ):
             raise InvalidFlucsInputFileError(
                 "You must remove existing 'restart.nc' manually if "
-                "write_restart_file is 'True' but restart_if_exists "
-                "is 'False'."
+                "write_restart_file is 'True' but both restart_if_exists "
+                "and restart_from are 'False'."
             )
 
     def write_restart(self, force: bool = False) -> None:
@@ -237,18 +258,53 @@ class FlucsRestart:
     def _backup_restart_file(self):
         """
         Called before starting to write to a restart file.
-        Copies the old restart file (if it exists) to a backup file.
-        If the backup file already exists, it is deleted.
-
+        Copies the old restart file (if it exists) to a temporary backup file.
+        If the temporary backup file already exists, it is deleted.
         """
 
         if not self.write_path.exists():
             return
 
-        if self.backup_path.exists():
-            self.backup_path.unlink()
+        if self.backup_temp.exists():
+            self.backup_temp.unlink()
 
-        shutil.move(self.write_path, self.backup_path)
+        shutil.move(self.write_path, self.backup_temp)
+
+    def _finalise_backup_files(self):
+        """
+        Called after successfully writing a restart file.
+
+        If backup_count == 0, deletes the temporary backup file.
+        Otherwise, rotates numbered backups and moves the temporary backup
+        to restart.backup.00.nc.
+        """
+
+        if not self.backup_temp.exists():
+            return
+
+        # Delete temporary backup if no backups are kept
+        if self.backup_count <= 0:
+            self.backup_temp.unlink()
+            return
+
+        # Rotate backup files.
+        for i in range(self.backup_count - 1, 0, -1):
+            src = self.backup_paths[i - 1]
+            dst = self.backup_paths[i]
+
+            if dst.exists():
+                dst.unlink()
+
+            if src.exists():
+                shutil.move(src, dst)
+
+        newest_backup = self.backup_paths[0]
+
+        # Move temporary backup to newest backup location
+        if newest_backup.exists():
+            newest_backup.unlink()
+
+        shutil.move(self.backup_temp, newest_backup)
 
     def _write_restart_data(self) -> None:
         """
@@ -323,9 +379,8 @@ class FlucsRestart:
                     )
                     v[:] = var_data
 
-        # Remove backup file after successful write
-        if self.backup_path.exists():
-            self.backup_path.unlink()
+        # Finalise backups after successful write
+        self._finalise_backup_files()
 
     @staticmethod
     def reconstruct_input_from_restart(
