@@ -1,4 +1,5 @@
-"""Pseudospectral Fourier-space solver.
+"""
+Pseudospectral Fourier-space solver.
 
 Solves a system of PDEs in a periodic box using
 pseudospectral Fourier methods.
@@ -13,7 +14,8 @@ from flucs.utilities.messages import flucsprint
 
 
 class FourierSolver(FlucsSolver[FourierSystem]):
-    """A pseudospectral solver for a system of nonlinear fluid PDEs in 2D or 3D
+    """
+    A pseudospectral solver for a system of nonlinear fluid PDEs in 2D or 3D
     that are specified by a FourierSystem.
 
     """

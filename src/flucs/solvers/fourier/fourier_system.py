@@ -24,23 +24,27 @@ from .fourier_system_diagnostics import (
     RealspaceDataDiag,
 )
 
-
 class FourierSystemForcing(ABC):
+    """
+    Base class for optional forcing methods used by FourierSystem solvers.
+
+    """
     linear: bool
     explicit: bool
     system: FourierSystem
 
     @abstractmethod
-    def setup_cuda_defs(self):
+    def setup_cuda_definitions(self):
         pass
 
     def __init__(self, system: FourierSystem):
-        self.system = system
-
+        self.system = system  
 
 class FourierSystem(FlucsSystem):
-    """A generic system of equations solved using pseudospectral Fourier
-    methods."""
+    """
+    A generic system of equations solved using pseudospectral Fourier
+    methods.
+    """
 
     # Number of fields that the solver is solving for
     number_of_fields: int
@@ -152,8 +156,8 @@ class FourierSystem(FlucsSystem):
 
     # Forcing methods
     forcing_object: FourierSystemForcing
-    solver_forcing_methods: ClassVar[dict[str, FourierSystemForcing]] = {}
-    system_forcing_methods: ClassVar[dict[str, FourierSystemForcing]] = {}
+    solver_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
+    system_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
 
     def _interpret_input(self):
         """Validates inputs and sets up the number of lattice points."""
@@ -288,7 +292,7 @@ class FourierSystem(FlucsSystem):
         # Precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
 
-        # Finally, setup forcing
+        # Setup forcing
         forcing_method = self.input["forcing.method"]
         if not forcing_method:
             return
@@ -594,15 +598,19 @@ class FourierSystem(FlucsSystem):
         return kx_broadcast, ky_broadcast, kz_broadcast
 
     def check_health(self) -> None:
-        """Basic consistency/health checks before running.
+        """
+        Basic consistency/health checks before running.
         Alerts the user if anything needs their attention.
 
         """
-        if not self.input["setup.check_health"]:
-            flucsprint("Skipping health checks.", source=self)
-            return
 
-        flucsprint("Performing health checks...", source=self)
+        if not self.input["setup.check_linear_matrix"]:
+            flucsprint(
+                "Skipping linear matrix check.", 
+                source=self, 
+                message_type="warning",
+            )
+            return
 
         # Check consistency of linear matrices
         matrix_solver = self.compute_linear_matrix()
@@ -858,7 +866,7 @@ class FourierSystem(FlucsSystem):
             if self.forcing_object.explicit:
                 self.module_options.define_flag("FORCING_EXPLICIT")
 
-            self.forcing_object.setup_cuda_defs()
+            self.forcing_object.setup_cuda_definitions()
 
         # Setup
         self.module_options.define_float("ALPHA", self.input["setup.alpha"])

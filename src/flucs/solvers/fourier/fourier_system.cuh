@@ -63,19 +63,18 @@ int explicit_term_field_index(const int term_index);
 #else
 
 #ifdef FORCING_EXPLICIT
-__device__ void add_explicit_forcing(
+__device__ void add_forcing_explicit(
     const size_t index,
     const FLUCS_FLOAT dt,
     const long long current_step,
     const FLUCS_COMPLEX* previous_fields,
-    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS_EXPLICIT]);
 #endif
 
 #ifdef FORCING_LINEAR
-__device__ void add_linear_forcing(
+__device__ void add_forcing_linear(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const long long current_step,
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 #endif
 
@@ -103,7 +102,7 @@ __device__ void add_explicit_terms(
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_explicit_forcing(index, dt, current_step, previous_fields, explicit_terms);
+    add_forcing_explicit(index, dt, current_step, previous_fields, explicit_terms);
 #endif
 
     const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
@@ -134,6 +133,10 @@ void get_linear_matrix_wrapped(const size_t index,
 
     get_linear_matrix(index, dt, matrix);
 
+#ifdef FORCING_LINEAR
+    add_forcing_linear(index, dt, matrix);
+#endif
+
 #if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) ||\
       defined(HYPERDISSIPATION_KY) || defined(HYPERDISSIPATION_KZ))
     return;
@@ -144,10 +147,6 @@ void get_linear_matrix_wrapped(const size_t index,
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++)
         matrix[i][i] += hyperdissipation;
-
-#ifdef FORCING_LINEAR
-    add_linear_forcing(index, dt, current_step, matrix);
-#endif
     
 }
 
