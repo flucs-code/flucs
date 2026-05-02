@@ -203,9 +203,11 @@ class FlucsRestart:
                 "restart.backup_count must be an integer between 0 and 100."
             )
         if self.backup_count > 10:
-            print(
-                f"[{type(self).__name__}] WARNING: restart.backup_count "
-                f"= {self.backup_count} may lead to large disk usage."
+            flucsprint(
+                f"restart.backup_count = {self.backup_count}"
+                " may lead to large disk usage.",
+                source=self,
+                message_type="warning",
             )
 
         self.backup_temp = system_input.io_path / "restart.temp.nc"
@@ -431,6 +433,5 @@ class FlucsRestart:
 
         input_file_path.write_text(input_file)
         flucsprint(
-            f"Reconstructed input file: {input_file_path}",
-            source=__class__
+            f"Reconstructed input file: {input_file_path}", source=__class__
         )

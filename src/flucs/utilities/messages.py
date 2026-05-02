@@ -28,9 +28,7 @@ def flucsprint(*parts, source=None, message_type=None):
         type_prefix = ""
 
     # Construct prefix and message
-    prefix = " ".join(
-        part for part in [source_prefix, type_prefix] if part
-    )
+    prefix = " ".join(part for part in [source_prefix, type_prefix] if part)
     message = " ".join(str(part) for part in parts)
 
     # Print

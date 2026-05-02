@@ -33,8 +33,8 @@ extern "C" {
 __constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
 __constant__ FLUCS_COMPLEX* inverse_lhs_precomp = NULL;
 
-// Multistep nonlinear terms stored in global memory
-extern __constant__ FLUCS_COMPLEX* multistep_nonlinear_terms;
+// Multistep explicit terms stored in global memory
+__constant__ FLUCS_COMPLEX* multistep_explicit_terms;
 
 // Gets the linear matrix for a single mode.
 // Must be implemented by the user.
@@ -44,19 +44,47 @@ __device__ void get_linear_matrix(const size_t index,
 
 // Finds the nonlinear terms for the current time.
 // Must be implemented by the user.
-__device__ void get_nonlinear_terms(
+__device__ void add_nonlinear_terms(
     const size_t index,
     const FLUCS_COMPLEX* dft_bits,
-    FLUCS_COMPLEX nonlinear_terms[NUMBER_OF_FIELDS_NONLINEAR]);
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS_EXPLICIT]);
 
-// Provides a mapping from the nonlinear term index 
+// Provides a mapping from the explicit term index 
 // to the field index that it contributes to.
 // Must be implemented by the user.
 __device__ __forceinline__
-int nonlinear_term_field_index(const int term_index);
+int explicit_term_field_index(const int term_index);
 
-// Adds the nonlinear terms to the rhs and updates the AB3 nonlinear history
-__device__ void add_nonlinear_terms(
+// Forcing terms
+#ifdef FORCING
+
+#ifdef FORCING_FROM_SOLVER // Add forcing from shared methods
+#include "flucs/solvers/fourier/fourier_system_forcing.cuh"
+#else
+
+#ifdef FORCING_EXPLICIT
+__device__ void add_explicit_forcing(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const long long current_step,
+    const FLUCS_COMPLEX* previous_fields,
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
+#endif
+
+#ifdef FORCING_LINEAR
+__device__ void add_linear_forcing(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const long long current_step,
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
+#endif
+
+#endif // else FORCING_FROM_SOLVER
+#endif // FORCING
+
+
+// Adds the explicit terms to the rhs and updates the AB3 history
+__device__ void add_explicit_terms(
     const size_t index,
     const FLUCS_FLOAT dt,
     const long long current_step,
@@ -64,69 +92,41 @@ __device__ void add_nonlinear_terms(
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
     const FLUCS_COMPLEX* dft_bits,
+    const FLUCS_COMPLEX* previous_fields,
     FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]
 )
 {
-    FLUCS_COMPLEX nonlinear_terms[NUMBER_OF_FIELDS_NONLINEAR];
-    get_nonlinear_terms(index, dft_bits, nonlinear_terms);
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS_EXPLICIT] = {0};
 
-    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS_NONLINEAR * HALFUNPADDEDSIZE + index;
-    const size_t multistep_index_1 = ((current_step + 2) % 3)          * NUMBER_OF_FIELDS_NONLINEAR * HALFUNPADDEDSIZE + index;
-    const size_t multistep_index_2 = ((current_step + 1) % 3)          * NUMBER_OF_FIELDS_NONLINEAR * HALFUNPADDEDSIZE + index;
+#ifdef NONLINEAR
+    add_nonlinear_terms(index, dft_bits, explicit_terms);
+#endif
+
+#ifdef FORCING_EXPLICIT
+    add_explicit_forcing(index, dt, current_step, previous_fields, explicit_terms);
+#endif
+
+    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_1 = ((current_step + 2) % 3)          * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_2 = ((current_step + 1) % 3)          * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
 
     #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS_NONLINEAR; i++) {
-        const int field = nonlinear_term_field_index(i);
+    for (int i = 0; i < NUMBER_OF_FIELDS_EXPLICIT; i++) {
+        const int field = explicit_term_field_index(i);
         const size_t offset = i * HALFUNPADDEDSIZE;
 
         rhs_fields[field] -= dt * (
-            + AB0 * nonlinear_terms[i]
-            + AB1 * multistep_nonlinear_terms[multistep_index_1 + offset]
-            + AB2 * multistep_nonlinear_terms[multistep_index_2 + offset]
+            + AB0 * explicit_terms[i]
+            + AB1 * multistep_explicit_terms[multistep_index_1 + offset]
+            + AB2 * multistep_explicit_terms[multistep_index_2 + offset]
         );
 
-        multistep_nonlinear_terms[multistep_index_0 + offset] = nonlinear_terms[i];
+        multistep_explicit_terms[multistep_index_0 + offset] = explicit_terms[i];
     }
 
 }
 
-// Forcing terms
-#ifdef FORCING
-
-#ifdef FORCING_FROM_SOLVER // Add forcing from shared methods
-#include "flucs/solvers/fourier/fourier_system_forcing.cuh"
-#else 
-__device__ void get_forcing(
-    const size_t index,
-    const FLUCS_FLOAT dt,
-    const long long current_step,
-    const FLUCS_COMPLEX* previous_fields,
-    FLUCS_COMPLEX forcing_terms[NUMBER_OF_FIELDS]);
-#endif
-
-__device__ void add_forcing(
-    const size_t index,
-    const FLUCS_FLOAT dt,
-    const long long current_step,
-    const FLUCS_COMPLEX* previous_fields,
-    FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS])
-{
-    FLUCS_COMPLEX forcing_terms[NUMBER_OF_FIELDS];
-
-    #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++)
-        forcing_terms[i] = FLUCS_COMPLEX(0, 0);
-
-    get_forcing(index, dt, current_step, previous_fields, forcing_terms);
-
-    #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++)
-        rhs_fields[i] += dt * forcing_terms[i];
-}
-
-#endif
-
-// Wrapper for get_linear_matrix that adds hyperdissipation if needed
+// Wrapper for get_linear_matrix that adds hyperdissipation and forcing if needed
 __device__ __forceinline__
 void get_linear_matrix_wrapped(const size_t index,
                        const FLUCS_FLOAT dt,
@@ -144,6 +144,10 @@ void get_linear_matrix_wrapped(const size_t index,
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++)
         matrix[i][i] += hyperdissipation;
+
+#ifdef FORCING_LINEAR
+    add_linear_forcing(index, dt, current_step, matrix);
+#endif
     
 }
 
@@ -245,12 +249,8 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
         rhs_fields[i] = sum;
     }
 
-#ifdef NONLINEAR
-    add_nonlinear_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, rhs_fields);
-#endif
-
-#ifdef FORCING
-    add_forcing(index, dt, current_step, previous_fields, rhs_fields);
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+    add_explicit_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, previous_fields, rhs_fields);
 #endif
 
     #pragma unroll
@@ -291,12 +291,8 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
         }
     }
 
-#ifdef NONLINEAR
-    add_nonlinear_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, rhs_fields);
-#endif
-
-#ifdef FORCING
-    add_forcing(index, dt, current_step, previous_fields, rhs_fields);
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+    add_explicit_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, previous_fields, rhs_fields);
 #endif
 
     FLUCS_COMPLEX result[NUMBER_OF_FIELDS];

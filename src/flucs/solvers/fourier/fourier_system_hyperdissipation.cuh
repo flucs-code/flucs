@@ -8,10 +8,16 @@ FLUCS_FLOAT get_hyperdissipation_perp(
 
 #ifdef HYPERDISSIPATION_PERP
 
+    const FLUCS_FLOAT kperp2 = kx * kx + ky * ky;
+
+#ifdef HYPERDISSIPATION_PERP_NORMALISED
     const FLUCS_FLOAT kx_max = kx_from_ikx(HALF_NX - 1);
     const FLUCS_FLOAT ky_max = ky_from_iky(HALF_NY - 1);
-    const FLUCS_FLOAT kperp2 = kx * kx + ky * ky;
     const FLUCS_FLOAT kperp2_norm = kperp2 / (kx_max * kx_max + ky_max * ky_max);
+#else
+    const FLUCS_FLOAT kperp2_norm = kperp2;
+#endif // NORMALISED
+
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_PERP;
 
     #pragma unroll
@@ -38,9 +44,15 @@ FLUCS_FLOAT get_hyperdissipation_kx(
 
 #ifdef HYPERDISSIPATION_KX
 
-    const FLUCS_FLOAT kx_max = kx_from_ikx(HALF_NX - 1);
     const FLUCS_FLOAT kx2 = kx * kx;
+
+#ifdef HYPERDISSIPATION_KX_NORMALISED
+    const FLUCS_FLOAT kx_max = kx_from_ikx(HALF_NX - 1);
     const FLUCS_FLOAT kx2_norm = kx2 / (kx_max * kx_max);
+#else
+    const FLUCS_FLOAT kx2_norm = kx2;
+#endif
+
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KX;
 
     #pragma unroll
@@ -66,9 +78,15 @@ FLUCS_FLOAT get_hyperdissipation_ky(
 
 #ifdef HYPERDISSIPATION_KY
 
-    const FLUCS_FLOAT ky_max = ky_from_iky(HALF_NY - 1);
     const FLUCS_FLOAT ky2 = ky * ky;
+
+#ifdef HYPERDISSIPATION_KY_NORMALISED
+    const FLUCS_FLOAT ky_max = ky_from_iky(HALF_NY - 1);
     const FLUCS_FLOAT ky2_norm = ky2 / (ky_max * ky_max);
+#else
+    const FLUCS_FLOAT ky2_norm = ky2;
+#endif
+
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KY;
 
     #pragma unroll
@@ -94,9 +112,15 @@ FLUCS_FLOAT get_hyperdissipation_kz(
 
 #ifdef HYPERDISSIPATION_KZ
 
-    const FLUCS_FLOAT kz_max = kz_from_ikz(HALF_NZ - 1);
     const FLUCS_FLOAT kz2 = kz * kz;
+
+#ifdef HYPERDISSIPATION_KZ_NORMALISED
+    const FLUCS_FLOAT kz_max = kz_from_ikz(HALF_NZ - 1);
     const FLUCS_FLOAT kz2_norm = kz2 / (kz_max * kz_max);
+#else
+    const FLUCS_FLOAT kz2_norm = kz2;
+#endif
+
     FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KZ;
 
     #pragma unroll

@@ -50,10 +50,17 @@ alpha = 0.5
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false
 
-# Generic hyperdissipation that is added to the linear matrix of any system. All
-# terms are of the form
-# hyper = coefficient * (k / k_max)**(2 * power)
-# Set the coefficient to a negative number to disable. If set to be adaptive, 
+# Whether to perform some predefined health checks (e.g., linear spectrum against a reference)
+check_health = true
+
+# Generic hyperdissipation that is added to the linear matrix of any system.
+# If normalised, the terms are of the form
+# hyper = coefficient * (k / k_max)**(2 * power),
+# otherwise, we have
+# hyper = coefficient * k**(2 * power),
+# where 'coefficient' is perp, kx, ky, or kz.
+# Set the coefficient to a negative number to disable.
+# If set to be adaptive,
 # the coefficient is rescaled by 1/dt at each timestep, such that the amplitude
 # of a purely dissipated mode is multiplied at each step by
 # (1 - (1 - alpha) * hyper) / (1 + alpha * hyper)
@@ -61,15 +68,22 @@ precompute_linear_matrix = false
 perp = -1.0
 perp_power = 2
 perp_adaptive = false
+perp_normalised = true
+
 kx = -1.0
 kx_power = 2
 kx_adaptive = false
+kx_normalised = true
+
 ky = -1.0
 ky_power = 2
 ky_adaptive = false
+ky_normalised = true
+
 kz = -1.0
 kz_power = 2
 kz_adaptive = false
+kz_normalised = true
 
 [forcing]
 method = ""

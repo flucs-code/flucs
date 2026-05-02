@@ -820,5 +820,5 @@ class FlucsPostProcessing:
                 f"({len(self.io_paths)}, "
                 f"{self.output_files}, "
                 f"{self.save_directory})",
-                source=self
+                source=self,
             )

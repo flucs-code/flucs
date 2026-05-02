@@ -2,7 +2,9 @@
 Abstract base class for a system that can be solved by FourierSolver.
 """
 
-from abc import abstractmethod
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from typing import ClassVar
 
 import cupy as cp
@@ -23,6 +25,19 @@ from .fourier_system_diagnostics import (
 )
 
 
+class FourierSystemForcing(ABC):
+    linear: bool
+    explicit: bool
+    system: FourierSystem
+
+    @abstractmethod
+    def setup_cuda_defs(self):
+        pass
+
+    def __init__(self, system: FourierSystem):
+        self.system = system
+
+
 class FourierSystem(FlucsSystem):
     """A generic system of equations solved using pseudospectral Fourier
     methods."""
@@ -30,10 +45,10 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
-    # Number of fields whose equations contain nonlinear terms. This is
+    # Number of fields whose equations contain explicit terms. This is
     # typically the same as number_of_fields, but can be smaller for some
     # systems
-    number_of_fields_nonlinear: int
+    number_of_fields_explicit: int
 
     # Derivatives and bits used for the nonlinear terms
     number_of_dft_derivatives: int
@@ -136,8 +151,9 @@ class FourierSystem(FlucsSystem):
     }
 
     # Forcing methods
-    solver_forcing_methods: ClassVar[frozenset[str]] = frozenset() # Currently none
-    system_forcing_methods: ClassVar[frozenset[str]] = frozenset()
+    forcing_object: FourierSystemForcing
+    solver_forcing_methods: ClassVar[dict[str, FourierSystemForcing]] = {}
+    system_forcing_methods: ClassVar[dict[str, FourierSystemForcing]] = {}
 
     def _interpret_input(self):
         """Validates inputs and sets up the number of lattice points."""
@@ -169,15 +185,6 @@ class FourierSystem(FlucsSystem):
                 "Cannot enable both hyperdissipation.perp "
                 "and hyperdissipation.kx/ky simultaneously. "
                 "Use either perp or kx/ky. "
-            )
-
-        # Check for conflicts in forcing parameters
-        forcing_method = self.input["forcing.method"]
-        if forcing_method and forcing_method not in (
-            set(self.solver_forcing_methods) | set(self.system_forcing_methods)
-        ):
-            raise InvalidFlucsInputFileError(
-                f"Invalid forcing.method: {self.input['forcing.method']}."
             )
 
         # Set resolutions appropriately
@@ -278,8 +285,24 @@ class FourierSystem(FlucsSystem):
             self.padded_ny,
         )
 
-        # Finally, precompute wavenumbers (useful for many things)
+        # Precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
+
+        # Finally, setup forcing
+        forcing_method = self.input["forcing.method"]
+        if not forcing_method:
+            return
+
+        if forcing_method not in (
+            self.solver_forcing_methods | self.system_forcing_methods
+        ):
+            raise InvalidFlucsInputFileError(
+                f"Invalid forcing.method: {self.input['forcing.method']}."
+            )
+
+        self.forcing_object = (
+            self.solver_forcing_methods | self.system_forcing_methods
+        )[forcing_method](self)
 
     def setup(self) -> None:
         """
@@ -349,14 +372,14 @@ class FourierSystem(FlucsSystem):
             self.dft_bits = cp.zeros(1, dtype=self.complex)
             return
 
-        # For the nonlinear terms, we need to keep terms at the current
+        # For the explicit terms, we need to keep terms at the current
         # time step + terms from the past 2 time steps since we are
         # using AB3.
-        # The nonlinear terms are indexed as (step, field, kz, kx, ky)
-        self.multistep_nonlinear_terms = cp.zeros(
+        # The explicit terms are indexed as (step, field, kz, kx, ky)
+        self.multistep_explicit_terms = cp.zeros(
             (
                 3,
-                self.number_of_fields_nonlinear,
+                self.number_of_fields_explicit,
                 self.nz,
                 self.nx,
                 self.half_ny,
@@ -575,6 +598,11 @@ class FourierSystem(FlucsSystem):
         Alerts the user if anything needs their attention.
 
         """
+        if not self.input["setup.check_health"]:
+            flucsprint("Skipping health checks.", source=self)
+            return
+
+        flucsprint("Performing health checks...", source=self)
 
         # Check consistency of linear matrices
         matrix_solver = self.compute_linear_matrix()
@@ -594,11 +622,16 @@ class FourierSystem(FlucsSystem):
                 ("kz", kz**2),
             ]:
                 coeff = self.input[f"hyperdissipation.{component}"]
+                norm = self.input[f"hyperdissipation.{component}_normalised"]
                 if coeff > 0.0:
-                    k2_max = np.max(np.abs(k2))
+                    if norm:
+                        k2_norm = np.max(np.abs(k2))
+                    else:
+                        k2_norm = self.float(1.0)
+
                     contribution = coeff * (
-                        (k2 / k2_max) **
-                        self.input[f"hyperdissipation.{component}_power"]
+                        (k2 / k2_norm)
+                        ** self.input[f"hyperdissipation.{component}_power"]
                     )
                     if self.input[f"hyperdissipation.{component}_adaptive"]:
                         contribution /= self.init_dt
@@ -649,7 +682,6 @@ class FourierSystem(FlucsSystem):
             )
 
     def ready(self) -> None:
-
         # Reset time counters
         self.current_step = self.int(0)
         self.current_time = self.init_time
@@ -669,9 +701,14 @@ class FourierSystem(FlucsSystem):
             np.reshape(self.fields_initial, self.fields[0].shape)
         )
 
-        # Reset AB3 nonlinear history
+        # Reset AB3 history
         if not self.input["setup.linear"]:
-            self.multistep_nonlinear_terms.fill(self.float(0.0))
+            self.multistep_explicit_terms.fill(self.complex(0.0))
+            cupy_set_device_pointer(
+                self.cupy_module,
+                "multistep_explicit_terms",
+                self.multistep_explicit_terms,
+            )
 
         super().ready()
 
@@ -735,7 +772,7 @@ class FourierSystem(FlucsSystem):
         )
 
         self.module_options.define_int(
-            "NUMBER_OF_FIELDS_NONLINEAR", self.number_of_fields_nonlinear
+            "NUMBER_OF_FIELDS_EXPLICIT", self.number_of_fields_explicit
         )
 
         self.module_options.define_dimension(
@@ -788,11 +825,18 @@ class FourierSystem(FlucsSystem):
                     f"HYPERDISSIPATION_{component.upper()}_POWER",
                     self.input[f"hyperdissipation.{component}_power"],
                 )
+
                 if self.input[f"hyperdissipation.{component}_adaptive"]:
                     self.module_options.define_flag(
                         f"HYPERDISSIPATION_{component.upper()}_ADAPTIVE"
                     )
                     message += " (adaptive)"
+
+                if self.input[f"hyperdissipation.{component}_normalised"]:
+                    self.module_options.define_flag(
+                        f"HYPERDISSIPATION_{component.upper()}_NORMALISED"
+                    )
+                    message += " (normalised)"
 
                 flucsprint(message)
 
@@ -807,6 +851,14 @@ class FourierSystem(FlucsSystem):
 
             if self.input["forcing.method"] in self.solver_forcing_methods:
                 self.module_options.define_flag("FORCING_FROM_SOLVER")
+
+            if self.forcing_object.linear:
+                self.module_options.define_flag("FORCING_LINEAR")
+
+            if self.forcing_object.explicit:
+                self.module_options.define_flag("FORCING_EXPLICIT")
+
+            self.forcing_object.setup_cuda_defs()
 
         # Setup
         self.module_options.define_float("ALPHA", self.input["setup.alpha"])
@@ -1223,7 +1275,7 @@ class FourierSystem(FlucsSystem):
 
     @abstractmethod
     def finish_time_step(self) -> None:
-        """Combines the nonlinear and linear terms in order to finish the time
+        """Combines the explicit and linear terms in order to finish the time
         step"""
         self.finish_step_kernel(
             (self.half_unpadded_cuda_grid_size,),

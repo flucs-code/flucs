@@ -54,9 +54,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
     def init_vars(self):
         if not self.system.input["setup.linear"]:
             flucsprint(
-                "running nonlinearly.",
-                source=self,
-                message_type="warning"
+                "running nonlinearly.", source=self, message_type="warning"
             )
 
         field = np.arange(self.system.number_of_fields)
