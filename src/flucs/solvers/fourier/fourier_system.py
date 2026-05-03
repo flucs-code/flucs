@@ -23,22 +23,7 @@ from .fourier_system_diagnostics import (
     LinearEigensystemDiag,
     RealspaceDataDiag,
 )
-
-class FourierSystemForcing(ABC):
-    """
-    Base class for optional forcing methods used by FourierSystem solvers.
-
-    """
-    linear: bool
-    explicit: bool
-    system: FourierSystem
-
-    @abstractmethod
-    def setup_cuda_definitions(self):
-        pass
-
-    def __init__(self, system: FourierSystem):
-        self.system = system  
+from .fourier_system_forcing import FourierSystemForcing
 
 class FourierSystem(FlucsSystem):
     """
