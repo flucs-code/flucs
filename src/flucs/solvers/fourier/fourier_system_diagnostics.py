@@ -8,6 +8,7 @@ import numpy as np
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 from flucs.solvers import FlucsSolverState
+from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
     from flucs.solvers.fourier.fourier_system import FourierSystem
@@ -52,7 +53,9 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
     def init_vars(self):
         if not self.system.input["setup.linear"]:
-            print(f"[{type(self).__name__}] WARNING: running nonlinearly.")
+            flucsprint(
+                "running nonlinearly.", source=self, message_type="warning"
+            )
 
         field = np.arange(self.system.number_of_fields)
 
@@ -250,7 +253,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 if converged:
                     message = "converged"
 
-                print(f"[{type(self).__name__}] {message}")
+                flucsprint(message, source=self)
                 self.system.solver.interrupted = True
 
 
@@ -273,7 +276,9 @@ class FourierDataDiag(FlucsDiagnostic):
     """
 
     name = "fourier_data"
+    system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
+
     type: str
     slices: dict
     slice_calculators: list[Callable[[], None]]
@@ -376,7 +381,9 @@ class RealspaceDataDiag(FlucsDiagnostic):
     """
 
     name = "realspace_data"
+    system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
+
     type: str
     slices: dict
     slice_calculators: list[Callable[[], None]]

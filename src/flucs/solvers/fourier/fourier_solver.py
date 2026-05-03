@@ -1,4 +1,5 @@
-"""Pseudospectral Fourier-space solver.
+"""
+Pseudospectral Fourier-space solver.
 
 Solves a system of PDEs in a periodic box using
 pseudospectral Fourier methods.
@@ -9,10 +10,12 @@ import time
 
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
+from flucs.utilities.messages import flucsprint
 
 
 class FourierSolver(FlucsSolver[FourierSystem]):
-    """A pseudospectral solver for a system of nonlinear fluid PDEs in 2D or 3D
+    """
+    A pseudospectral solver for a system of nonlinear fluid PDEs in 2D or 3D
     that are specified by a FourierSystem.
 
     """
@@ -34,13 +37,13 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.ready()
 
         time_taken = self._solver_loop()
-        print(
+        flucsprint(
             f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
             f"taking  {time_taken:.3e} seconds."
         )
 
         if self.system.input["setup.timing"]:
-            print("Timing completed. Exiting.\n")
+            flucsprint("Timing completed. Exiting.\n")
             return
 
         # Reset system and actually run it
@@ -49,11 +52,11 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         time_taken = self._solver_loop()
 
-        print(
+        flucsprint(
             f"Finished at time {float(self.system.current_time):.3e}, "
             f"dt {float(self.system.current_dt):.3e}"
         )
-        print(f"flucs given in {time_taken} seconds.\n")
+        flucsprint(f"flucs given in {time_taken} seconds.\n")
 
     def _not_done(self) -> bool:
         if self.interrupted:

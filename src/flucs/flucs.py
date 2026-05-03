@@ -1,8 +1,3 @@
-"""
-Main flucs script.
-Used to run simulations.
-"""
-
 import argparse
 import importlib.metadata
 import pathlib as pl
@@ -14,6 +9,7 @@ from importlib.metadata import entry_points
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
+from flucs.utilities.messages import flucsprint
 
 FLUCS_HEADER = rf"""
 ***************************************************
@@ -99,18 +95,18 @@ def list_solvers_and_systems():
 
     _indent = 3 * " "
 
-    print("Installed solvers:")
+    flucsprint("Installed solvers:")
     for s in sorted(solvers, key=lambda e: e.name.lower()):
-        print(f"{_indent}{s.name}")
+        flucsprint(f"{_indent}{s.name}")
 
-    print("Installed systems:")
+    flucsprint("Installed systems:")
     if not systems:
-        print(f"{_indent}None")
+        flucsprint(f"{_indent}None")
     else:
         for s in sorted(systems, key=lambda e: e.name.lower()):
-            print(f"{_indent}{s.name:20} ({s.dist.name})")
+            flucsprint(f"{_indent}{s.name:20} ({s.dist.name})")
 
-    print("For more information, see https://github.com/flucs-code")
+    flucsprint("For more information, see https://github.com/flucs-code")
 
 
 def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
@@ -147,7 +143,7 @@ def run_flucs(input_path: pl.Path, override: list | None = None):
 
     with open(log_path, "a", encoding="utf-8") as log_file:
         with FlucsLogHandler(log_file, keep_stdout=True):
-            print(f"{FLUCS_HEADER}")
+            flucsprint(f"{FLUCS_HEADER}")
 
             flucs_input = FlucsInput(input_path, override)
 
