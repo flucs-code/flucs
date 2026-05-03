@@ -1029,16 +1029,61 @@ class FourierSystem(FlucsSystem):
         # Handle known initialisation types
         match self.input["init.type"]:
             case "white_noise":
+                # Set random seed
                 np.random.seed(self.input["init.rand_seed"])
+
+                # Set initial fields
                 self.fields_initial = self.input[
                     "init.amplitude"
                 ] * np.random.random(
                     (self.number_of_fields, *self.half_unpadded_tuple)
                 )
 
+            case "gaussian":
+                # Construct wavenumbers
+                kx, ky, kz = self.get_broadcast_wavenumbers()
+
+                try:
+                    k2 = sum(
+                        {"kx": kx**2, "ky": ky**2, "kz": kz**2}[component] 
+                        for component in self.input["init.components"]
+                        )
+                except KeyError as err:
+                    raise InvalidFlucsInputFileError(
+                        "init.components entries must be one of kx, ky, or kz."
+                    )
+
+                # Envelope
+                envelope = (k2 ** self.input["init.power"]) * np.exp(
+                   - 1.0 * (k2 / self.input["init.width"] ** 2)
+                )
+                envelope[k2 == 0] = 0.0
+
+                # Phase
+                phase = self.input["init.phase"]
+                if phase == "random":
+                    random = np.random.default_rng(self.input["init.rand_seed"])
+                    angle = random.uniform(
+                        0.0,
+                        2.0 * np.pi,
+                        size=(self.number_of_fields, *self.half_unpadded_tuple),
+                    )
+                else:
+                    angle = self.float(phase)
+
+                # Normalise fields to the requested amplitude
+                self.fields_initial = (
+                    envelope[None, ...] * np.exp(1j * angle)
+                ).astype(self.complex)
+
+                norm = np.sqrt(np.sum(np.abs(self.fields_initial) ** 2))
+
+                self.fields_initial *= self.input["init.amplitude"] / norm
+
             case _:
-                # Exotic initialisation types should be handled by each solver
-                # separately.
+                raise InvalidFlucsInputFileError(
+                    f"Invalid init.type: {self.input['init.type']}."
+                )
                 pass
 
     def _check_initial_conditions(self) -> None:

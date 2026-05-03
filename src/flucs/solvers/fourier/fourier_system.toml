@@ -53,6 +53,14 @@ precompute_linear_matrix = false
 # Whether to perform some predefined health checks (e.g., linear spectrum against a reference)
 check_linear_matrix = true
 
+[init]
+
+# for type = "gaussian"
+components = ['kx', 'ky']
+width = 1.0
+power = 6.0
+phase = "random"
+
 # Generic hyperdissipation that is added to the linear matrix of any system.
 # The terms are of the form
 # hyper = coefficient * (k        )**(2 * power),
