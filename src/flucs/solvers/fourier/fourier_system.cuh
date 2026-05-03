@@ -125,7 +125,7 @@ __device__ void add_explicit_terms(
 
 }
 
-// Wrapper for get_linear_matrix that adds hyperdissipation and forcing if needed
+// Wrapper for get_linear_matrix that adds forcing if needed
 __device__ __forceinline__
 void get_linear_matrix_wrapped(const size_t index,
                        const FLUCS_FLOAT dt,
@@ -136,18 +136,6 @@ void get_linear_matrix_wrapped(const size_t index,
 #ifdef FORCING_LINEAR
     add_forcing_linear(index, dt, matrix);
 #endif
-
-#if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) ||\
-      defined(HYPERDISSIPATION_KY) || defined(HYPERDISSIPATION_KZ))
-    return;
-#endif
-
-    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index, dt);
-
-    #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++)
-        matrix[i][i] += hyperdissipation;
-    
 }
 
 
@@ -214,6 +202,37 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     }
 }
 
+// Adds hyperdissipation to the final fields
+__device__ __forceinline__
+void add_hyperdissipation(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    FLUCS_COMPLEX* current_fields
+) {
+    #if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) || \
+          defined(HYPERDISSIPATION_KY)   || defined(HYPERDISSIPATION_KZ))
+        return;
+    #endif
+
+    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index, dt);
+    const FLUCS_FLOAT factor = exp(-dt * hyperdissipation);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+        current_fields[index + i * HALFUNPADDEDSIZE] *= factor;
+    }
+}
+
+// Function for end-of-timestep operations
+__device__ __forceinline__
+void complete_finish_step(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const long long current_step,
+    FLUCS_COMPLEX* current_fields
+) {
+    add_hyperdissipation(index, dt, current_fields);
+}
 
 // Called right at the end of a time step,
 // combines the linear matrices and nonlinear
@@ -303,6 +322,9 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
     }
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
+
+complete_finish_step(index, dt, current_step, current_fields);
+
 }
 
 } // extern "C"
