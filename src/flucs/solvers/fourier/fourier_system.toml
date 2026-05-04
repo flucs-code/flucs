@@ -55,7 +55,7 @@ check_linear_matrix = true
 
 [init]
 
-# for type = "gaussian"
+# for method = "gaussian"
 components = ['kx', 'ky']
 width = 1.0
 power = 6.0

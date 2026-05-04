@@ -997,8 +997,8 @@ class FourierSystem(FlucsSystem):
 
             return
 
-        # Handle known initialisation types
-        match self.input["init.type"]:
+        # Handle known initialisation methods
+        match self.input["init.method"]:
             case "white_noise":
                 # Set random seed
                 np.random.seed(self.input["init.rand_seed"])
@@ -1040,7 +1040,7 @@ class FourierSystem(FlucsSystem):
                         size=(self.number_of_fields, *self.half_unpadded_tuple),
                     )
                 else:
-                    angle = self.float(phase)
+                    angle = self.float(phase) / (2.0 * np.pi)
 
                 # Normalise fields to the requested amplitude
                 self.fields_initial = (
@@ -1053,7 +1053,7 @@ class FourierSystem(FlucsSystem):
 
             case _:
                 raise InvalidFlucsInputFileError(
-                    f"Invalid init.type: {self.input['init.type']}."
+                    f"Invalid init.method: {self.input['init.method']}."
                 )
                 pass
 
