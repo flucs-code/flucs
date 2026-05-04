@@ -1026,7 +1026,7 @@ class FourierSystem(FlucsSystem):
 
                 # Envelope
                 envelope = (k2 ** self.input["init.power"]) * np.exp(
-                   - 1.0 * (k2 / self.input["init.width"] ** 2)
+                   - 2.0 * (k2 / self.input["init.width"] ** 2)
                 )
                 envelope[k2 == 0] = 0.0
 
