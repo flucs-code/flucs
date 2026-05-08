@@ -3,7 +3,7 @@ __device__ __forceinline__
 FLUCS_FLOAT get_hyperdissipation_perp(
     const FLUCS_FLOAT kx,
     const FLUCS_FLOAT ky,
-    const FLUCS_FLOAT dt
+    const FLUCS_FLOAT adaptive_rate
 ) {
 
 #ifdef HYPERDISSIPATION_PERP
@@ -25,7 +25,7 @@ FLUCS_FLOAT get_hyperdissipation_perp(
         hyperdissipation *= kperp2_norm;
 
     #ifdef HYPERDISSIPATION_PERP_ADAPTIVE
-        hyperdissipation /= dt;
+        hyperdissipation *= adaptive_rate;
     #endif
 
     return hyperdissipation;
@@ -39,7 +39,7 @@ FLUCS_FLOAT get_hyperdissipation_perp(
 __device__ __forceinline__
 FLUCS_FLOAT get_hyperdissipation_kx(
     const FLUCS_FLOAT kx,
-    const FLUCS_FLOAT dt
+    const FLUCS_FLOAT adaptive_rate
 ) {
 
 #ifdef HYPERDISSIPATION_KX
@@ -60,7 +60,7 @@ FLUCS_FLOAT get_hyperdissipation_kx(
         hyperdissipation *= kx2_norm;
 
     #ifdef HYPERDISSIPATION_KX_ADAPTIVE
-        hyperdissipation /= dt;
+        hyperdissipation *= adaptive_rate;
     #endif
 
     return hyperdissipation;
@@ -73,7 +73,7 @@ FLUCS_FLOAT get_hyperdissipation_kx(
 __device__ __forceinline__
 FLUCS_FLOAT get_hyperdissipation_ky(
     const FLUCS_FLOAT ky,
-    const FLUCS_FLOAT dt
+    const FLUCS_FLOAT adaptive_rate
 ) {
 
 #ifdef HYPERDISSIPATION_KY
@@ -94,7 +94,7 @@ FLUCS_FLOAT get_hyperdissipation_ky(
         hyperdissipation *= ky2_norm;
 
     #ifdef HYPERDISSIPATION_KY_ADAPTIVE
-        hyperdissipation /= dt;
+        hyperdissipation *= adaptive_rate;
     #endif
 
     return hyperdissipation;
@@ -107,7 +107,7 @@ FLUCS_FLOAT get_hyperdissipation_ky(
 __device__ __forceinline__
 FLUCS_FLOAT get_hyperdissipation_kz(
     const FLUCS_FLOAT kz,
-    const FLUCS_FLOAT dt
+    const FLUCS_FLOAT adaptive_rate
 ) {
 
 #ifdef HYPERDISSIPATION_KZ
@@ -128,7 +128,7 @@ FLUCS_FLOAT get_hyperdissipation_kz(
         hyperdissipation *= kz2_norm;
 
     #ifdef HYPERDISSIPATION_KZ_ADAPTIVE
-        hyperdissipation /= dt;
+        hyperdissipation *= adaptive_rate;
     #endif
 
     return hyperdissipation;
@@ -141,7 +141,7 @@ FLUCS_FLOAT get_hyperdissipation_kz(
 __device__ __forceinline__
 FLUCS_FLOAT get_hyperdissipation(
     const size_t index,
-    const FLUCS_FLOAT dt
+    const FLUCS_FLOAT adaptive_rate
 ) {
 
     indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
@@ -150,24 +150,26 @@ FLUCS_FLOAT get_hyperdissipation(
     const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
     const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
 
-    return get_hyperdissipation_perp(kx, ky, dt)
-        + get_hyperdissipation_kx(kx, dt)
-        + get_hyperdissipation_ky(ky, dt)
-        + get_hyperdissipation_kz(kz, dt);
+    return get_hyperdissipation_perp(kx, ky, adaptive_rate)
+        + get_hyperdissipation_kx(kx, adaptive_rate)
+        + get_hyperdissipation_ky(ky, adaptive_rate)
+        + get_hyperdissipation_kz(kz, adaptive_rate);
 }
 
 // Functor for calculating the size of the term due to perpendicular hyperdissipation for a given mode
 template<typename FunctorT>
 struct HyperdissipationPerp_Functor {
     const FunctorT functor;
-    const FLUCS_FLOAT dt;
+    const FLUCS_FLOAT adaptive_rate;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
         
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
         const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
 
-        const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_perp(kx, ky, dt);
+        const FLUCS_FLOAT hyperdissipation = (
+            get_hyperdissipation_perp(kx, ky, adaptive_rate)
+        );
 
         return hyperdissipation * functor(index);
     }
@@ -177,13 +179,15 @@ struct HyperdissipationPerp_Functor {
 template<typename FunctorT>
 struct HyperdissipationKx_Functor {
     const FunctorT functor;
-    const FLUCS_FLOAT dt;
+    const FLUCS_FLOAT adaptive_rate;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
 
-        const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_kx(kx, dt);
+        const FLUCS_FLOAT hyperdissipation = (
+            get_hyperdissipation_kx(kx, adaptive_rate)
+        );
 
         return hyperdissipation * functor(index);
     }
@@ -193,13 +197,15 @@ struct HyperdissipationKx_Functor {
 template<typename FunctorT>
 struct HyperdissipationKy_Functor {
     const FunctorT functor;
-    const FLUCS_FLOAT dt;
+    const FLUCS_FLOAT adaptive_rate;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
 
-        const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_ky(ky, dt);
+        const FLUCS_FLOAT hyperdissipation = (
+            get_hyperdissipation_ky(ky, adaptive_rate)
+        );
 
         return hyperdissipation * functor(index);
     }
@@ -209,13 +215,15 @@ struct HyperdissipationKy_Functor {
 template<typename FunctorT>
 struct HyperdissipationKz_Functor {
     const FunctorT functor;
-    const FLUCS_FLOAT dt;
+    const FLUCS_FLOAT adaptive_rate;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
         indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
         const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
 
-        const FLUCS_FLOAT hyperdissipation = get_hyperdissipation_kz(kz, dt);
+        const FLUCS_FLOAT hyperdissipation = (
+            get_hyperdissipation_kz(kz, adaptive_rate)
+        );
 
         return hyperdissipation * functor(index);
     }
@@ -227,10 +235,13 @@ struct HyperdissipationKz_Functor {
 template<typename FunctorT>
 struct Hyperdissipation_Functor {
     const FunctorT functor;
-    const FLUCS_FLOAT dt;
+    const FLUCS_FLOAT adaptive_rate;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
-        const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index, dt);
+        const FLUCS_FLOAT hyperdissipation = (
+            get_hyperdissipation(index, adaptive_rate)
+        );
+        
         return hyperdissipation * functor(index);
     }
 };

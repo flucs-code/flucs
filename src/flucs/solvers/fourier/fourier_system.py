@@ -89,6 +89,9 @@ class FourierSystem(FlucsSystem):
     dt_array: np.ndarray
     ab3_coefficients: np.ndarray
 
+    # Hyperdissipation variables
+    adaptive_rate: float
+
     # CUDA kernels
     precompute_iteration_matrices_kernel: cp.RawKernel
     finish_step_kernel: cp.RawKernel
@@ -656,6 +659,7 @@ class FourierSystem(FlucsSystem):
             [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
+        self.adaptive_rate = 1.0
 
         # Reset CFL
         self.current_cfl = 0.0
@@ -1213,6 +1217,7 @@ class FourierSystem(FlucsSystem):
 
         self.current_cfl = self.cfl_rate_float * self.current_dt
         self.dt_array[self.current_step % 3] = self.current_dt
+        self.adaptive_rate = self.cfl_rate_float
 
     def _update_ab3_coefficients(self) -> None:
         """
@@ -1260,7 +1265,8 @@ class FourierSystem(FlucsSystem):
 
     @abstractmethod
     def begin_time_step(self) -> None:
-        """Executed in the beginning of the time step. Should be used to
+        """
+        Executed in the beginning of the time step. Should be used to
         advance any system-specific counters.
 
         """
@@ -1272,7 +1278,8 @@ class FourierSystem(FlucsSystem):
 
     @abstractmethod
     def calculate_nonlinear_terms(self) -> None:
-        """Computes the nonlinear terms and adjusts the time step if
+        """
+        Computes the nonlinear terms and adjusts the time step if
         necessary.
 
         Called in the beginning of a time step.
@@ -1284,13 +1291,18 @@ class FourierSystem(FlucsSystem):
 
     @abstractmethod
     def finish_time_step(self) -> None:
-        """Combines the explicit and linear terms in order to finish the time
-        step"""
+        """
+        Combines the explicit and linear terms in order to finish the time
+        step
+        
+        """
+
         self.finish_step_kernel(
             (self.half_unpadded_cuda_grid_size,),
             (self.cuda_block_size,),
             (
                 self.float(self.current_dt),
+                self.float(self.adaptive_rate),
                 self.current_step,
                 self.ab3_coefficients[0],
                 self.ab3_coefficients[1],

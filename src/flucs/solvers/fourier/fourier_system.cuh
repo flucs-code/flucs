@@ -207,6 +207,7 @@ __device__ __forceinline__
 void add_hyperdissipation(
     const size_t index,
     const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT adaptive_rate,
     FLUCS_COMPLEX* current_fields
 ) {
     #if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) || \
@@ -214,7 +215,9 @@ void add_hyperdissipation(
         return;
     #endif
 
-    const FLUCS_FLOAT hyperdissipation = get_hyperdissipation(index, dt);
+    const FLUCS_FLOAT hyperdissipation = (
+        get_hyperdissipation(index, adaptive_rate)
+    );
     const FLUCS_FLOAT factor = exp(-dt * hyperdissipation);
 
     #pragma unroll
@@ -228,23 +231,27 @@ __device__ __forceinline__
 void complete_finish_step(
     const size_t index,
     const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT adaptive_rate,
     const long long current_step,
     FLUCS_COMPLEX* current_fields
 ) {
-    add_hyperdissipation(index, dt, current_fields);
+    add_hyperdissipation(index, dt, adaptive_rate, current_fields);
 }
 
 // Called right at the end of a time step,
 // combines the linear matrices and nonlinear
 // terms to find the fields at the current time step.
-__global__ void finish_step(const FLUCS_FLOAT dt,
-                            const long long current_step,
-                            const FLUCS_FLOAT AB0,
-                            const FLUCS_FLOAT AB1,
-                            const FLUCS_FLOAT AB2,
-                            const FLUCS_COMPLEX* previous_fields,
-                            const FLUCS_COMPLEX* dft_bits,
-                            FLUCS_COMPLEX* current_fields){
+__global__ void finish_step(
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT adaptive_rate,
+    const long long current_step,
+    const FLUCS_FLOAT AB0,
+    const FLUCS_FLOAT AB1,
+    const FLUCS_FLOAT AB2,
+    const FLUCS_COMPLEX* previous_fields,
+    const FLUCS_COMPLEX* dft_bits,
+    FLUCS_COMPLEX* current_fields
+){
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -323,7 +330,9 @@ __global__ void finish_step(const FLUCS_FLOAT dt,
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
-complete_finish_step(index, dt, current_step, current_fields);
+complete_finish_step(
+    index, dt, adaptive_rate, current_step, current_fields
+);
 
 }
 
