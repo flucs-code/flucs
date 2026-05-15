@@ -281,6 +281,10 @@ class FourierSystem(FlucsSystem):
         self._precompute_wavenumbers()
 
         # Setup forcing
+        self._setup_forcing()
+
+    def _setup_forcing(self):
+        """ Sets up the forcing method. """
         forcing_method = self.input["forcing.method"]
         if not forcing_method:
             return
