@@ -663,7 +663,7 @@ class FourierSystem(FlucsSystem):
             [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
-        self.adaptive_rate = 1.0
+        self.adaptive_rate = self.float(1.0) / self.current_dt
 
         # Reset CFL
         self.current_cfl = 0.0
@@ -1221,7 +1221,7 @@ class FourierSystem(FlucsSystem):
 
         self.current_cfl = self.cfl_rate_float * self.current_dt
         self.dt_array[self.current_step % 3] = self.current_dt
-        self.adaptive_rate = self.cfl_rate_float
+        self.adaptive_rate = self.float(1.0) / self.current_dt
 
     def _update_ab3_coefficients(self) -> None:
         """
