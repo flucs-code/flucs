@@ -1,6 +1,13 @@
 """A selection of useful functions and classes for dealing with CuPy"""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import cupy as cp
+
+if TYPE_CHECKING:
+    from flucs.systems import FlucsSystem
 
 
 def cupy_set_device_pointer(
@@ -161,7 +168,9 @@ class ModuleOptions:
 
 
 class KernelWrapper:
+    system: FlucsSystem
     kernel: cp.RawKernel
+    cuda_kernel_name: str
     grid: tuple[int]
     block: tuple[int]
     shared_mem: int
@@ -172,12 +181,25 @@ class KernelWrapper:
                     args,
                     shared_mem=self.shared_mem)
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, KernelWrapper):
+            return NotImplemented
+
+        return (
+            (self.cuda_kernel_name, self.grid, self.block, self.shared_mem)
+            ==
+            (other.cuda_kernel_name, other.grid, other.block, other.shared_mem)
+        )
+
     def __init__(self,
-                 kernel: cp.RawKernel,
+                 system: FlucsSystem,
+                 cuda_kernel_name: str,
                  grid: tuple[int],
                  block: tuple[int],
                  shared_mem: int = 0) -> None:
-        self.kernel = kernel
+        self.system = system
+        self.cuda_kernel_name = cuda_kernel_name
+        self.kernel = system.cupy_module.get_function(cuda_kernel_name)
         self.grid = grid
         self.block = block
         self.shared_mem = shared_mem
@@ -185,33 +207,23 @@ class KernelWrapper:
 
 class KernelCollection:
     _kernels: dict[str, KernelWrapper]
-    _cupy_module: cp.RawModule
+    system: FlucsSystem
 
-    def __init__(self, cupy_module):
+    def __init__(self, system: FlucsSystem):
         self._kernels = {}
-        self._cupy_module = cupy_module
+        self.system = system
 
     def __getitem__(self, key):
         return self._kernels[key]
 
-    def add(self,
-            kernel_name: str,
-            grid: tuple[int],
-            block: tuple[int],
-            shared_mem: int = 0,
-            cuda_kernel_name: str | None = None):
+    def __setitem__(self, key, value):
+        if key in self._kernels and self._kernels[key] != value:
+            raise ValueError(
+                f"Kernel {key} is already defined "
+                "but with mismatching parameters."
+            )
 
-        if kernel_name in self._kernels:
-            raise ValueError(f"Kernel {kernel_name} is already defined!")
+        self._kernels[key] = value
 
-        if cuda_kernel_name is None:
-            cuda_kernel_name = kernel_name
-
-        kernel = self._cupy_module.get_function(cuda_kernel_name)
-
-        self._kernels[kernel_name] = KernelWrapper(
-            kernel=kernel,
-            grid=grid,
-            block=block,
-            shared_mem=shared_mem
-        )
+    def __contains__(self, key):
+        return key in self._kernels

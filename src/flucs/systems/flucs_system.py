@@ -185,15 +185,18 @@ class FlucsSystem(ABC):
             output_to_execute.execute()
             heapq.heappush(self.output_heap, output_to_execute)
 
-    def temp_array_from_size(self, size: int) -> cp.ndarray:
-        size_str = str(size)
-        if size_str not in self.system._temp_arrays:
-            # Always allocate complex arrays as they have enough memory
-            # to find floats, too
-            temp_array = cp.zeros(size, dtype=self.system.complex)
-            self.system.temp_arrays[size_str] = temp_array
+    def get_temp_array(self, size: int, is_complex=True) -> cp.ndarray:
+        array_key = (size, is_complex)
 
-        return self.system.temp_arrays[size_str]
+        if array_key not in self.temp_arrays:
+            if is_complex:
+                temp_array = cp.zeros(size, dtype=self.complex)
+            else:
+                temp_array = cp.zeros(size, dtype=self.float)
+
+            self.temp_arrays[array_key] = temp_array
+
+        return self.temp_arrays[array_key]
 
     def setup(self) -> None:
         """
@@ -268,7 +271,6 @@ class FlucsSystem(ABC):
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)
-        self.kernels = KernelCollection(self.cupy_module)
         self.setup_kernels()
 
     @abstractmethod
@@ -453,6 +455,7 @@ class FlucsSystem(ABC):
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
         self.temp_arrays = {}
+        self.kernels = KernelCollection(self)
         self.module_options = ModuleOptions()
         self._add_include_dirs()
         self._interpret_input()
