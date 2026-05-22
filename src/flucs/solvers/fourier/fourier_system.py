@@ -542,7 +542,6 @@ class FourierSystem(FlucsSystem):
 
     def create_reduction(
         self,
-        reduction_name: str,
         shape: tuple[int],
         data_kernel_name: str,
         is_complex: bool,
