@@ -176,27 +176,27 @@ class KernelWrapper:
     shared_mem: int
 
     def __call__(self, *args) -> None:
-        self.kernel(self.grid,
-                    self.block,
-                    args,
-                    shared_mem=self.shared_mem)
+        self.kernel(self.grid, self.block, args, shared_mem=self.shared_mem)
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, KernelWrapper):
             return NotImplemented
 
         return (
-            (self.cuda_kernel_name, self.grid, self.block, self.shared_mem)
-            ==
-            (other.cuda_kernel_name, other.grid, other.block, other.shared_mem)
-        )
+            self.cuda_kernel_name,
+            self.grid,
+            self.block,
+            self.shared_mem,
+        ) == (other.cuda_kernel_name, other.grid, other.block, other.shared_mem)
 
-    def __init__(self,
-                 system: FlucsSystem,
-                 cuda_kernel_name: str,
-                 grid: tuple[int],
-                 block: tuple[int],
-                 shared_mem: int = 0) -> None:
+    def __init__(
+        self,
+        system: FlucsSystem,
+        cuda_kernel_name: str,
+        grid: tuple[int],
+        block: tuple[int],
+        shared_mem: int = 0,
+    ) -> None:
         self.system = system
         self.cuda_kernel_name = cuda_kernel_name
         self.kernel = system.cupy_module.get_function(cuda_kernel_name)

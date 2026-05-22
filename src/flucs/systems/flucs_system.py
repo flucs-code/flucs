@@ -23,7 +23,7 @@ from flucs import FlucsInput
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
-from flucs.utilities.cupy import ModuleOptions, KernelCollection
+from flucs.utilities.cupy import KernelCollection, ModuleOptions
 from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:

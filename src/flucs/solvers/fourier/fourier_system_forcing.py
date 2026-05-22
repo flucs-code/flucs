@@ -11,6 +11,7 @@ import numpy as np
 from flucs.input import InvalidFlucsInputFileError
 from flucs.utilities.messages import flucsprint
 
+
 class FourierSystemForcing(ABC):
     """
     Base class for optional forcing methods used by FourierSystem solvers.
@@ -29,8 +30,8 @@ class FourierSystemForcing(ABC):
 
     def setup_forcing_range_kz_kperp(self):
         """
-        Determines the range of wavenumbers to be forced based on the input 
-        parameters, and calculates the number of modes in this range.  
+        Determines the range of wavenumbers to be forced based on the input
+        parameters, and calculates the number of modes in this range.
         """
 
         # Alias system
@@ -84,9 +85,8 @@ class FourierSystemForcing(ABC):
         )
         ky0_modes = ky < 0.5 * ky[0, 0, 1]
 
-        forced_mode_count = (
-            2 * np.sum(forced_modes_halfny)
-            - np.sum(forced_modes_halfny & ky0_modes)
+        forced_mode_count = 2 * np.sum(forced_modes_halfny) - np.sum(
+            forced_modes_halfny & ky0_modes
         )
 
         if forced_mode_count == 0:
@@ -100,5 +100,5 @@ class FourierSystemForcing(ABC):
 
         flucsprint(
             f"Forcing applied on a total of {self.forced_mode_count} modes.",
-            source=self
+            source=self,
         )

@@ -15,7 +15,7 @@ from cupy.cuda import cufft
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
-from flucs.utilities.cupy import cupy_set_device_pointer, KernelWrapper
+from flucs.utilities.cupy import KernelWrapper, cupy_set_device_pointer
 from flucs.utilities.messages import flucsprint
 from flucs.utilities.smooth_numbers import next_smooth_number
 
@@ -288,7 +288,7 @@ class FourierSystem(FlucsSystem):
         self._setup_forcing()
 
     def _setup_forcing(self):
-        """ Sets up the forcing method. """
+        """Sets up the forcing method."""
         forcing_method = self.input["forcing.method"]
         if not forcing_method:
             return
@@ -622,7 +622,9 @@ class FourierSystem(FlucsSystem):
         )
 
         # Arrays for intermediate steps
-        temp_2d = self.get_temp_array(shape[0]*shape[1], is_complex=is_complex)
+        temp_2d = self.get_temp_array(
+            shape[0] * shape[1], is_complex=is_complex
+        )
         temp_1d = self.get_temp_array(shape[0], is_complex=is_complex)
         temp_0d = self.get_temp_array(1, is_complex=is_complex)
 
@@ -700,8 +702,8 @@ class FourierSystem(FlucsSystem):
 
         if not self.input["setup.check_linear_matrix"]:
             flucsprint(
-                "Skipping linear matrix check.", 
-                source=self, 
+                "Skipping linear matrix check.",
+                source=self,
                 message_type="warning",
             )
             return
@@ -712,8 +714,6 @@ class FourierSystem(FlucsSystem):
 
         # Check against the reference linear matrix if provided by the user
         if matrix_reference is not None:
-            kx, ky, kz = self.get_broadcast_wavenumbers()
-
             if not np.allclose(matrix_reference, matrix_solver):
                 raise ValueError(
                     "The linear matrix computed by CUDA disagrees "
@@ -1137,17 +1137,17 @@ class FourierSystem(FlucsSystem):
 
                 try:
                     k2 = sum(
-                        {"kx": kx**2, "ky": ky**2, "kz": kz**2}[component] 
+                        {"kx": kx**2, "ky": ky**2, "kz": kz**2}[component]
                         for component in self.input["init.components"]
-                        )
-                except KeyError as err:
+                    )
+                except KeyError:
                     raise InvalidFlucsInputFileError(
                         "init.components entries must be one of kx, ky, or kz."
                     )
 
                 # Envelope
                 envelope = (k2 ** self.input["init.power"]) * np.exp(
-                   - 2.0 * (k2 / self.input["init.width"] ** 2)
+                    -2.0 * (k2 / self.input["init.width"] ** 2)
                 )
                 envelope[k2 == 0] = 0.0
 
