@@ -41,7 +41,7 @@ FLUCS_COMPLEX warp_sum(FLUCS_COMPLEX v)
 }
 
 // Helper function for expanding varargs into a sum
-template <size_t N, typename T, typename... Functors>
+template <typename T, typename... Functors>
 __device__ __forceinline__
 T add_at(size_t index, Functors... array_functors)
 {
@@ -56,7 +56,7 @@ T add_at(size_t index, Functors... array_functors)
 }
 
 // Helper function for expanding varargs into a product
-template <size_t N, typename T, typename... Functors>
+template <typename T, typename... Functors>
 __device__ __forceinline__
 T multiply_at(size_t index, Functors... array_functors)
 {
@@ -101,7 +101,7 @@ struct Abs2_Functor {
 };
 
 // Functor for multiplying by a constant
-template <typename T, T multiplier>
+template <typename T>
 struct ConstMultiplier_Functor {
     const T* __restrict__ array;
     __device__ __forceinline__ T operator()(size_t index) const {
@@ -178,9 +178,11 @@ struct DelPerp2_Functor {
  *
  * Some examples are given below.
  */
-template <size_t N, bool is_half_axis, typename T, typename... Functors>
+template <typename T, typename... Functors>
 __device__ __forceinline__
 void multiply_and_sum_last_axis(
+    const size_t N,
+    const bool is_half_axis,
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
@@ -192,7 +194,7 @@ void multiply_and_sum_last_axis(
 
     // Grid-stride loop over contiguous axis
     for (size_t iy = tid; iy < N; iy += blockDim.x) {
-        sum += ((is_half_axis && iy > 0) ? (FLUCS_FLOAT)2.0 : (FLUCS_FLOAT)1.0) * multiply_at<N, T>(ix * N + iy, array_functors...);
+        sum += ((is_half_axis && iy > 0) ? (FLUCS_FLOAT)2.0 : (FLUCS_FLOAT)1.0) * multiply_at<T>(ix * N + iy, array_functors...);
     }
 
     // Warp-level reduction
@@ -220,9 +222,11 @@ void multiply_and_sum_last_axis(
 
 // Same as the product kernel but now we add the functors
 // element-wise instead of multiplying them.
-template <size_t N, bool is_half_axis, typename T, typename... Functors>
+template <typename T, typename... Functors>
 __device__ __forceinline__
 void add_and_sum_last_axis(
+    const size_t N,
+    const bool is_half_axis,
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
@@ -234,7 +238,7 @@ void add_and_sum_last_axis(
 
     // Grid-stride loop over contiguous axis
     for (size_t iy = tid; iy < N; iy += blockDim.x) {
-        sum += ((is_half_axis && iy > 0) ? (FLUCS_FLOAT)2.0 : (FLUCS_FLOAT)1.0) * add_at<N, T>(ix * N + iy, array_functors...);
+        sum += ((is_half_axis && iy > 0) ? (FLUCS_FLOAT)2.0 : (FLUCS_FLOAT)1.0) * add_at<T>(ix * N + iy, array_functors...);
     }
 
     // Warp-level reduction
@@ -259,112 +263,57 @@ void add_and_sum_last_axis(
             output[ix] = v * multiplier;
     }
 }
+
 // End of C++ section
 
 
 extern "C" {
 
-// FOURIER SPACE
-
-// Sum over the last axis of an (M, HALF_NY) array.
 __global__
-void last_axis_sum_half_ny(
+void last_axis_sum_float(
+    const size_t N,
+    const bool is_half_axis,
+    const FLUCS_FLOAT* __restrict__ input,
+    FLUCS_FLOAT* __restrict__ output) {
+
+    multiply_and_sum_last_axis(N, is_half_axis, FLOAT_ONE,
+                                                  output,
+                                                  NOP_Functor<FLUCS_FLOAT>{input});
+}
+
+__global__
+void last_axis_sum_complex(
+    const size_t N,
+    const bool is_half_axis,
     const FLUCS_COMPLEX* __restrict__ input,
     FLUCS_COMPLEX* __restrict__ output) {
 
-    multiply_and_sum_last_axis<HALF_NY, true>(COMPLEX_ONE,
+    multiply_and_sum_last_axis(N, is_half_axis, COMPLEX_ONE,
+                                                  output,
+                                                  NOP_Functor<FLUCS_COMPLEX>{input});
+}
+__global__
+void last_axis_average_float(
+    const size_t N,
+    const bool is_half_axis,
+    const FLUCS_FLOAT* __restrict__ input,
+    FLUCS_FLOAT* __restrict__ output) {
+
+    multiply_and_sum_last_axis(N, is_half_axis, FLOAT_ONE / (FLUCS_FLOAT)N,
+                                                       output,
+                                                       NOP_Functor<FLUCS_FLOAT>{input});
+}
+
+__global__
+void last_axis_average_complex(
+    const size_t N,
+    const bool is_half_axis,
+    const FLUCS_COMPLEX* __restrict__ input,
+    FLUCS_COMPLEX* __restrict__ output) {
+
+    multiply_and_sum_last_axis(N, is_half_axis, COMPLEX_ONE / (FLUCS_FLOAT)N,
                                                        output,
                                                        NOP_Functor<FLUCS_COMPLEX>{input});
-}
-
-// Sum over the last axis of an (M, NX) array.
-__global__
-void last_axis_sum_nx(
-    const FLUCS_COMPLEX* __restrict__ input,
-    FLUCS_COMPLEX* __restrict__ output) {
-
-    multiply_and_sum_last_axis<NX, false>(COMPLEX_ONE,
-                                                  output,
-                                                  NOP_Functor<FLUCS_COMPLEX>{input});
-}
-
-// Sum over the last axis of an (M, NZ) array.
-__global__
-void last_axis_sum_nz(
-    const FLUCS_COMPLEX* __restrict__ input,
-    FLUCS_COMPLEX* __restrict__ output) {
-
-    multiply_and_sum_last_axis<NZ, false>(COMPLEX_ONE,
-                                                  output,
-                                                  NOP_Functor<FLUCS_COMPLEX>{input});
-}
-
-
-// REAL UNPADDED
-__global__
-void real_last_axis_sum_half_ny(
-    const FLUCS_FLOAT* __restrict__ input,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    multiply_and_sum_last_axis<HALF_NY, true>(FLOAT_ONE,
-                                                       output,
-                                                       NOP_Functor<FLUCS_FLOAT>{input});
-}
-
-// Sum over the last axis of an (M, NX) array.
-__global__
-void real_last_axis_sum_nx(
-    const FLUCS_FLOAT* __restrict__ input,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    multiply_and_sum_last_axis<NX, false>(FLOAT_ONE,
-                                                  output,
-                                                  NOP_Functor<FLUCS_FLOAT>{input});
-}
-
-// Sum over the last axis of an (M, NZ) array.
-__global__
-void real_last_axis_sum_nz(
-    const FLUCS_FLOAT* __restrict__ input,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    multiply_and_sum_last_axis<NZ, false>(FLOAT_ONE,
-                                                  output,
-                                                  NOP_Functor<FLUCS_FLOAT>{input});
-}
-// REAL PADDED SPACE
-
-// Average over the last axis of an (M, PADDED_NX) array.
-__global__
-void last_axis_average_padded_nx(
-    const FLUCS_FLOAT* __restrict__ input,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    multiply_and_sum_last_axis<PADDED_NX, false>(FLOAT_ONE / (FLUCS_FLOAT)PADDED_NX,
-                                                       output,
-                                                       NOP_Functor<FLUCS_FLOAT>{input});
-}
-
-// Average over the last axis of an (M, PADDED_NY) array.
-__global__
-void last_axis_average_padded_ny(
-    const FLUCS_FLOAT* __restrict__ input,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    multiply_and_sum_last_axis<PADDED_NY, false>(FLOAT_ONE / (FLUCS_FLOAT)PADDED_NY,
-                                                       output,
-                                                       NOP_Functor<FLUCS_FLOAT>{input});
-}
-
-// Average over the last axis of an (M, PADDED_NZ) array.
-__global__
-void last_axis_average_padded_nz(
-    const FLUCS_FLOAT* __restrict__ input,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    multiply_and_sum_last_axis<PADDED_NZ, false>(FLOAT_ONE / (FLUCS_FLOAT)PADDED_NZ,
-                                                       output,
-                                                       NOP_Functor<FLUCS_FLOAT>{input});
 }
 
 } // extern "C"

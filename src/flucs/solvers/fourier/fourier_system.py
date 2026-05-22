@@ -4,7 +4,8 @@ Abstract base class for a system that can be solved by FourierSolver.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+from collections.abc import Callable
 from typing import ClassVar
 
 import cupy as cp
@@ -14,7 +15,7 @@ from cupy.cuda import cufft
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
-from flucs.utilities.cupy import cupy_set_device_pointer
+from flucs.utilities.cupy import cupy_set_device_pointer, KernelWrapper
 from flucs.utilities.messages import flucsprint
 from flucs.utilities.smooth_numbers import next_smooth_number
 
@@ -24,6 +25,9 @@ from .fourier_system_diagnostics import (
     RealspaceDataDiag,
 )
 from .fourier_system_forcing import FourierSystemForcing
+
+THREADS_PER_WARP = 32
+
 
 class FourierSystem(FlucsSystem):
     """
@@ -536,6 +540,105 @@ class FourierSystem(FlucsSystem):
             last_size=last_size,
         )
 
+    def create_reduction(
+        self,
+        reduction_name: str,
+        shape: tuple[int],
+        data_kernel_name: str,
+        is_complex: bool,
+        is_half_axis: tuple[bool] = (False, False),
+        reduce_both_axes: bool = True,
+        shared_mem: int = 0,
+    ) -> Callable[..., cp.ndarray]:
+        """
+        Creates a reduction function, typically used for diagnostics,
+        which combines a few operations into one unit:
+            1. Evaluates the data kernel, whose list of arguments must
+               be of the form (*args, output), where the shape of the output
+               array is specified and must be 2D, i.e., (M, N).
+            2. Sums the output array over the N axis.
+            3. If reduce_both_axes is True, sums over the M axis.
+
+        The reduction itself is a function that can be called as
+        reduction(*args) and returns the final sum as either a CuPy array
+        with a single item (default behaviour) or M items.
+
+        Parameters
+        ----------
+        shape : tuple[int]
+            Shape of the output array of the data kernel.
+        data_kernel_name : str
+            Name of the data kernel in the CUDA module.
+        is_complex : bool
+            Specifies whether the output is complex or real.
+        is_half_axis : tuple[bool], default: (False, False)
+            Specifies if half_axis reductions should be used
+            for either the M or N axis.
+        reduce_both_axes : bool, default: True
+            Whether to perform the final reduction over the M axis.
+        shared_mem : int
+            Bytes of shared memory required by the data kernel in addition
+            to the standard reduction requirements.
+
+        Returns
+        -------
+        reduction : Callable[..., cp.ndarray]
+            The reduction function.
+
+        """
+
+        if len(shape) != 2:
+            raise ValueError("Only 2D reductions are supported.")
+
+        # Create kernels for intermediate steps if needed
+        if is_complex:
+            reduction_shared_mem = THREADS_PER_WARP * self.complex().nbytes
+            cuda_sum_kernel = "last_axis_sum_complex"
+        else:
+            reduction_shared_mem = THREADS_PER_WARP * self.float().nbytes
+            cuda_sum_kernel = "last_axis_sum_float"
+
+        shared_mem += reduction_shared_mem
+
+        data_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name=data_kernel_name,
+            grid=(shape[0] * shape[1],),
+            block=(self.cuda_block_size,),
+            shared_mem=shared_mem,
+        )
+        reduction_kernel_2d = KernelWrapper(
+            system=self,
+            cuda_kernel_name=cuda_sum_kernel,
+            grid=(shape[0],),
+            block=(self.cuda_block_size,),
+            shared_mem=reduction_shared_mem,
+        )
+        reduction_kernel_1d = KernelWrapper(
+            system=self,
+            cuda_kernel_name=cuda_sum_kernel,
+            grid=(1,),
+            block=(self.cuda_block_size,),
+            shared_mem=reduction_shared_mem,
+        )
+
+        # Arrays for intermediate steps
+        temp_2d = self.get_temp_array(shape[0]*shape[1], is_complex=is_complex)
+        temp_1d = self.get_temp_array(shape[0], is_complex=is_complex)
+        temp_0d = self.get_temp_array(1, is_complex=is_complex)
+
+        def reduction(*args):
+            data_kernel(*args, temp_2d)
+            reduction_kernel_2d(shape[1], is_half_axis[1], temp_2d, temp_1d)
+
+            if shape[0] == 1 or not reduce_both_axes:
+                return temp_1d
+
+            reduction_kernel_1d(shape[0], is_half_axis[0], temp_1d, temp_0d)
+            return temp_0d
+
+        return reduction
+
     def _precompute_wavenumbers(self):
         # Check if we have already done this
         if hasattr(self, "ky"):
@@ -856,14 +959,23 @@ class FourierSystem(FlucsSystem):
             self.full_padded_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
 
-        self.kernels.add(
-            "precompute_iteration_matrices",
+        self.kernels["precompute_iteration_matrices"] = KernelWrapper(
+            system=self,
+            cuda_kernel_name="precompute_iteration_matrices",
             grid=(self.half_unpadded_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
 
-        self.kernels.add(
-            "finish_step",
+        self.kernels["finish_step"] = KernelWrapper(
+            system=self,
+            cuda_kernel_name="finish_step",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.kernels["finish_step"] = KernelWrapper(
+            system=self,
+            cuda_kernel_name="finish_step",
             grid=(self.half_unpadded_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
