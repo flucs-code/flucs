@@ -714,10 +714,6 @@ class FourierSystem(FlucsSystem):
 
             cupy_set_device_pointer(self.cupy_module, "rhs_precomp", self.rhs)
 
-            self.precompute_iteration_matrices_kernel = (
-                self.cupy_module.get_function("precompute_iteration_matrices")
-            )
-
             self.precompute_iteration_matrices()
 
         # Print starting message
@@ -731,11 +727,7 @@ class FourierSystem(FlucsSystem):
         if not self.input["setup.precompute_linear_matrix"]:
             return
 
-        self.precompute_iteration_matrices_kernel(
-            (self.half_unpadded_cuda_grid_size,),
-            (self.cuda_block_size,),
-            (self.float(self.current_dt),),
-        )
+        self.kernels["precompute_iteration_matrices"](self.current_dt)
 
     def compile_cupy_module(self) -> None:
         # FourierSystem specific constants
@@ -844,10 +836,8 @@ class FourierSystem(FlucsSystem):
 
         super().compile_cupy_module()
 
-        self.finish_step_kernel = self.cupy_module.get_function("finish_step")
-
-    def setup_cuda_grids(self) -> None:
-        """Sets up the grids and blocks for CUDA kernels.
+    def setup_kernels(self) -> None:
+        """Sets up the CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
         As it stands, this is sysem-specific.
@@ -865,6 +855,18 @@ class FourierSystem(FlucsSystem):
         self.full_padded_cuda_grid_size = (
             self.full_padded_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
+
+        self.kernels.add(
+            "precompute_iteration_matrices",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.kernels.add(
+            "finish_step",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
 
     def compute_linear_matrix(self) -> np.ndarray:
         """
@@ -889,7 +891,7 @@ class FourierSystem(FlucsSystem):
             dtype=self.complex,
         )
 
-        # Get kernel
+        # Get kernel (separate from self.kernels as not part of solver per se)
         compute_linear_matrix_kernel = self.cupy_module.get_function(
             "compute_linear_matrix"
         )
@@ -1298,23 +1300,19 @@ class FourierSystem(FlucsSystem):
         """
         Combines the explicit and linear terms in order to finish the time
         step
-        
+
         """
 
-        self.finish_step_kernel(
-            (self.half_unpadded_cuda_grid_size,),
-            (self.cuda_block_size,),
-            (
-                self.float(self.current_dt),
-                self.float(self.adaptive_rate),
-                self.current_step,
-                self.ab3_coefficients[0],
-                self.ab3_coefficients[1],
-                self.ab3_coefficients[2],
-                self.fields[self.current_step % self.fields_history_size - 1],
-                self.dft_bits,
-                self.fields[self.current_step % self.fields_history_size],
-            ),
+        self.kernels["finish_step"](
+            self.float(self.current_dt),
+            self.float(self.adaptive_rate),
+            self.current_step,
+            self.ab3_coefficients[0],
+            self.ab3_coefficients[1],
+            self.ab3_coefficients[2],
+            self.fields[self.current_step % self.fields_history_size - 1],
+            self.dft_bits,
+            self.fields[self.current_step % self.fields_history_size],
         )
 
         self.current_time += self.current_dt

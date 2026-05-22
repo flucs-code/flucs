@@ -23,7 +23,7 @@ from flucs import FlucsInput
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
-from flucs.utilities.cupy import ModuleOptions
+from flucs.utilities.cupy import ModuleOptions, KernelCollection
 from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
@@ -61,6 +61,13 @@ class FlucsSystem(ABC):
 
     # Compile options for CUDA
     module_options: ModuleOptions
+
+    # CUDA arrays for intermediate calculations
+    # typically used by diagnostics
+    temp_arrays: dict[str, cp.ndarray]
+
+    # CUDA kernels
+    kernels: KernelCollection
 
     # CUFFT plan types
     fft_c2r_plan_type: int
@@ -178,6 +185,16 @@ class FlucsSystem(ABC):
             output_to_execute.execute()
             heapq.heappush(self.output_heap, output_to_execute)
 
+    def temp_array_from_size(self, size: int) -> cp.ndarray:
+        size_str = str(size)
+        if size_str not in self.system._temp_arrays:
+            # Always allocate complex arrays as they have enough memory
+            # to find floats, too
+            temp_array = cp.zeros(size, dtype=self.system.complex)
+            self.system.temp_arrays[size_str] = temp_array
+
+        return self.system.temp_arrays[size_str]
+
     def setup(self) -> None:
         """
         Sets up the initial time data, calls the restart manager,
@@ -251,14 +268,15 @@ class FlucsSystem(ABC):
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)
-        self.setup_cuda_grids()
+        self.kernels = KernelCollection(self.cupy_module)
+        self.setup_kernels()
 
     @abstractmethod
-    def setup_cuda_grids(self) -> None:
-        """Sets up the grids and blocks for CUDA kernels.
+    def setup_kernels(self) -> None:
+        """Sets up the CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
-        As it stands, this is sysem-specific.
+        As it stands, this is system-specific.
         """
         pass
 
@@ -434,6 +452,7 @@ class FlucsSystem(ABC):
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
+        self.temp_arrays = {}
         self.module_options = ModuleOptions()
         self._add_include_dirs()
         self._interpret_input()

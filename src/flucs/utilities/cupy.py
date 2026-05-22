@@ -158,3 +158,60 @@ class ModuleOptions:
                 ret += (f"-D{key}",)
 
         return ret
+
+
+class KernelWrapper:
+    kernel: cp.RawKernel
+    grid: tuple[int]
+    block: tuple[int]
+    shared_mem: int
+
+    def __call__(self, *args) -> None:
+        self.kernel(self.grid,
+                    self.block,
+                    args,
+                    shared_mem=self.shared_mem)
+
+    def __init__(self,
+                 kernel: cp.RawKernel,
+                 grid: tuple[int],
+                 block: tuple[int],
+                 shared_mem: int = 0) -> None:
+        self.kernel = kernel
+        self.grid = grid
+        self.block = block
+        self.shared_mem = shared_mem
+
+
+class KernelCollection:
+    _kernels: dict[str, KernelWrapper]
+    _cupy_module: cp.RawModule
+
+    def __init__(self, cupy_module):
+        self._kernels = {}
+        self._cupy_module = cupy_module
+
+    def __getitem__(self, key):
+        return self._kernels[key]
+
+    def add(self,
+            kernel_name: str,
+            grid: tuple[int],
+            block: tuple[int],
+            shared_mem: int = 0,
+            cuda_kernel_name: str | None = None):
+
+        if kernel_name in self._kernels:
+            raise ValueError(f"Kernel {kernel_name} is already defined!")
+
+        if cuda_kernel_name is None:
+            cuda_kernel_name = kernel_name
+
+        kernel = self._cupy_module.get_function(cuda_kernel_name)
+
+        self._kernels[kernel_name] = KernelWrapper(
+            kernel=kernel,
+            grid=grid,
+            block=block,
+            shared_mem=shared_mem
+        )
