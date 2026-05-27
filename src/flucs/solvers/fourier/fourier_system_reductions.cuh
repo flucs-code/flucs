@@ -4,18 +4,6 @@
 
 // C++ section, contains various templated and/or overloaded functions
 
-// Atomic addition for complex numbers
-// (CURRENTLY NOT USED)
-// __device__ __forceinline__
-// atomicAdd_complex(FLUCS_COMPLEX* address, FLUCS_COMPLEX val) {
-//     // Cast complex to float to allow easy access to real and imag parts
-//     FLUCS_FLOAT* ptr = reinterpret_cast<FLUCS_FLOAT*>(address);
-//
-//     atomicAdd(&ptr[0], val.real());
-//     atomicAdd(&ptr[1], val.imag());
-// }
-
-
 // Sums over warps
 __device__ __forceinline__
 FLUCS_FLOAT warp_sum(FLUCS_FLOAT v)
@@ -264,6 +252,176 @@ void add_and_sum_last_axis(
     }
 }
 
+template <typename T, typename... Functors>
+__device__ __forceinline__
+void add_and_shell_sum(
+    const size_t nkperp,
+    const FLUCS_FLOAT kperp_min,
+    const FLUCS_FLOAT kperp_max,
+    const T multiplier,
+    T* __restrict__ output,
+    Functors... array_functors)
+{
+    // kperp bins are stored in shared memory
+    T* kperp_bins = templated_shared_memory<T>();
+
+    const FLUCS_FLOAT inv_dkperp = ((FLUCS_FLOAT)nkperp) / (kperp_max - kperp_min);
+
+    // One block per kz
+    const size_t ikz  = blockIdx.x;
+
+    const size_t tid = threadIdx.x;
+
+    // First, zero out shared mem
+    for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
+        kperp_bins[bin_index] = 0;
+    }
+
+    __syncthreads();
+
+
+    // Each thread reads data from global memory in a contiguous way
+    for (size_t perp_index = tid; perp_index < NX*HALF_NY; perp_index += blockDim.x) {
+
+        // Convert perp index to ikx and iky
+        indices3d_t indices = get_indices3d<1, NX, HALF_NY>(perp_index);
+        const size_t ikx = indices.ikx;
+        const size_t iky = indices.iky;
+
+        const FLUCS_FLOAT kx = kx_from_ikx(ikx);
+        const FLUCS_FLOAT ky = ky_from_iky(iky);
+        const FLUCS_FLOAT kperp = flucs_sqrt(kx*kx + ky*ky);
+        const FLUCS_FLOAT bin_index_float = (kperp - kperp_min) * inv_dkperp;
+
+        // Evaluates true if kperp < KPERP_MIN
+        // Need to compare the float index as casting negative floats to ints
+        // rounds up rather than down
+        if (bin_index_float < 0)
+            continue;
+
+        // Now can safely cast to int, which rounds down
+        // and we can check if kperp > KPERP_MAX
+        const int bin_index = (int)(bin_index_float);
+        if (bin_index >= nkperp)
+            continue;
+
+
+        // Construct full indices
+        const size_t mode_index = index_from_3d<NZ, NX, HALF_NY>(ikz, ikx, iky);
+        const T mode = add_at<T>(mode_index, array_functors...);
+
+        // Add mode to shared-memory bin
+        atomicAdd(&kperp_bins[bin_index], mode);
+
+        // If ky > 0, need to add the missing conjugate mode
+        if (iky > 0) {
+            const size_t conj_mode_index = index_from_3d<NZ, NX, HALF_NY>(
+                (ikz == 0 ? 0 : NZ - ikz),
+                (ikx == 0 ? 0 : NX - ikx),
+                iky
+            );
+            const T conj_mode = add_at<T>(conj_mode_index, array_functors...);
+            atomicAdd(&kperp_bins[bin_index], conj(conj_mode));
+        }
+
+        
+    }
+
+    __syncthreads();
+
+
+    // Finally, write the output from shared into global memory
+    for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
+        output[bin_index + ikz*nkperp] = kperp_bins[bin_index];
+    }
+ 
+}
+
+template <typename T, typename... Functors>
+__device__ __forceinline__
+void multiply_and_shell_sum(
+    const size_t nkperp,
+    const FLUCS_FLOAT kperp_min,
+    const FLUCS_FLOAT kperp_max,
+    const T multiplier,
+    T* __restrict__ output,
+    Functors... array_functors)
+{
+    // kperp bins are stored in shared memory
+    T* kperp_bins = templated_shared_memory<T>();
+
+    const FLUCS_FLOAT inv_dkperp = ((FLUCS_FLOAT)nkperp) / (kperp_max - kperp_min);
+
+    // One block per kz
+    const size_t ikz  = blockIdx.x;
+
+    const size_t tid = threadIdx.x;
+
+    // First, zero out shared mem
+    for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
+        kperp_bins[bin_index] = 0;
+    }
+
+    __syncthreads();
+
+
+    // Each thread reads data from global memory in a contiguous way
+    for (size_t perp_index = tid; perp_index < NX*HALF_NY; perp_index += blockDim.x) {
+
+        // Convert perp index to ikx and iky
+        indices3d_t indices = get_indices3d<1, NX, HALF_NY>(perp_index);
+        const size_t ikx = indices.ikx;
+        const size_t iky = indices.iky;
+
+        const FLUCS_FLOAT kx = kx_from_ikx(ikx);
+        const FLUCS_FLOAT ky = ky_from_iky(iky);
+        const FLUCS_FLOAT kperp = flucs_sqrt(kx*kx + ky*ky);
+        const FLUCS_FLOAT bin_index_float = (kperp - kperp_min) * inv_dkperp;
+
+        // Evaluates true if kperp < KPERP_MIN
+        // Need to compare the float index as casting negative floats to ints
+        // rounds up rather than down
+        if (bin_index_float < 0)
+            continue;
+
+        // Now can safely cast to int, which rounds down
+        // and we can check if kperp > KPERP_MAX
+        const int bin_index = (int)(bin_index_float);
+        if (bin_index >= nkperp)
+            continue;
+
+
+        // Construct full indices
+        const size_t mode_index = index_from_3d<NZ, NX, HALF_NY>(ikz, ikx, iky);
+        const T mode = multiply_at<T>(mode_index, array_functors...);
+
+        // Add mode to shared-memory bin
+        atomicAdd(&kperp_bins[bin_index], mode);
+
+        // If ky > 0, need to add the missing conjugate mode
+        if (iky > 0) {
+            const size_t conj_mode_index = index_from_3d<NZ, NX, HALF_NY>(
+                (ikz == 0 ? 0 : NZ - ikz),
+                (ikx == 0 ? 0 : NX - ikx),
+                iky
+            );
+            const T conj_mode = multiply_at<T>(conj_mode_index, array_functors...);
+            atomicAdd(&kperp_bins[bin_index], conj(conj_mode));
+        }
+
+        
+    }
+
+    __syncthreads();
+
+
+    // Finally, write the output from shared into global memory contiguously
+    for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
+        output[bin_index + ikz*nkperp] = kperp_bins[bin_index];
+    }
+ 
+}
+
 // End of C++ section
 
 
@@ -276,9 +434,13 @@ void last_axis_sum_float(
     const FLUCS_FLOAT* __restrict__ input,
     FLUCS_FLOAT* __restrict__ output) {
 
-    multiply_and_sum_last_axis(N, is_half_axis, FLOAT_ONE,
-                                                  output,
-                                                  NOP_Functor<FLUCS_FLOAT>{input});
+    multiply_and_sum_last_axis(
+        N,
+        is_half_axis,
+        FLOAT_ONE,
+        output,
+        NOP_Functor<FLUCS_FLOAT>{input}
+    );
 }
 
 __global__
@@ -288,9 +450,13 @@ void last_axis_sum_complex(
     const FLUCS_COMPLEX* __restrict__ input,
     FLUCS_COMPLEX* __restrict__ output) {
 
-    multiply_and_sum_last_axis(N, is_half_axis, COMPLEX_ONE,
-                                                  output,
-                                                  NOP_Functor<FLUCS_COMPLEX>{input});
+    multiply_and_sum_last_axis(
+        N,
+        is_half_axis,
+        COMPLEX_ONE,
+        output,
+        NOP_Functor<FLUCS_COMPLEX>{input}
+    );
 }
 __global__
 void last_axis_average_float(
@@ -299,9 +465,13 @@ void last_axis_average_float(
     const FLUCS_FLOAT* __restrict__ input,
     FLUCS_FLOAT* __restrict__ output) {
 
-    multiply_and_sum_last_axis(N, is_half_axis, FLOAT_ONE / (FLUCS_FLOAT)N,
-                                                       output,
-                                                       NOP_Functor<FLUCS_FLOAT>{input});
+    multiply_and_sum_last_axis(
+        N,
+        is_half_axis,
+        FLOAT_ONE / (FLUCS_FLOAT)N,
+        output,
+        NOP_Functor<FLUCS_FLOAT>{input}
+    );
 }
 
 __global__
@@ -311,9 +481,70 @@ void last_axis_average_complex(
     const FLUCS_COMPLEX* __restrict__ input,
     FLUCS_COMPLEX* __restrict__ output) {
 
-    multiply_and_sum_last_axis(N, is_half_axis, COMPLEX_ONE / (FLUCS_FLOAT)N,
-                                                       output,
-                                                       NOP_Functor<FLUCS_COMPLEX>{input});
+    multiply_and_sum_last_axis(
+        N,
+        is_half_axis,
+        COMPLEX_ONE / (FLUCS_FLOAT)N,
+        output,
+        NOP_Functor<FLUCS_COMPLEX>{input}
+    );
+}
+
+__global__
+void shell_sum_float(
+    const size_t nkperp,
+    const FLUCS_FLOAT kperp_min,
+    const FLUCS_FLOAT kperp_max,
+    const FLUCS_FLOAT* __restrict__ input,
+    FLUCS_FLOAT* __restrict__ output) {
+
+    add_and_shell_sum(
+        nkperp,
+        kperp_min,
+        kperp_max,
+        FLOAT_ONE,
+        output,
+        NOP_Functor<FLUCS_FLOAT>{input}
+    );
+}
+
+__global__
+void shell_sum_complex(
+    const size_t nkperp,
+    const FLUCS_FLOAT kperp_min,
+    const FLUCS_FLOAT kperp_max,
+    const FLUCS_COMPLEX* __restrict__ input,
+    FLUCS_COMPLEX* __restrict__ output) {
+
+    add_and_shell_sum<FLUCS_COMPLEX>(
+        nkperp,
+        kperp_min,
+        kperp_max,
+        COMPLEX_ONE,
+        output,
+        NOP_Functor<FLUCS_COMPLEX>{input}
+    );
+}
+
+__global__
+void shell_sum_field_squared(
+    const size_t nkperp,
+    const FLUCS_FLOAT kperp_min,
+    const FLUCS_FLOAT kperp_max,
+    const int field_index,
+    const FLUCS_COMPLEX* __restrict__ fields,
+    FLUCS_FLOAT* __restrict__ output) {
+
+    const FLUCS_COMPLEX* field = fields + field_index * HALFUNPADDEDSIZE;
+
+    add_and_shell_sum(
+        nkperp,
+        kperp_min,
+        kperp_max,
+        FLOAT_ONE,
+        output,
+        Abs2_Functor{field, FLOAT_ONE}
+    );
 }
 
 } // extern "C"
