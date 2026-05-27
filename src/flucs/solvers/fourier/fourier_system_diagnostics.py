@@ -8,8 +8,8 @@ import numpy as np
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 from flucs.solvers import FlucsSolverState
-from flucs.utilities.messages import flucsprint
 from flucs.utilities.cupy import KernelWrapper
+from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
     from flucs.solvers.fourier.fourier_system import FourierSystem
@@ -388,12 +388,15 @@ class FourierSpectrumDiag(FlucsDiagnostic):
     to 0 and the largest kperp in the system, respectively.
 
     """
+
     name = "fourier_spectrum"
     system: FourierSystem
-    option_defaults: ClassVar[dict[str, object]] = {"spectra": list(),
-                                                    "nkperp": -1,
-                                                    "kperp_min": -1.0,
-                                                    "kperp_max": -1.0}
+    option_defaults: ClassVar[dict[str, object]] = {
+        "spectra": list(),
+        "nkperp": -1,
+        "kperp_min": -1.0,
+        "kperp_max": -1.0,
+    }
     kperp: np.ndarray
 
     spectrum_calculators: list[Callable[[], None]]
@@ -438,7 +441,7 @@ class FourierSpectrumDiag(FlucsDiagnostic):
             ifield=ifield,
             var_name=var_name,
             shell_sum_kernel=shell_sum_kernel,
-            output_array=output_array
+            output_array=output_array,
         ):
             shell_sum_kernel(
                 self.nkperp,
@@ -448,7 +451,7 @@ class FourierSpectrumDiag(FlucsDiagnostic):
                 self.system.fields[
                     self.system.current_step % self.system.fields_history_size
                 ],
-                output_array
+                output_array,
             )
 
             self.vars[f"{var_name}/data"].data_cache.append(output_array.get())
@@ -461,8 +464,7 @@ class FourierSpectrumDiag(FlucsDiagnostic):
 
         if self.nkperp < 0:
             raise ValueError(
-                "nkperp must be specified when "
-                "using kperp-based spectra."
+                "nkperp must be specified when using kperp-based spectra."
             )
 
         if self.kperp_min < 0:
@@ -471,15 +473,12 @@ class FourierSpectrumDiag(FlucsDiagnostic):
         if self.kperp_max < 0:
             self.system._precompute_wavenumbers()
             self.kperp_max = np.sqrt(
-                self.system.kx[self.system.half_nx - 1]**2 +
-                self.system.ky[self.system.half_ny - 1]**2
+                self.system.kx[self.system.half_nx - 1] ** 2
+                + self.system.ky[self.system.half_ny - 1] ** 2
             )
 
             # add a bit in order to capture the modes at kperp_max
-            self.kperp_max += min(
-                self.system.kx[1],
-                self.system.ky[1]
-            )
+            self.kperp_max += min(self.system.kx[1], self.system.ky[1])
 
         # Ensure proper typing for CUDA
         self.kperp_min = self.system.float(self.kperp_min)
@@ -490,7 +489,7 @@ class FourierSpectrumDiag(FlucsDiagnostic):
             self.kperp_max,
             self.nkperp,
             dtype=self.system.float,
-        )[:self.nkperp]
+        )[: self.nkperp]
 
     def init_vars(self):
         self.spectrum_calculators = []
@@ -501,16 +500,10 @@ class FourierSpectrumDiag(FlucsDiagnostic):
 
             spectrum_type = spectrum_type.strip()
 
-            if not hasattr(
-                self,
-                f"create_{spectrum_type}_calculator"
-            ):
+            if not hasattr(self, f"create_{spectrum_type}_calculator"):
                 raise ValueError(f"Unknown spectrum type {spectrum_type}")
 
-            getattr(
-                self,
-                f"create_{spectrum_type}_calculator"
-            )(ifield)
+            getattr(self, f"create_{spectrum_type}_calculator")(ifield)
 
     def ready(self):
         pass
@@ -518,6 +511,7 @@ class FourierSpectrumDiag(FlucsDiagnostic):
     def execute(self):
         for spectrum_calculator in self.spectrum_calculators:
             spectrum_calculator()
+
 
 class RealspaceDataDiag(FlucsDiagnostic):
     """
