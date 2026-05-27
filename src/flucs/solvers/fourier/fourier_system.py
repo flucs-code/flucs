@@ -23,6 +23,7 @@ from .fourier_system_diagnostics import (
     FourierDataDiag,
     LinearEigensystemDiag,
     RealspaceDataDiag,
+    FourierSpectrumDiag
 )
 from .fourier_system_forcing import FourierSystemForcing
 
@@ -144,6 +145,7 @@ class FourierSystem(FlucsSystem):
         LinearEigensystemDiag,
         FourierDataDiag,
         RealspaceDataDiag,
+        FourierSpectrumDiag,
     }
 
     # Forcing methods

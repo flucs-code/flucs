@@ -9,6 +9,7 @@ import numpy as np
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 from flucs.solvers import FlucsSolverState
 from flucs.utilities.messages import flucsprint
+from flucs.utilities.cupy import KernelWrapper
 
 if TYPE_CHECKING:
     from flucs.solvers.fourier.fourier_system import FourierSystem
@@ -279,8 +280,6 @@ class FourierDataDiag(FlucsDiagnostic):
     system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
 
-    type: str
-    slices: dict
     slice_calculators: list[Callable[[], None]]
 
     def init_vars(self):
@@ -362,6 +361,164 @@ class FourierDataDiag(FlucsDiagnostic):
             slice_calculator()
 
 
+class FourierSpectrumDiag(FlucsDiagnostic):
+    """
+    Outputs Fourier spectral data.
+
+    Requires specifying diagnostic options with the following structure:
+    {
+        spectra = [s0, s1, ...],
+        nkperp: int,
+        kperp_min: float,
+        kperp_max: float
+    }
+
+    where each of s0, s1, etc, are strings with the format
+
+        'ifield:spectrum_type'
+
+    where ifield is the index of the field whose spectrum will be
+    calculated, and spectrum_type is one of the following:
+        - 'kzkperp'
+
+    The nkperp option is required if using at least one kperp
+    spectrum.
+
+    If only nkperp is specified, kperp_min and kperp_max will be set
+    to 0 and the largest kperp in the system, respectively.
+
+    """
+    name = "fourier_spectrum"
+    system: FourierSystem
+    option_defaults: ClassVar[dict[str, object]] = {"spectra": list(),
+                                                    "nkperp": -1,
+                                                    "kperp_min": -1.0,
+                                                    "kperp_max": -1.0}
+    kperp: np.ndarray
+
+    spectrum_calculators: list[Callable[[], None]]
+
+    def create_kzkperp_calculator(self, ifield: int):
+        var_name = f"{ifield}:kzkperp"
+        self.system._precompute_wavenumbers()
+        self.init_kperp_grid()
+
+        dimensions = {
+            f"{var_name}/kz": self.system.kz,
+            f"{var_name}/kperp": self.kperp,
+        }
+
+        self.add_var(
+            FlucsDiagnosticVariable(
+                name=f"{var_name}/data",
+                shape=("kz", "kperp"),
+                dimensions=dimensions,
+                is_complex=False,
+            )
+        )
+
+        # Setup shell average kernel
+
+        shared_mem = self.nkperp * self.system.float().nbytes
+
+        shell_sum_kernel = KernelWrapper(
+            system=self.system,
+            cuda_kernel_name="shell_sum_field_squared",
+            grid=(self.system.nz,),
+            block=(self.system.cuda_block_size,),
+            shared_mem=shared_mem,
+        )
+
+        output_array = self.system.get_temp_array(
+            size=self.system.nz * self.nkperp,
+            is_complex=False,
+        )
+
+        def spectrum_calculator(
+            ifield=ifield,
+            var_name=var_name,
+            shell_sum_kernel=shell_sum_kernel,
+            output_array=output_array
+        ):
+            shell_sum_kernel(
+                self.nkperp,
+                self.kperp_min,
+                self.kperp_max,
+                ifield,
+                self.system.fields[
+                    self.system.current_step % self.system.fields_history_size
+                ],
+                output_array
+            )
+
+            self.vars[f"{var_name}/data"].data_cache.append(output_array.get())
+
+        self.spectrum_calculators.append(spectrum_calculator)
+
+    def init_kperp_grid(self):
+        if hasattr(self, "kperp"):
+            return
+
+        if self.nkperp < 0:
+            raise ValueError(
+                "nkperp must be specified when "
+                "using kperp-based spectra."
+            )
+
+        if self.kperp_min < 0:
+            self.kperp_min = 0.0
+
+        if self.kperp_max < 0:
+            self.system._precompute_wavenumbers()
+            self.kperp_max = np.sqrt(
+                self.system.kx[self.system.half_nx - 1]**2 +
+                self.system.ky[self.system.half_ny - 1]**2
+            )
+
+            # add a bit in order to capture the modes at kperp_max
+            self.kperp_max += min(
+                self.system.kx[1],
+                self.system.ky[1]
+            )
+
+        # Ensure proper typing for CUDA
+        self.kperp_min = self.system.float(self.kperp_min)
+        self.kperp_max = self.system.float(self.kperp_max)
+
+        self.kperp = np.linspace(
+            self.kperp_min,
+            self.kperp_max,
+            self.nkperp,
+            dtype=self.system.float,
+        )[:self.nkperp]
+
+    def init_vars(self):
+        self.spectrum_calculators = []
+
+        for spectrum in self.spectra:
+            ifield, spectrum_type = spectrum.split(":")
+            ifield = int(ifield)
+
+            spectrum_type = spectrum_type.strip()
+
+            if not hasattr(
+                self,
+                f"create_{spectrum_type}_calculator"
+            ):
+                raise ValueError(f"Unknown spectrum type {spectrum_type}")
+
+            getattr(
+                self,
+                f"create_{spectrum_type}_calculator"
+            )(ifield)
+
+    def ready(self):
+        pass
+
+    def execute(self):
+        for spectrum_calculator in self.spectrum_calculators:
+            spectrum_calculator()
+
 class RealspaceDataDiag(FlucsDiagnostic):
     """
     Outputs 1D, 2D, or 3D `locations` of the real-space data.
@@ -384,8 +541,6 @@ class RealspaceDataDiag(FlucsDiagnostic):
     system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
 
-    type: str
-    slices: dict
     slice_calculators: list[Callable[[], None]]
 
     def init_vars(self):
