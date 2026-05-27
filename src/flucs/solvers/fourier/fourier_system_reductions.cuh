@@ -332,7 +332,7 @@ void add_and_shell_sum(
 
     // Finally, write the output from shared into global memory
     for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
-        output[bin_index + ikz*nkperp] = kperp_bins[bin_index];
+        output[bin_index + ikz*nkperp] = kperp_bins[bin_index] * multiplier;
     }
  
 }
@@ -417,10 +417,61 @@ void multiply_and_shell_sum(
 
     // Finally, write the output from shared into global memory contiguously
     for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
-        output[bin_index + ikz*nkperp] = kperp_bins[bin_index];
+        output[bin_index + ikz*nkperp] = kperp_bins[bin_index] * multiplier;
     }
  
 }
+
+// Somewhat naive but gets the job done
+// Reduces an (m, n, k) array down to (m, k) one
+// Must be invoked with a block (block_size, )
+// and a grid (m, (k + block_size - 1) // k)
+template <typename T, typename... Functors>
+__device__ __forceinline__
+void add_and_sum_axis(
+    const size_t n,
+    const size_t k,
+    const T multiplier,
+    T* __restrict__ output,
+    Functors... array_functors)
+{
+    const size_t iy = blockDim.x * blockIdx.y + threadIdx.x;
+
+    if (!(iy < k))
+        return;
+
+    T sum = 0;
+
+    for (size_t ix = 0; ix < n; ix++) {
+        sum += add_at<T>((ix + n * blockIdx.x) * k + iy, array_functors...);
+    }
+    
+    output[k * blockIdx.x + iy] = sum * multiplier;
+}
+
+template <typename T, typename... Functors>
+__device__ __forceinline__
+void multiply_and_sum_axis(
+    const size_t n,
+    const size_t k,
+    const T multiplier,
+    T* __restrict__ output,
+    Functors... array_functors)
+{
+    const size_t iy = blockDim.x * blockIdx.y + threadIdx.x;
+
+    if (!(iy < k))
+        return;
+
+    T sum = 0;
+
+    for (size_t ix = 0; ix < n; ix++) {
+        sum += multiply_at<T>((ix + n * blockIdx.x) * k + iy, array_functors...);
+    }
+    
+    output[k * blockIdx.x + iy] = sum * multiplier;
+}
+
 
 // End of C++ section
 
