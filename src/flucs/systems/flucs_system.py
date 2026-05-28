@@ -266,21 +266,34 @@ class FlucsSystem(ABC):
         # Add the current date at the end of the source to force recompilation
         cuda_module += f"\n// {datetime.datetime.now()}"
 
+        self.setup_cuda_defs()
+        self.register_kernels()
+
         self.cupy_module = cp.RawModule(
-            code=cuda_module, options=self.module_options.get_options()
+            code=cuda_module,
+            options=self.module_options.get_options(),
+            name_expressions=self.module_options.name_expressions
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)
         self.setup_kernels()
 
     @abstractmethod
+    def setup_cuda_defs(self) -> None:
+        """Sets up any CUDA defs (e.g., compile-time constants, flags, etc)"""
+        pass
+
+    @abstractmethod
+    def register_kernels(self) -> None:
+        """Registers kernels (incl. templated kernels) that are to be used."""
+        pass
+
     def setup_kernels(self) -> None:
         """Sets up the CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
-        As it stands, this is system-specific.
         """
-        pass
+        self.kernels.bind()
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """

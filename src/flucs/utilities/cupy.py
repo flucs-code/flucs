@@ -46,9 +46,11 @@ class ModuleOptions:
 
     _defs: dict
     options = ("--ptxas-options=-O3", "--use_fast_math")
+    name_expressions: list
 
     def __init__(self) -> None:
         self._defs = {}
+        self.name_expressions = []
 
     def add_compiler_option(self, option: str) -> None:
         """Adds a compiler option."""
@@ -175,6 +177,12 @@ class KernelWrapper:
     block: tuple[int]
     shared_mem: int
 
+    def bind(self) -> None:
+        """Binds the wrapper to the compiled kernel."""
+        self.kernel = self.system.cupy_module.get_function(
+            self.cuda_kernel_name
+        )
+
     def __call__(self, *args) -> None:
         self.kernel(self.grid, self.block, args, shared_mem=self.shared_mem)
 
@@ -197,33 +205,30 @@ class KernelWrapper:
         block: tuple[int],
         shared_mem: int = 0,
     ) -> None:
+        system.kernels._kernels.append(self)
+        system.module_options.name_expressions.append(cuda_kernel_name)
         self.system = system
         self.cuda_kernel_name = cuda_kernel_name
-        self.kernel = system.cupy_module.get_function(cuda_kernel_name)
         self.grid = grid
         self.block = block
         self.shared_mem = shared_mem
 
 
 class KernelCollection:
-    _kernels: dict[str, KernelWrapper]
+    _kernels: list[KernelWrapper]
     system: FlucsSystem
 
+    def bind(self):
+        """Binds the KernelWrappers to the compiled symbols."""
+        for kernel in self._kernels:
+            kernel.bind()
+
     def __init__(self, system: FlucsSystem):
-        self._kernels = {}
+        self._kernels = []
         self.system = system
 
-    def __getitem__(self, key):
-        return self._kernels[key]
+    def __getitem__(self, i):
+        return self._kernels[i]
 
-    def __setitem__(self, key, value):
-        if key in self._kernels and self._kernels[key] != value:
-            raise ValueError(
-                f"Kernel {key} is already defined "
-                "but with mismatching parameters."
-            )
-
-        self._kernels[key] = value
-
-    def __contains__(self, key):
-        return key in self._kernels
+    def __iter__(self):
+        return iter(self._kernels)

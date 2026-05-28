@@ -57,6 +57,10 @@ class FourierSystem(FlucsSystem):
     plan_derivatives_c2r: cufft.PlanNd
     plan_bits_r2c: cufft.PlanNd
 
+    # CUDA kernels
+    precompute_iteration_matrices: KernelWrapper
+    finish_step: KernelWrapper
+
     # Total number of time steps for which we hold field data in memory
     # This is typically 2 (previous time step +
     # the current one we are solving for)
@@ -831,9 +835,9 @@ class FourierSystem(FlucsSystem):
         if not self.input["setup.precompute_linear_matrix"]:
             return
 
-        self.kernels["precompute_iteration_matrices"](self.current_dt)
+        self.precompute_iteration_matrices(self.current_dt)
 
-    def compile_cupy_module(self) -> None:
+    def setup_cuda_defs(self) -> None:
         # FourierSystem specific constants
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
@@ -938,14 +942,8 @@ class FourierSystem(FlucsSystem):
             flucsprint("Linear matrices will be precomputed.")
             self.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
-        super().compile_cupy_module()
-
-    def setup_kernels(self) -> None:
-        """Sets up the CUDA kernels.
-
-        In the future, this may be the place to do some automatic optimisation.
-        As it stands, this is sysem-specific.
-        """
+    def register_kernels(self) -> None:
+        """Registers the CUDA kernels. """
 
         # Setup kernel parameters (grid, block, shared memory)
         self.half_unpadded_cuda_grid_size = (
@@ -960,21 +958,14 @@ class FourierSystem(FlucsSystem):
             self.full_padded_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
 
-        self.kernels["precompute_iteration_matrices"] = KernelWrapper(
+        self.precompute_iteration_matrices = KernelWrapper(
             system=self,
             cuda_kernel_name="precompute_iteration_matrices",
             grid=(self.half_unpadded_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
 
-        self.kernels["finish_step"] = KernelWrapper(
-            system=self,
-            cuda_kernel_name="finish_step",
-            grid=(self.half_unpadded_cuda_grid_size,),
-            block=(self.cuda_block_size,),
-        )
-
-        self.kernels["finish_step"] = KernelWrapper(
+        self.finish_step = KernelWrapper(
             system=self,
             cuda_kernel_name="finish_step",
             grid=(self.half_unpadded_cuda_grid_size,),
@@ -1004,7 +995,7 @@ class FourierSystem(FlucsSystem):
             dtype=self.complex,
         )
 
-        # Get kernel (separate from self.kernels as not part of solver per se)
+        # Get kernel (TODO: bundle it with the wrappers?)
         compute_linear_matrix_kernel = self.cupy_module.get_function(
             "compute_linear_matrix"
         )
@@ -1416,7 +1407,7 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        self.kernels["finish_step"](
+        self.finish_step(
             self.float(self.current_dt),
             self.float(self.adaptive_rate),
             self.current_step,
