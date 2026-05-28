@@ -272,7 +272,7 @@ class FlucsSystem(ABC):
         self.cupy_module = cp.RawModule(
             code=cuda_module,
             options=self.module_options.get_options(),
-            name_expressions=self.module_options.name_expressions
+            name_expressions=self.module_options.name_expressions,
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)

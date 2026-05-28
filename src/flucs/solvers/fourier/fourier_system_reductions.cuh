@@ -428,14 +428,14 @@ void multiply_and_shell_sum(
 // and a grid (m, (k + block_size - 1) // k)
 template <typename T, typename... Functors>
 __device__ __forceinline__
-void add_and_sum_axis(
+void add_and_sum_middle_axis(
     const size_t n,
     const size_t k,
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
 {
-    const size_t iy = blockDim.x * blockIdx.y + threadIdx.x;
+    const size_t iy = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (!(iy < k))
         return;
@@ -443,22 +443,22 @@ void add_and_sum_axis(
     T sum = 0;
 
     for (size_t ix = 0; ix < n; ix++) {
-        sum += add_at<T>((ix + n * blockIdx.x) * k + iy, array_functors...);
+        sum += add_at<T>((ix + n * blockIdx.y) * k + iy, array_functors...);
     }
     
-    output[k * blockIdx.x + iy] = sum * multiplier;
+    output[k * blockIdx.y + iy] = sum * multiplier;
 }
 
 template <typename T, typename... Functors>
 __device__ __forceinline__
-void multiply_and_sum_axis(
+void multiply_and_sum_middle_axis(
     const size_t n,
     const size_t k,
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
 {
-    const size_t iy = blockDim.x * blockIdx.y + threadIdx.x;
+    const size_t iy = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (!(iy < k))
         return;
@@ -466,15 +466,39 @@ void multiply_and_sum_axis(
     T sum = 0;
 
     for (size_t ix = 0; ix < n; ix++) {
-        sum += multiply_at<T>((ix + n * blockIdx.x) * k + iy, array_functors...);
+        sum += multiply_at<T>((ix + n * blockIdx.y) * k + iy, array_functors...);
     }
     
-    output[k * blockIdx.x + iy] = sum * multiplier;
+    output[k * blockIdx.y + iy] = sum * multiplier;
 }
 
 
-// End of C++ section
+// Templated reduction kernels
+template <size_t N, bool is_half_axis, typename T_output, typename Functor, typename... InputArgs>
+__global__
+void simple_last_axis_sum(T_output* __restrict__ output, InputArgs... input_args) {
+    multiply_and_sum_last_axis(
+        N,
+        is_half_axis,
+        (T_output)FLOAT_ONE,
+        output,
+        Functor{input_args...}
+    );
+}
 
+template <size_t N, size_t K, typename T_output, typename Functor, typename... InputArgs>
+__global__
+void simple_middle_axis_sum(T_output* __restrict__ output, InputArgs... input_args) {
+    multiply_and_sum_middle_axis(
+        N,
+        K,
+        (T_output)FLOAT_ONE,
+        output,
+        Functor{input_args...}
+    );
+}
+
+// End of C++ section
 
 extern "C" {
 
@@ -509,6 +533,7 @@ void last_axis_sum_complex(
         NOP_Functor<FLUCS_COMPLEX>{input}
     );
 }
+
 __global__
 void last_axis_average_float(
     const size_t N,
