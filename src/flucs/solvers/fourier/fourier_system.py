@@ -54,10 +54,6 @@ class FourierSystem(FlucsSystem):
     plan_derivatives_c2r: cufft.PlanNd
     plan_bits_r2c: cufft.PlanNd
 
-    # CUDA kernels
-    precompute_iteration_matrices: KernelWrapper
-    finish_step: KernelWrapper
-
     # Total number of time steps for which we hold field data in memory
     # This is typically 2 (previous time step +
     # the current one we are solving for)
@@ -99,9 +95,9 @@ class FourierSystem(FlucsSystem):
     adaptive_rate: float
 
     # CUDA kernels
-    precompute_iteration_matrices_kernel: cp.RawKernel
-    finish_step_kernel: cp.RawKernel
-    compute_linear_matrix_kernel: cp.RawKernel
+    finish_step_kernel: KernelWrapper
+    precompute_iteration_matrices_kernel: KernelWrapper
+    compute_linear_matrix_kernel: KernelWrapper
     cuda_block_size: int = 512
 
     # CUDA grids
@@ -732,7 +728,7 @@ class FourierSystem(FlucsSystem):
         if not self.input["setup.precompute_linear_matrix"]:
             return
 
-        self.precompute_iteration_matrices(self.current_dt)
+        self.precompute_iteration_matrices_kernel(self.float(self.current_dt))
 
     def setup_cuda_defs(self) -> None:
         # FourierSystem specific constants
@@ -855,14 +851,21 @@ class FourierSystem(FlucsSystem):
             self.full_padded_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
 
-        self.precompute_iteration_matrices = KernelWrapper(
+        self.compute_linear_matrix_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_linear_matrix",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.precompute_iteration_matrices_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="precompute_iteration_matrices",
             grid=(self.half_unpadded_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
 
-        self.finish_step = KernelWrapper(
+        self.finish_step_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="finish_step",
             grid=(self.half_unpadded_cuda_grid_size,),
@@ -892,16 +895,10 @@ class FourierSystem(FlucsSystem):
             dtype=self.complex,
         )
 
-        # Get kernel (TODO: bundle it with the wrappers?)
-        compute_linear_matrix_kernel = self.cupy_module.get_function(
-            "compute_linear_matrix"
-        )
-
         # Compute
-        compute_linear_matrix_kernel(
-            (self.half_unpadded_cuda_grid_size,),
-            (self.cuda_block_size,),
-            (self.init_dt, linear_matrix_cupy),
+        self.compute_linear_matrix_kernel(
+            self.float(self.init_dt),
+            linear_matrix_cupy,
         )
 
         self.linear_matrix = cp.asnumpy(linear_matrix_cupy)
@@ -1304,7 +1301,7 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        self.finish_step(
+        self.finish_step_kernel(
             self.float(self.current_dt),
             self.float(self.adaptive_rate),
             self.current_step,
