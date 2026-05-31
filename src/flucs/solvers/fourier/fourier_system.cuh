@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cfloat>
 #include <cupy/complex.cuh>
 
 // Deal with float types
@@ -10,14 +9,14 @@
     #define flucs_sqrt(x) sqrt(x)
     #define flucs_fmax(x, y) fmax(x, y)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
-    #define FLUCS_EPSILON ((FLUCS_FLOAT)DBL_EPSILON)
+    #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
     #define flucs_sqrt(x) sqrtf(x)
     #define flucs_fmax(x, y) fmaxf(x, y)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
-    #define FLUCS_EPSILON ((FLUCS_FLOAT)FLT_EPSILON)
+    #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
 #endif
 
 #define FLUCS_COMPLEX complex<FLUCS_FLOAT>
