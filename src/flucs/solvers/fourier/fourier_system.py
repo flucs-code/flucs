@@ -138,6 +138,12 @@ class FourierSystem(FlucsSystem):
     ky: np.ndarray
     kz: np.ndarray
 
+    # kperp shells
+    shell_kperp_min: float
+    shell_kperp_max: float
+    shell_nkperp: int
+    shell_kperp: np.ndarray
+
     # Diagnostics available to all FourierSystems
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
         LinearEigensystemDiag,
@@ -312,6 +318,10 @@ class FourierSystem(FlucsSystem):
         # Base FlucsSystem setup
         super().setup()
 
+        # Initialise shell grids for diagnostics
+        self._precompute_shells()
+
+        # Setup initial conditions
         self._set_initial_conditions()
         self._check_initial_conditions()
 
@@ -569,6 +579,64 @@ class FourierSystem(FlucsSystem):
             * np.fft.rfftfreq(self.ny)
             / self.input["dimensions.Ly"]
         )
+
+    def _precompute_shells(self):
+        """
+        Sets the default kperp shell grid used. 
+
+        The CUDA shell-sum kernels use uniform half-open bins,
+
+            [kperp_min, kperp_max),
+
+        with bin index 
+            
+            floor((kperp - kperp_min) * nkperp / (kperp_max - kperp_min)).
+
+        The default kperp_max is padded above the largest resolved diagonal mode 
+        so that summing all bins includes all resolved modes.
+        """
+
+        # TODO: if adding NS/isotropic systems, either add to this or add a 
+        # separate method for isotropic systems (_precompute_shells_isotropic) 
+        # alongside the appropriate kernels to do the isotropic shell calcs, as
+        # well as create_shell_reduction_isotropic
+
+        # Check if we have already done this
+        if hasattr(self, "shell_kperp"):
+            return
+
+        # kperp grid spacing
+        dkperp = min(self.kx[1], self.ky[1])
+
+        # Minimum kperp
+        kperp_min = self.float(0.0)
+
+        # Maximum kperp
+        kx_max = abs(self.kx[self.half_nx - 1])
+        ky_max = abs(self.ky[self.half_ny - 1])
+
+        kperp_max = np.sqrt(kx_max**2 + ky_max**2)
+        kperp_max += dkperp  # Adding padding for diagonal
+        kperp_max = self.float(kperp_max)
+
+        # Number of kperp shells
+        nkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
+        nkperp = min(nkperp, self.cuda_block_size)
+
+        # kperp grid
+        kperp = np.linspace(
+            kperp_min,
+            kperp_max,
+            nkperp,
+            endpoint=False,
+            dtype=self.float,
+        )
+
+        # Assign attributes
+        self.shell_kperp_min = kperp_min
+        self.shell_kperp_max = kperp_max
+        self.shell_nkperp = nkperp
+        self.shell_kperp = kperp
 
     def get_broadcast_wavenumbers(self):
         """Returns wavenumber arrays broadcast to (nz, nx, half_ny)

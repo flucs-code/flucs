@@ -498,6 +498,25 @@ void simple_middle_axis_sum(T_output* __restrict__ output, InputArgs... input_ar
     );
 }
 
+template <typename T_output, typename Functor, typename... InputArgs>
+__global__
+void simple_shell_sum(
+    const size_t nkperp,
+    const FLUCS_FLOAT kperp_min,
+    const FLUCS_FLOAT kperp_max,
+    T_output* __restrict__ output,
+    InputArgs... input_args
+) {
+    multiply_and_shell_sum<T_output>(
+        nkperp,
+        kperp_min,
+        kperp_max,
+        (T_output)FLOAT_ONE,
+        output,
+        Functor{input_args...}
+    );
+}
+
 // End of C++ section
 
 extern "C" {
