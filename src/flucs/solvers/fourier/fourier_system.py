@@ -730,7 +730,7 @@ class FourierSystem(FlucsSystem):
 
         self.precompute_iteration_matrices_kernel(self.float(self.current_dt))
 
-    def setup_cuda_defs(self) -> None:
+    def setup_cuda_definitions(self) -> None:
         # FourierSystem specific constants
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields

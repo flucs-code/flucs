@@ -266,7 +266,7 @@ class FlucsSystem(ABC):
         # Add the current date at the end of the source to force recompilation
         cuda_module += f"\n// {datetime.datetime.now()}"
 
-        self.setup_cuda_defs()
+        self.setup_cuda_definitions()
         self.register_kernels()
 
         self.cupy_module = cp.RawModule(
@@ -279,8 +279,8 @@ class FlucsSystem(ABC):
         self.setup_kernels()
 
     @abstractmethod
-    def setup_cuda_defs(self) -> None:
-        """Sets up any CUDA defs (e.g., compile-time constants, flags, etc)"""
+    def setup_cuda_definitions(self) -> None:
+        """Sets up any CUDA definitions (e.g., compile-time constants, flags, etc)"""
         pass
 
     @abstractmethod
