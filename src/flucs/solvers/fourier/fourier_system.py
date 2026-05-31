@@ -92,6 +92,7 @@ class FourierSystem(FlucsSystem):
     ab3_coefficients: np.ndarray
 
     # Hyperdissipation variables
+    hyperdissipation_components = ("kz", "kx", "ky", "perp")
     adaptive_rate: float
 
     # CUDA kernels
@@ -778,7 +779,12 @@ class FourierSystem(FlucsSystem):
             )
 
         # Hyperdissipation
-        for component in ["perp", "kx", "ky", "kz"]:
+        for index, component in enumerate(self.hyperdissipation_components):
+
+            self.module_options.define_int(
+                f"HYPERDISSIPATION_{component.upper()}_INT", index
+            )
+
             if self.input[f"hyperdissipation.{component}"] > 0.0:
                 message = f"Using hyperdissipation in {component:<4}"
 

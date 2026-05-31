@@ -245,3 +245,35 @@ struct Hyperdissipation_Functor {
         return hyperdissipation * functor(index);
     }
 };
+
+// Functor for registering the hyperdissipation functors for each component
+template<typename FunctorT>
+struct HyperdissipationSelector_Functor {
+    const FunctorT functor;
+    const FLUCS_FLOAT adaptive_rate;
+    const int hyperdissipation_type;
+
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
+        switch (hyperdissipation_type) {
+            case HYPERDISSIPATION_KZ_INT:
+                return HyperdissipationKz_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_KX_INT:
+                return HyperdissipationKx_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_KY_INT:
+                return HyperdissipationKy_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_PERP_INT:
+                return HyperdissipationPerp_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            default:
+                __trap();
+                return ((FLUCS_FLOAT)0);
+        }
+    }
+};
