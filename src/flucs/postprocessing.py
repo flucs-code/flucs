@@ -394,6 +394,28 @@ class FlucsPostProcessing:
                 return _get_var(grp[subgrp], var)
             return None
 
+        # Helper function to get dimension from group
+        def _get_dim_var(var_obj, dim: str):
+            grp = var_obj.group()
+
+            while grp is not None:
+                if dim in grp.variables:
+                    return grp.variables[dim]
+
+                # Stop once we have reached the diagnostic group, whose parent 
+                # is the numbered output group containing "time", "dt", and 
+                # other diagnostic groups.
+                parent = grp.parent
+                if parent is None or "time" in parent.variables:
+                    break
+
+                grp = parent
+
+            raise KeyError(
+                f"Dimension variable '{dim}' not found for variable "
+                f"'{var_obj.name}' in diagnostic group '{var_obj.group().path}'."
+            )
+
         # Handle a single group
         if isinstance(groups, (int, str)):
             groups = [groups]
@@ -488,9 +510,9 @@ class FlucsPostProcessing:
                     for dim in var_obj.dimensions:
                         if dim == "time":
                             continue
-                        dims_dicts[-1][dim] = np.asarray(
-                            var_obj.group()[dim][:]
-                        )
+
+                        dim_var = _get_dim_var(var_obj, dim)
+                        dims_dicts[-1][dim] = np.asarray(dim_var[:])
                 else:
                     # Fill missing group segment with zeros of appropriate shape
                     group_data.append(
