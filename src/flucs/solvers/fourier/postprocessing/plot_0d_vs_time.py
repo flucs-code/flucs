@@ -27,6 +27,13 @@ def plot_0d_vs_time(post, variable=None):
         time = post.load_netcdf_variable(nc_path, "time")[0]
         data = post.load_netcdf_variable(nc_path, variable)[0]
 
+        # Validate dimension
+        if data.ndim != 1:
+            raise ValueError(
+                f"Expected a 0D time-dependent variable, but '{variable}' loaded "
+                f"with shape {data.shape}."
+            )
+
         # Plot data
         ax.plot(
             time,
@@ -42,7 +49,6 @@ def plot_0d_vs_time(post, variable=None):
     ax.set_ylabel(variable)
 
     ax.set_xlim(np.min(time), np.max(time))
-    ax.set_ylim(ymin=0.0)
 
     ax.legend()
 
