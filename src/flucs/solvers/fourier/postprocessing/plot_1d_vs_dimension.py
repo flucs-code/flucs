@@ -21,11 +21,11 @@ def plot_1d_vs_dimension(post, args):
 
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout="constrained")
-    figure_name = None
+    fig_name = None
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
-        
+
         # Assign identifiers
         sim_label = pl.Path(nc_path).parent.name
         sim_color = plt.cm.rainbow(np.linspace(0, 1, len(nc_paths)))[index]
@@ -57,10 +57,10 @@ def plot_1d_vs_dimension(post, args):
         data = data[:, mask]
 
         # Time average
-        mask = time >= (
+        mask_time = time >= (
             np.min(time) + (1.0 - fraction) * (np.max(time) - np.min(time))
         )
-        data_avg = np.nanmean(data[mask], axis=0)
+        data_avg = np.nanmean(data[mask_time], axis=0)
 
         # Plot data
         ax.plot(
@@ -72,6 +72,59 @@ def plot_1d_vs_dimension(post, args):
             linestyle="solid",
         )
 
+        # Plot spectra evolution over time
+        if args.time:
+
+            # Initialise individual plot
+            fig_time, ax_time = plt.subplots(1, 1, layout="constrained")
+            fig_name_time = (
+                f"{variable_name}_vs_{dimension_name}_time_{sim_label}"
+            )
+            fig_time.canvas.manager.set_window_title(fig_name_time)
+
+            # Get data in specified plotting window
+            time_plot = time[mask_time]
+            data_plot = data[mask_time]
+
+            # Downsample data to prevent overcrowding
+            count = min(20, len(time_plot))
+            time_indices = np.linspace(
+                0, len(time_plot), count, endpoint=False, dtype=int
+            )
+
+            # Set colormap
+            norm = plt.Normalize(vmin=np.min(time_plot), vmax=np.max(time_plot))
+            cmap = plt.cm.rainbow
+
+            # Iterate and plot
+            for it in time_indices:
+                ax_time.plot(
+                    dimension,
+                    np.abs(data_plot[it]),
+                    linewidth=1.0,
+                    color=cmap(norm(time_plot[it])),
+                )
+
+            # Setting plot options
+            colorbar = fig_time.colorbar(
+                plt.cm.ScalarMappable(norm=norm, cmap=cmap),
+                ax=ax_time,
+            )
+            colorbar.set_label("Time")
+
+            ax_time.set_xlabel(dimension_name)
+            ax_time.set_ylabel(f"|{variable_name}|")
+            ax_time.set_xscale("log")
+            ax_time.set_yscale("log")
+
+            # Save figure if required
+            post.save(
+                fig_time,
+                name=fig_name_time,
+                suffix="png",
+                save_kwargs={"dpi": 300},
+            )
+
     # Setting plot options
     ax.set_xlabel(dimension_name)
     ax.set_ylabel(f"|{variable_name}|")
@@ -82,13 +135,13 @@ def plot_1d_vs_dimension(post, args):
     ax.legend()
 
     # Assign figure name based on last file
-    figure_name = f"{variable_name}_vs_{dimension_name}"
-    fig.canvas.manager.set_window_title(figure_name)
+    fig_name = f"{variable_name}_vs_{dimension_name}"
+    fig.canvas.manager.set_window_title(fig_name)
 
     # Save figures if required
     post.save(
         fig,
-        name=figure_name,
+        name=fig_name,
         suffix="png",
         save_kwargs={"dpi": 300},
     )
@@ -125,6 +178,16 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--groups",
+        "-g",
+        nargs="+",
+        type=str,
+        default=None,
+        required=False,
+        help="Names of groups to load. Loads all groups by default.",
+    )
+
+    parser.add_argument(
         "--fraction",
         "-f",
         type=float,
@@ -136,13 +199,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--groups",
-        "-g",
-        nargs="+",
-        type=str,
-        default=None,
-        required=False,
-        help="Names of groups to load. Loads all groups by default.",
+        "--time",
+        "-t",
+        action="store_true",
+        default=False,
+        help=(
+            "Additionally plot spectra over the time interval used for the "
+            "time-averaging."
+        ),
     )
 
     args = parser.parse_args()
