@@ -617,20 +617,22 @@ class FourierSystem(FlucsSystem):
 
         kperp_max = np.sqrt(kx_max**2 + ky_max**2)
         kperp_max += dkperp  # Adding padding for diagonal
-        kperp_max = self.float(kperp_max)
 
         # Number of kperp shells
-        nkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
-        nkperp = min(nkperp, self.cuda_block_size)
+        nkperp_from_dkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
+        nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
+
+        # Maximum kperp from bin width
+        bin_width = (
+            dkperp
+            if nkperp_from_dkperp <= self.cuda_block_size 
+            else (kperp_max - kperp_min) / nkperp
+        )
+
+        kperp_max = self.float(kperp_min + nkperp * bin_width)
 
         # kperp grid
-        kperp = np.linspace(
-            kperp_min,
-            kperp_max,
-            nkperp,
-            endpoint=False,
-            dtype=self.float,
-        )
+        kperp = kperp_min + bin_width * np.arange(nkperp, dtype=self.float)
 
         # Assign attributes
         self.shell_kperp_min = kperp_min
