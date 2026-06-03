@@ -751,6 +751,19 @@ class FlucsPostProcessing:
             ),
         )
 
+        parser.add_argument(
+            "--groups",
+            "-g",
+            nargs="+",
+            type=str,
+            default=None,
+            required=False,
+            help=(
+                "Names of groups to load from the output file. Integers are "
+                "interpreted as strings. Loads all groups by default.",
+            )
+        )
+
         return parser
 
     def __init__(

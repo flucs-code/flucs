@@ -7,14 +7,22 @@ import numpy as np
 from flucs.postprocessing import FlucsPostProcessing
 
 
-def plot_0d_vs_time(post, variable=None):
+def plot_0d_vs_time(post, args):
+    # Get variable
+    variable = args.variable
+    if variable is None:
+        raise ValueError(
+            "Please specify a variable to plot using --variable/-v."
+    )
+    variable = str(variable)
+
     # Get valid files for the specified variable
-    nc_paths = post.get_valid_netcdf_paths(str(variable))
+    nc_paths = post.get_valid_netcdf_paths(variable)
 
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout="constrained")
 
-    figure_name = f"{str(variable).split('/', 1)[-1]}_vs_time"
+    figure_name = f"{variable.split('/', 1)[-1]}_vs_time"
     fig.canvas.manager.set_window_title(figure_name)
 
     # Iterate over output files
@@ -105,4 +113,4 @@ if __name__ == "__main__":
         exit()
 
     # Call function
-    plot_0d_vs_time(post, variable=args.variable)
+    plot_0d_vs_time(post, args)

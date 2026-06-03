@@ -10,11 +10,16 @@ from flucs.postprocessing import FlucsPostProcessing
 def plot_1d_vs_dimension(post, args):
 
     # Alias arguments
-    variable = str(args.variable)
+    variable = args.variable
+    if variable is None:
+        raise ValueError(
+            "Please specify a variable to plot using --variable/-v."
+    )
+    variable = str(variable)
+    variable_name = variable.rsplit("/", 1)[-1]
+
     groups = args.groups
     fraction = args.fraction
-
-    variable_name = variable.rsplit("/", 1)[-1]
 
     # Get valid files for the specified variable
     nc_paths = post.get_valid_netcdf_paths(variable)
@@ -175,16 +180,6 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Name of variable to plot.",
-    )
-
-    parser.add_argument(
-        "--groups",
-        "-g",
-        nargs="+",
-        type=str,
-        default=None,
-        required=False,
-        help="Names of groups to load. Loads all groups by default.",
     )
 
     parser.add_argument(
