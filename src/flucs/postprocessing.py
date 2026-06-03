@@ -760,7 +760,7 @@ class FlucsPostProcessing:
             required=False,
             help=(
                 "Names of groups to load from the output file. Integers are "
-                "interpreted as strings. Loads all groups by default.",
+                "interpreted as strings. Loads all groups by default."
             )
         )
 

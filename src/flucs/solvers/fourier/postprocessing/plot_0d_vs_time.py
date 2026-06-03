@@ -13,7 +13,7 @@ def plot_0d_vs_time(post, args):
     if variable is None:
         raise ValueError(
             "Please specify a variable to plot using --variable/-v."
-    )
+        )
     variable = str(variable)
 
     # Get valid files for the specified variable
