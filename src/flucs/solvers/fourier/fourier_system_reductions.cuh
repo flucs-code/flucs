@@ -621,25 +621,4 @@ void shell_sum_complex(
     );
 }
 
-__global__
-void shell_sum_field_squared(
-    const size_t nkperp,
-    const FLUCS_FLOAT kperp_min,
-    const FLUCS_FLOAT kperp_max,
-    const int field_index,
-    const FLUCS_COMPLEX* __restrict__ fields,
-    FLUCS_FLOAT* __restrict__ output) {
-
-    const FLUCS_COMPLEX* field = fields + field_index * HALFUNPADDEDSIZE;
-
-    add_and_shell_sum(
-        nkperp,
-        kperp_min,
-        kperp_max,
-        FLOAT_ONE,
-        output,
-        Abs2_Functor{field, FLOAT_ONE}
-    );
-}
-
 } // extern "C"

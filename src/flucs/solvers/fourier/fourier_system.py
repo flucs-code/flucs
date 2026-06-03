@@ -20,7 +20,6 @@ from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,
-    FourierSpectrumDiag,
     LinearEigensystemDiag,
     RealspaceDataDiag,
 )
@@ -149,7 +148,6 @@ class FourierSystem(FlucsSystem):
         LinearEigensystemDiag,
         FourierDataDiag,
         RealspaceDataDiag,
-        FourierSpectrumDiag,
     }
 
     # Forcing methods
