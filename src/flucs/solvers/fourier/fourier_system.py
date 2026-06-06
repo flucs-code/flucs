@@ -854,7 +854,7 @@ class FourierSystem(FlucsSystem):
             )
 
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                message = f"Using hyperdissipation in {component:<4}"
+                message = f"Using hyperdissipation in {component:<5}"
 
                 self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
