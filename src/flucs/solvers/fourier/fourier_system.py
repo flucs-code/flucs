@@ -91,7 +91,7 @@ class FourierSystem(FlucsSystem):
     ab3_coefficients: np.ndarray
 
     # Hyperdissipation variables
-    hyperdissipation_components = ("kz", "kx", "ky", "perp")
+    hyperdissipation_components = ("kz", "kx", "ky", "kperp")
     adaptive_rate: float
 
     # CUDA kernels
@@ -177,14 +177,14 @@ class FourierSystem(FlucsSystem):
             )
 
         # Check for conflicts in hyperdissipation parameters
-        if self.input["hyperdissipation.perp"] > 0.0 and (
+        if self.input["hyperdissipation.kperp"] > 0.0 and (
             self.input["hyperdissipation.kx"] > 0.0
             or self.input["hyperdissipation.ky"] > 0.0
         ):
             raise InvalidFlucsInputFileError(
-                "Cannot enable both hyperdissipation.perp "
+                "Cannot enable both hyperdissipation.kperp "
                 "and hyperdissipation.kx/ky simultaneously. "
-                "Use either perp or kx/ky. "
+                "Use either kperp or kx/ky. "
             )
 
         # Set resolutions appropriately

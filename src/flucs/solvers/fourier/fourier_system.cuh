@@ -214,8 +214,8 @@ void add_hyperdissipation(
     const FLUCS_FLOAT adaptive_rate,
     FLUCS_COMPLEX* current_fields
 ) {
-    #if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) || \
-          defined(HYPERDISSIPATION_KY)   || defined(HYPERDISSIPATION_KZ))
+    #if !(defined(HYPERDISSIPATION_KPERP) || defined(HYPERDISSIPATION_KX) || \
+          defined(HYPERDISSIPATION_KY)    || defined(HYPERDISSIPATION_KZ))
         return;
     #endif
 
