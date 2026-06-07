@@ -617,6 +617,27 @@ class FlucsPostProcessing:
 
         return values, boundary_indices_real, dims_dicts_real
 
+    def load_netcdf_input_files(
+        self,
+        nc_path: pl.Path,
+        groups: list[int | str] | int | str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Loads the input files stored in the selected NetCDF output groups.
+        """
+
+        input_files = self.load_netcdf_variable(
+            nc_path,
+            "input_file",
+            groups=groups,
+            concatenate=False,
+        )[0]
+
+        return [
+            toml.loads(str(input_file.item()))
+            for input_file in input_files
+        ]
+
     def save(
         self,
         obj,
