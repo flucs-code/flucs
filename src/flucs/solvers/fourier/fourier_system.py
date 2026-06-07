@@ -1355,14 +1355,23 @@ class FourierSystem(FlucsSystem):
         self.realspace_fields = None
 
     @abstractmethod
-    def calculate_nonlinear_terms(self) -> None:
+    def compute_nonlinear_terms(self, fields: cp.ndarray) -> None:
+        """
+        Computes the nonlinear terms for the supplied fields.
+
+        """
+
+    def prepare_nonlinear_terms(self) -> None:
         """
         Computes the nonlinear terms and adjusts the time step if
         necessary.
 
-        Called in the beginning of a time step.
-
         """
+
+        fields = self.fields[
+            (self.current_step - 1) % self.fields_history_size
+        ]
+        self.compute_nonlinear_terms(fields)
 
         self._update_dt()
         self._update_ab3_coefficients()
