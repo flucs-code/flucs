@@ -92,7 +92,7 @@ def plot_1d_vs_dimension(post, args):
             data_plot = data[mask_time]
 
             # Downsample data to prevent overcrowding
-            count = min(20, len(time_plot))
+            count = min(50, len(time_plot))
             time_indices = np.linspace(
                 0, len(time_plot), count, endpoint=False, dtype=int
             )

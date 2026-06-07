@@ -65,6 +65,22 @@ class FourierReductions:
                 return self._reduce_unpadded_to_kzkperp(
                     functor, input_args, complex_output, **kwargs
                 )
+            case "kx_cumulative":
+                return self._reduce_unpadded_to_kx_cumulative(
+                    functor, input_args, complex_output, **kwargs
+                )
+            case "ky_cumulative":
+                return self._reduce_unpadded_to_ky_cumulative(
+                    functor, input_args, complex_output, **kwargs
+                )
+            case "kz_cumulative":
+                return self._reduce_unpadded_to_kz_cumulative(
+                    functor, input_args, complex_output, **kwargs
+                )
+            case "kperp_cumulative":
+                return self._reduce_unpadded_to_kperp_cumulative(
+                    functor, input_args, complex_output, **kwargs
+                )
             case _:
                 raise ValueError(
                     f"Unknown reduction output {reduction_output!r}."
@@ -117,6 +133,26 @@ class FourierReductions:
             case "kzkperp":
                 return {
                     "kz": self.system.kz,
+                    "kperp": self.system.shell_kperp,
+                }
+
+            case "kx_cumulative":
+                return {
+                    "kx_abs": self.system.kx[:self.system.half_nx],
+                }
+
+            case "ky_cumulative":
+                return {
+                    "ky_abs": self.system.ky,
+                }
+
+            case "kz_cumulative":
+                return {
+                    "kz_abs": self.system.kz[:self.system.half_nz],
+                }
+
+            case "kperp_cumulative":
+                return {
                     "kperp": self.system.shell_kperp,
                 }
 
@@ -777,4 +813,172 @@ class FourierReductions:
             complex_output=complex_output,
             reduce_kz=True,
             **shell_kwargs,
+        )
+
+
+    def _create_cumulative_reduction(
+        self,
+        base_reduction: Callable[..., cp.ndarray],
+        dimension: str,
+        output_size: int,
+        complex_output: bool,
+    ) -> Callable[..., cp.ndarray]:
+        """
+        Creates a cumulative reduction from an existing 1D reduction using
+        cp.cumsum. The resulting quantities are a function of the relevant
+        absolute wavenumber.
+
+        Parameters
+        ----------
+        base_reduction : Callable[..., cp.ndarray]
+            The 1D reduction to be cumulatively summed.
+        dimension : str
+            Dimension retained by the base reduction.
+        output_size : int
+            Number of points in the cumulative output.
+        complex_output : bool
+            True if the reduction returns complex values. Otherwise,
+            real values are assumed.
+
+        Returns
+        -------
+        reduction : Callable[..., cp.ndarray]
+            The cumulative reduction function.
+
+        """
+
+        # Use a separate array from the shared reduction work arrays
+        dtype = self.system.complex if complex_output else self.system.float
+        cumulative = cp.empty(output_size, dtype=dtype)
+
+        match dimension:
+            case "kx" | "kz":
+                # Fold onto absolute wavenumbers
+                def reduction(*args):
+                    spectrum = base_reduction(*args)
+                    cumulative[0] = spectrum[0]
+                    cumulative[1:] = (
+                        spectrum[1:output_size]
+                        + spectrum[-1:output_size - 1:-1]
+                    )
+                    cp.cumsum(cumulative, out=cumulative)
+                    return cumulative
+
+            case "ky":
+                # Handle the half grid
+                def reduction(*args):
+                    spectrum = base_reduction(*args)
+                    cumulative[0] = spectrum[0]
+                    cumulative[1:] = 2 * spectrum[1:]
+                    cp.cumsum(cumulative, out=cumulative)
+                    return cumulative
+
+            case "kperp":
+                # kperp is already an absolute value
+                def reduction(*args):
+                    spectrum = base_reduction(*args)
+                    cp.cumsum(spectrum, out=cumulative)
+                    return cumulative
+
+            case _:
+                raise ValueError(
+                    f"{dimension!r} does not support cumulative reduction."
+                )
+
+        return reduction
+
+
+    def _reduce_unpadded_to_kx_cumulative(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        shared_mem: int = 0,
+    ):
+        base_reduction = self._reduce_unpadded_to_kx(
+            functor,
+            input_args,
+            complex_output,
+            shared_mem,
+        )
+
+        return self._create_cumulative_reduction(
+            base_reduction=base_reduction,
+            dimension="kx",
+            output_size=self.system.half_nx,
+            complex_output=complex_output,
+        )
+
+
+    def _reduce_unpadded_to_ky_cumulative(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        shared_mem: int = 0,
+    ):
+        base_reduction = self._reduce_unpadded_to_ky(
+            functor,
+            input_args,
+            complex_output,
+            shared_mem,
+        )
+
+        return self._create_cumulative_reduction(
+            base_reduction=base_reduction,
+            dimension="ky",
+            output_size=self.system.half_ny,
+            complex_output=complex_output,
+        )
+
+
+    def _reduce_unpadded_to_kz_cumulative(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        shared_mem: int = 0,
+    ):
+        base_reduction = self._reduce_unpadded_to_kz(
+            functor,
+            input_args,
+            complex_output,
+            shared_mem,
+        )
+
+        return self._create_cumulative_reduction(
+            base_reduction=base_reduction,
+            dimension="kz",
+            output_size=self.system.half_nz,
+            complex_output=complex_output,
+        )
+
+
+    def _reduce_unpadded_to_kperp_cumulative(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        **shell_kwargs,
+    ):
+        base_reduction = self._reduce_unpadded_to_kperp(
+            functor,
+            input_args,
+            complex_output,
+            **shell_kwargs,
+        )
+
+        self.system._precompute_shells()
+        nkperp = shell_kwargs.get("nkperp")
+        output_size = (
+            self.system.shell_nkperp
+            if nkperp is None
+            else int(nkperp)
+        )
+
+        return self._create_cumulative_reduction(
+            base_reduction=base_reduction,
+            dimension="kperp",
+            output_size=output_size,
+            complex_output=complex_output,
         )
