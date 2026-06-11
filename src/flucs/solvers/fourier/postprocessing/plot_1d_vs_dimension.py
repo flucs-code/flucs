@@ -110,6 +110,16 @@ def plot_1d_vs_dimension(post, args):
                     color=cmap(norm(time_plot[it])),
                 )
 
+            # Plot time average
+            ax_time.plot(
+                dimension,
+                np.abs(data_avg),
+                label=sim_label,
+                linewidth=1.5,
+                color=sim_color,
+                linestyle="solid",
+            )
+
             # Setting plot options
             colorbar = fig_time.colorbar(
                 plt.cm.ScalarMappable(norm=norm, cmap=cmap),
