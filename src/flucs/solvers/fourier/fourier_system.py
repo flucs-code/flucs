@@ -342,6 +342,20 @@ class FourierSystem(FlucsSystem):
         # Allocate memory
         self._allocate_memory()
 
+    @property
+    def requires_explicit_terms(self) -> bool:
+        """
+        Whether explicit terms need to be allocated and computed for this system
+        """
+
+        return (
+            not self.input["setup.linear"]
+            or (
+                bool(self.input["forcing.method"])
+                and self.forcing_object.explicit
+            )
+        )
+
     def _allocate_memory(
         self,
         allocate_derivatives_and_bits=True,
@@ -374,9 +388,9 @@ class FourierSystem(FlucsSystem):
             for i in range(self.fields_history_size)
         ]
 
-        if self.input["setup.linear"]:
+        if not self.requires_explicit_terms:
             # Dummy placeholder that is passed to the kernels
-            # when running linearly
+            # when running with no explicit terms
             self.dft_bits = cp.zeros(1, dtype=self.complex)
             return
 
@@ -397,6 +411,12 @@ class FourierSystem(FlucsSystem):
 
         # CFL in GPU memory
         self.cfl_rate = cp.zeros([1], dtype=self.float)
+
+        if self.input["setup.linear"]:
+            # Dummy placeholder that is passed to the kernels
+            # when running linearly
+            self.dft_bits = cp.zeros(1, dtype=self.complex)
+            return
 
         # Don't do anything if the user wants to handle this manually
         if not allocate_derivatives_and_bits:
@@ -744,7 +764,7 @@ class FourierSystem(FlucsSystem):
         )
 
         # Reset AB3 history
-        if not self.input["setup.linear"]:
+        if self.requires_explicit_terms:
             self.multistep_explicit_terms.fill(self.complex(0.0))
             cupy_set_device_pointer(
                 self.cupy_module,
