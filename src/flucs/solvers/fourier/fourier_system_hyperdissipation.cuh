@@ -273,7 +273,6 @@ struct HyperdissipationSelector_Functor {
                 }(index);
             default:
                 __trap();
-                return ((FLUCS_FLOAT)0);
         }
     }
 };
