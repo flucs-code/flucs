@@ -25,6 +25,9 @@ def plot_0d_vs_time(post, args):
     figure_name = f"{variable.split('/', 1)[-1]}_vs_time"
     fig.canvas.manager.set_window_title(figure_name)
 
+    min_time = np.nan
+    max_time = np.nan
+
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
         # Assign identifiers
@@ -52,11 +55,15 @@ def plot_0d_vs_time(post, args):
             linestyle="solid",
         )
 
+        # Change x axis lims if needed
+        min_time = np.nanmin((min_time, np.min(time)))
+        max_time = np.nanmax((max_time, np.max(time)))
+
     # Setting plot options
     ax.set_xlabel("Time")
     ax.set_ylabel(variable)
 
-    ax.set_xlim(np.min(time), np.max(time))
+    ax.set_xlim((min_time, max_time))
 
     ax.legend()
 
