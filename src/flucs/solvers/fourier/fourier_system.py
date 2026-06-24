@@ -317,7 +317,7 @@ class FourierSystem(FlucsSystem):
         super().setup()
 
         # Initialise shell grids for diagnostics
-        self._precompute_shells()
+        self._compute_kperp_shells()
 
         # Setup initial conditions
         self._set_initial_conditions()
@@ -598,24 +598,24 @@ class FourierSystem(FlucsSystem):
             / self.input["dimensions.Ly"]
         )
 
-    def _precompute_shells(self):
+    def _compute_kperp_shells(self):
         """
-        Sets the default kperp shell grid used. 
+        Sets the default kperp shell grid used.
 
         The CUDA shell-sum kernels use uniform half-open bins,
 
             [kperp_min, kperp_max),
 
-        with bin index 
-            
+        with bin index
+
             floor((kperp - kperp_min) * nkperp / (kperp_max - kperp_min)).
 
-        The default kperp_max is padded above the largest resolved diagonal mode 
+        The default kperp_max is padded above the largest resolved diagonal mode
         so that summing all bins includes all resolved modes.
         """
 
-        # TODO: if adding NS/isotropic systems, either add to this or add a 
-        # separate method for isotropic systems (_precompute_shells_isotropic) 
+        # TODO: if adding NS/isotropic systems, either add to this or add a
+        # separate method for isotropic systems (_precompute_shells_isotropic)
         # alongside the appropriate kernels to do the isotropic shell calcs, as
         # well as create_shell_reduction_isotropic
 
@@ -643,7 +643,7 @@ class FourierSystem(FlucsSystem):
         # Maximum kperp from bin width
         bin_width = (
             dkperp
-            if nkperp_from_dkperp <= self.cuda_block_size 
+            if nkperp_from_dkperp <= self.cuda_block_size
             else (kperp_max - kperp_min) / nkperp
         )
 
@@ -657,6 +657,10 @@ class FourierSystem(FlucsSystem):
         self.shell_kperp_max = kperp_max
         self.shell_nkperp = nkperp
         self.shell_kperp = kperp
+        self.shell_last_complete_bin = (
+            int((min(kx_max, ky_max) - kperp_min)
+                * nkperp / (kperp_max - kperp_min))
+        )
 
     def get_broadcast_wavenumbers(self):
         """Returns wavenumber arrays broadcast to (nz, nx, half_ny)
