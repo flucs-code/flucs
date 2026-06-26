@@ -707,7 +707,7 @@ class FourierReductions:
         """
 
         # Precompute shells if not already done
-        self.system._precompute_shells()
+        self.system._compute_kperp_shells()
 
         # Overwrite defaults if specified
         nkperp = self.system.shell_nkperp if nkperp is None else int(nkperp)
@@ -968,7 +968,7 @@ class FourierReductions:
             **shell_kwargs,
         )
 
-        self.system._precompute_shells()
+        self.system._compute_kperp_shells()
         nkperp = shell_kwargs.get("nkperp")
         output_size = (
             self.system.shell_nkperp
