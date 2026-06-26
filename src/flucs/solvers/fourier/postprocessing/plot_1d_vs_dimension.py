@@ -8,13 +8,12 @@ from flucs.postprocessing import FlucsPostProcessing
 
 
 def plot_1d_vs_dimension(post, args):
-
     # Alias arguments
     variable = args.variable
     if variable is None:
         raise ValueError(
             "Please specify a variable to plot using --variable/-v."
-    )
+        )
     variable = str(variable)
     variable_name = variable.rsplit("/", 1)[-1]
 
@@ -30,15 +29,14 @@ def plot_1d_vs_dimension(post, args):
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
-
         # Assign identifiers
         sim_label = pl.Path(nc_path).parent.name
         sim_color = plt.cm.rainbow(np.linspace(0, 1, len(nc_paths)))[index]
 
         # Read data from netCDF file
         time = post.load_netcdf_variable(
-            nc_path, 
-            "time", 
+            nc_path,
+            "time",
             groups=groups,
         )[0]
         data, _, dims_dicts = post.load_netcdf_variable(
@@ -79,7 +77,6 @@ def plot_1d_vs_dimension(post, args):
 
         # Plot spectra evolution over time
         if args.time:
-
             # Initialise individual plot
             fig_time, ax_time = plt.subplots(1, 1, layout="constrained")
             fig_name_time = (

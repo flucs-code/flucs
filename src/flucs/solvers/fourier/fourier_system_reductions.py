@@ -5,6 +5,7 @@ import cupy as cp
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.cupy import KernelWrapper
 
+
 class FourierReductions:
     """
     A wrapper class for registering reductions and other functionality required
@@ -86,12 +87,7 @@ class FourierReductions:
                     f"Unknown reduction output {reduction_output!r}."
                 )
 
-
-    def get_dimensions(
-        self, 
-        reduction_output: str
-        ) -> dict[str, cp.ndarray]:
-
+    def get_dimensions(self, reduction_output: str) -> dict[str, cp.ndarray]:
         """
         Returns the dimensions corresponding to the specified reduction output.
         """
@@ -138,7 +134,7 @@ class FourierReductions:
 
             case "kx_cumulative":
                 return {
-                    "kx_abs": self.system.kx[:self.system.half_nx],
+                    "kx_abs": self.system.kx[: self.system.half_nx],
                 }
 
             case "ky_cumulative":
@@ -148,7 +144,7 @@ class FourierReductions:
 
             case "kz_cumulative":
                 return {
-                    "kz_abs": self.system.kz[:self.system.half_nz],
+                    "kz_abs": self.system.kz[: self.system.half_nz],
                 }
 
             case "kperp_cumulative":
@@ -161,7 +157,6 @@ class FourierReductions:
                     f"Unknown reduction output {reduction_output!r}."
                 )
 
-    
     def _create_reduction(
         self,
         shape: tuple[int],
@@ -274,8 +269,12 @@ class FourierReductions:
                 temp_2d = self.system.get_temp_array(
                     shape[0] * shape[1], is_complex=complex_output
                 )
-                temp_1d = self.system.get_temp_array(shape[0], is_complex=complex_output)
-                temp_0d = self.system.get_temp_array(1, is_complex=complex_output)
+                temp_1d = self.system.get_temp_array(
+                    shape[0], is_complex=complex_output
+                )
+                temp_0d = self.system.get_temp_array(
+                    1, is_complex=complex_output
+                )
 
                 def reduction(*args):
                     data_kernel(temp_2d, *args)
@@ -318,7 +317,9 @@ class FourierReductions:
                 temp_2d = self.system.get_temp_array(
                     shape[0] * shape[1], is_complex=complex_output
                 )
-                temp_1d = self.system.get_temp_array(shape[0], is_complex=complex_output)
+                temp_1d = self.system.get_temp_array(
+                    shape[0], is_complex=complex_output
+                )
 
                 def reduction(*args):
                     data_kernel(temp_2d, *args)
@@ -364,7 +365,9 @@ class FourierReductions:
                 temp_2d = self.system.get_temp_array(
                     shape[0] * shape[1], is_complex=complex_output
                 )
-                temp_1d = self.system.get_temp_array(shape[1], is_complex=complex_output)
+                temp_1d = self.system.get_temp_array(
+                    shape[1], is_complex=complex_output
+                )
 
                 def reduction(*args):
                     data_kernel(temp_2d, *args)
@@ -444,7 +447,9 @@ class FourierReductions:
                 temp_2d = self.system.get_temp_array(
                     shape[0] * shape[2], is_complex=complex_output
                 )
-                temp_1d = self.system.get_temp_array(shape[2], is_complex=complex_output)
+                temp_1d = self.system.get_temp_array(
+                    shape[2], is_complex=complex_output
+                )
 
                 def reduction(*args):
                     data_kernel(temp_2d, *args)
@@ -520,7 +525,6 @@ class FourierReductions:
 
         return reduction
 
-
     def _reduce_unpadded_to_scalar(
         self,
         functor: str,
@@ -537,7 +541,6 @@ class FourierReductions:
             is_half_axis=True,
             shared_mem=shared_mem,
         )
-
 
     def _reduce_unpadded_to_kz(
         self,
@@ -556,7 +559,6 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-
     def _reduce_unpadded_to_kx(
         self,
         functor: str,
@@ -573,7 +575,6 @@ class FourierReductions:
             is_half_axis=True,
             shared_mem=shared_mem,
         )
-
 
     def _reduce_unpadded_to_ky(
         self,
@@ -592,7 +593,6 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-
     def _reduce_unpadded_to_kzkx(
         self,
         functor: str,
@@ -609,7 +609,6 @@ class FourierReductions:
             is_half_axis=True,
             shared_mem=shared_mem,
         )
-
 
     def _reduce_unpadded_to_kzky(
         self,
@@ -628,7 +627,6 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-
     def _reduce_unpadded_to_kxky(
         self,
         functor: str,
@@ -645,7 +643,6 @@ class FourierReductions:
             is_half_axis=True,
             shared_mem=shared_mem,
         )
-
 
     def _create_shell_reduction(
         self,
@@ -713,10 +710,14 @@ class FourierReductions:
         nkperp = self.system.shell_nkperp if nkperp is None else int(nkperp)
 
         kperp_min = (
-            self.system.shell_kperp_min if kperp_min is None else self.system.float(kperp_min)
+            self.system.shell_kperp_min
+            if kperp_min is None
+            else self.system.float(kperp_min)
         )
         kperp_max = (
-            self.system.shell_kperp_max if kperp_max is None else self.system.float(kperp_max)
+            self.system.shell_kperp_max
+            if kperp_max is None
+            else self.system.float(kperp_max)
         )
 
         # Validate parameters
@@ -755,6 +756,7 @@ class FourierReductions:
 
         # (kz, kperp) data
         if not reduce_kz:
+
             def reduction(*args):
                 shell_kernel(nkperp, kperp_min, kperp_max, temp_2d, *args)
                 return temp_2d
@@ -762,7 +764,9 @@ class FourierReductions:
             return reduction
 
         # Temporary array for holding kperp data
-        temp_kperp = self.system.get_temp_array(nkperp, is_complex=complex_output)
+        temp_kperp = self.system.get_temp_array(
+            nkperp, is_complex=complex_output
+        )
 
         reduce_kz_kernel = KernelWrapper(
             system=self.system,
@@ -770,7 +774,11 @@ class FourierReductions:
                 f"simple_middle_axis_sum<{self.system.nz},{nkperp},"
                 f"{output_type},NOP_Functor<{output_type}>,{output_type}*>"
             ),
-            grid=((nkperp + self.system.cuda_block_size - 1) // self.system.cuda_block_size, 1),
+            grid=(
+                (nkperp + self.system.cuda_block_size - 1)
+                // self.system.cuda_block_size,
+                1,
+            ),
             block=(self.system.cuda_block_size,),
             shared_mem=0,
         )
@@ -782,7 +790,6 @@ class FourierReductions:
             return temp_kperp
 
         return reduction
-
 
     def _reduce_unpadded_to_kzkperp(
         self,
@@ -799,7 +806,6 @@ class FourierReductions:
             **shell_kwargs,
         )
 
-
     def _reduce_unpadded_to_kperp(
         self,
         functor: str,
@@ -814,7 +820,6 @@ class FourierReductions:
             reduce_kz=True,
             **shell_kwargs,
         )
-
 
     def _create_cumulative_reduction(
         self,
@@ -859,7 +864,7 @@ class FourierReductions:
                     cumulative[0] = spectrum[0]
                     cumulative[1:] = (
                         spectrum[1:output_size]
-                        + spectrum[-1:output_size - 1:-1]
+                        + spectrum[-1 : output_size - 1 : -1]
                     )
                     cp.cumsum(cumulative, out=cumulative)
                     return cumulative
@@ -887,7 +892,6 @@ class FourierReductions:
 
         return reduction
 
-
     def _reduce_unpadded_to_kx_cumulative(
         self,
         functor: str,
@@ -908,7 +912,6 @@ class FourierReductions:
             output_size=self.system.half_nx,
             complex_output=complex_output,
         )
-
 
     def _reduce_unpadded_to_ky_cumulative(
         self,
@@ -931,7 +934,6 @@ class FourierReductions:
             complex_output=complex_output,
         )
 
-
     def _reduce_unpadded_to_kz_cumulative(
         self,
         functor: str,
@@ -953,7 +955,6 @@ class FourierReductions:
             complex_output=complex_output,
         )
 
-
     def _reduce_unpadded_to_kperp_cumulative(
         self,
         functor: str,
@@ -971,9 +972,7 @@ class FourierReductions:
         self.system._compute_kperp_shells()
         nkperp = shell_kwargs.get("nkperp")
         output_size = (
-            self.system.shell_nkperp
-            if nkperp is None
-            else int(nkperp)
+            self.system.shell_nkperp if nkperp is None else int(nkperp)
         )
 
         return self._create_cumulative_reduction(

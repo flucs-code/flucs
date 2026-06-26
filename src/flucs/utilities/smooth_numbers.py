@@ -3,7 +3,7 @@ import heapq
 
 def next_smooth_number(n: int, primes: list | None = None) -> int:
     """
-    Returns the smallest number that is greater than or equal to a given number 
+    Returns the smallest number that is greater than or equal to a given number
     n and divisible only by the prime numbers specified in primes.
 
     Parameters

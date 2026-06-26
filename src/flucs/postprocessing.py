@@ -402,8 +402,8 @@ class FlucsPostProcessing:
                 if dim in grp.variables:
                     return grp.variables[dim]
 
-                # Stop once we have reached the diagnostic group, whose parent 
-                # is the numbered output group containing "time", "dt", and 
+                # Stop once we have reached the diagnostic group, whose parent
+                # is the numbered output group containing "time", "dt", and
                 # other diagnostic groups.
                 parent = grp.parent
                 if parent is None or "time" in parent.variables:
@@ -634,8 +634,7 @@ class FlucsPostProcessing:
         )[0]
 
         return [
-            toml.loads(str(input_file.item()))
-            for input_file in input_files
+            toml.loads(str(input_file.item())) for input_file in input_files
         ]
 
     def save(
@@ -782,7 +781,7 @@ class FlucsPostProcessing:
             help=(
                 "Names of groups to load from the output file. Integers are "
                 "interpreted as strings. Loads all groups by default."
-            )
+            ),
         )
 
         return parser

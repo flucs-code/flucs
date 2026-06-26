@@ -348,12 +348,8 @@ class FourierSystem(FlucsSystem):
         Whether explicit terms need to be allocated and computed for this system
         """
 
-        return (
-            not self.input["setup.linear"]
-            or (
-                bool(self.input["forcing.method"])
-                and self.forcing_object.explicit
-            )
+        return not self.input["setup.linear"] or (
+            bool(self.input["forcing.method"]) and self.forcing_object.explicit
         )
 
     def _allocate_memory(
@@ -657,9 +653,8 @@ class FourierSystem(FlucsSystem):
         self.shell_kperp_max = kperp_max
         self.shell_nkperp = nkperp
         self.shell_kperp = kperp
-        self.shell_last_complete_bin = (
-            int((min(kx_max, ky_max) - kperp_min)
-                * nkperp / (kperp_max - kperp_min))
+        self.shell_last_complete_bin = int(
+            (min(kx_max, ky_max) - kperp_min) * nkperp / (kperp_max - kperp_min)
         )
 
     def get_broadcast_wavenumbers(self):
@@ -872,7 +867,6 @@ class FourierSystem(FlucsSystem):
 
         # Hyperdissipation
         for index, component in enumerate(self.hyperdissipation_components):
-
             self.module_options.define_int(
                 f"HYPERDISSIPATION_{component.upper()}_INT", index
             )
@@ -1392,9 +1386,7 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        fields = self.fields[
-            (self.current_step - 1) % self.fields_history_size
-        ]
+        fields = self.fields[(self.current_step - 1) % self.fields_history_size]
         self.compute_nonlinear_terms(fields)
 
         self._update_dt()
