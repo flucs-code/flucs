@@ -1,6 +1,13 @@
 """A selection of useful functions and classes for dealing with CuPy"""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import cupy as cp
+
+if TYPE_CHECKING:
+    from flucs.systems import FlucsSystem
 
 
 def cupy_set_device_pointer(
@@ -39,9 +46,11 @@ class ModuleOptions:
 
     _defs: dict
     options = ("--ptxas-options=-O3", "--use_fast_math")
+    name_expressions: list
 
     def __init__(self) -> None:
         self._defs = {}
+        self.name_expressions = []
 
     def add_compiler_option(self, option: str) -> None:
         """Adds a compiler option."""
@@ -158,3 +167,68 @@ class ModuleOptions:
                 ret += (f"-D{key}",)
 
         return ret
+
+
+class KernelWrapper:
+    system: FlucsSystem
+    kernel: cp.RawKernel
+    cuda_kernel_name: str
+    grid: tuple[int]
+    block: tuple[int]
+    shared_mem: int
+
+    def bind(self) -> None:
+        """Binds the wrapper to the compiled kernel."""
+        self.kernel = self.system.cupy_module.get_function(
+            self.cuda_kernel_name
+        )
+
+    def __call__(self, *args) -> None:
+        self.kernel(self.grid, self.block, args, shared_mem=self.shared_mem)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, KernelWrapper):
+            return NotImplemented
+
+        return (
+            self.cuda_kernel_name,
+            self.grid,
+            self.block,
+            self.shared_mem,
+        ) == (other.cuda_kernel_name, other.grid, other.block, other.shared_mem)
+
+    def __init__(
+        self,
+        system: FlucsSystem,
+        cuda_kernel_name: str,
+        grid: tuple[int],
+        block: tuple[int],
+        shared_mem: int = 0,
+    ) -> None:
+        system.kernels._kernels.append(self)
+        system.module_options.name_expressions.append(cuda_kernel_name)
+        self.system = system
+        self.cuda_kernel_name = cuda_kernel_name
+        self.grid = grid
+        self.block = block
+        self.shared_mem = shared_mem
+
+
+class KernelCollection:
+    _kernels: list[KernelWrapper]
+    system: FlucsSystem
+
+    def bind(self):
+        """Binds the KernelWrappers to the compiled symbols."""
+        for kernel in self._kernels:
+            kernel.bind()
+
+    def __init__(self, system: FlucsSystem):
+        self._kernels = []
+        self.system = system
+
+    def __getitem__(self, i):
+        return self._kernels[i]
+
+    def __iter__(self):
+        return iter(self._kernels)

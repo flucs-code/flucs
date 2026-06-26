@@ -104,7 +104,7 @@ def list_solvers_and_systems():
         flucsprint(f"{_indent}None")
     else:
         for s in sorted(systems, key=lambda e: e.name.lower()):
-            flucsprint(f"{_indent}{s.name:20} ({s.dist.name})")
+            flucsprint(f"{_indent}{s.name:22} ({s.dist.name})")
 
     flucsprint("For more information, see https://github.com/flucs-code")
 

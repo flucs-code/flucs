@@ -1,16 +1,16 @@
 // Calculates the perpendicular hyperdissipation for a given kx, ky mode
 __device__ __forceinline__
-FLUCS_FLOAT get_hyperdissipation_perp(
+FLUCS_FLOAT get_hyperdissipation_kperp(
     const FLUCS_FLOAT kx,
     const FLUCS_FLOAT ky,
     const FLUCS_FLOAT adaptive_rate
 ) {
 
-#ifdef HYPERDISSIPATION_PERP
+#ifdef HYPERDISSIPATION_KPERP
 
     const FLUCS_FLOAT kperp2 = kx * kx + ky * ky;
 
-#ifdef HYPERDISSIPATION_PERP_NORMALISED
+#ifdef HYPERDISSIPATION_KPERP_NORMALISED
     const FLUCS_FLOAT kx_max = kx_from_ikx(HALF_NX - 1);
     const FLUCS_FLOAT ky_max = ky_from_iky(HALF_NY - 1);
     const FLUCS_FLOAT kperp2_norm = kperp2 / (kx_max * kx_max + ky_max * ky_max);
@@ -18,13 +18,13 @@ FLUCS_FLOAT get_hyperdissipation_perp(
     const FLUCS_FLOAT kperp2_norm = kperp2;
 #endif // NORMALISED
 
-    FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_PERP;
+    FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KPERP;
 
     #pragma unroll
-    for (int i = 0; i < HYPERDISSIPATION_PERP_POWER; i++)
+    for (int i = 0; i < HYPERDISSIPATION_KPERP_POWER; i++)
         hyperdissipation *= kperp2_norm;
 
-    #ifdef HYPERDISSIPATION_PERP_ADAPTIVE
+    #ifdef HYPERDISSIPATION_KPERP_ADAPTIVE
         hyperdissipation *= adaptive_rate;
     #endif
 
@@ -150,7 +150,7 @@ FLUCS_FLOAT get_hyperdissipation(
     const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
     const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
 
-    return get_hyperdissipation_perp(kx, ky, adaptive_rate)
+    return get_hyperdissipation_kperp(kx, ky, adaptive_rate)
         + get_hyperdissipation_kx(kx, adaptive_rate)
         + get_hyperdissipation_ky(ky, adaptive_rate)
         + get_hyperdissipation_kz(kz, adaptive_rate);
@@ -158,7 +158,7 @@ FLUCS_FLOAT get_hyperdissipation(
 
 // Functor for calculating the size of the term due to perpendicular hyperdissipation for a given mode
 template<typename FunctorT>
-struct HyperdissipationPerp_Functor {
+struct HyperdissipationKperp_Functor {
     const FunctorT functor;
     const FLUCS_FLOAT adaptive_rate;
     __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
@@ -168,7 +168,7 @@ struct HyperdissipationPerp_Functor {
         const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
 
         const FLUCS_FLOAT hyperdissipation = (
-            get_hyperdissipation_perp(kx, ky, adaptive_rate)
+            get_hyperdissipation_kperp(kx, ky, adaptive_rate)
         );
 
         return hyperdissipation * functor(index);
@@ -243,5 +243,36 @@ struct Hyperdissipation_Functor {
         );
         
         return hyperdissipation * functor(index);
+    }
+};
+
+// Functor for registering the hyperdissipation functors for each component
+template<typename FunctorT>
+struct HyperdissipationSelector_Functor {
+    const FunctorT functor;
+    const FLUCS_FLOAT adaptive_rate;
+    const int hyperdissipation_type;
+
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
+        switch (hyperdissipation_type) {
+            case HYPERDISSIPATION_KZ_INT:
+                return HyperdissipationKz_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_KX_INT:
+                return HyperdissipationKx_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_KY_INT:
+                return HyperdissipationKy_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_KPERP_INT:
+                return HyperdissipationKperp_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            default:
+                __trap();
+        }
     }
 };

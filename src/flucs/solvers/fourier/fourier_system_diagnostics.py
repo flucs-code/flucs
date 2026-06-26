@@ -279,8 +279,6 @@ class FourierDataDiag(FlucsDiagnostic):
     system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
 
-    type: str
-    slices: dict
     slice_calculators: list[Callable[[], None]]
 
     def init_vars(self):
@@ -384,8 +382,6 @@ class RealspaceDataDiag(FlucsDiagnostic):
     system: FourierSystem
     option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
 
-    type: str
-    slices: dict
     slice_calculators: list[Callable[[], None]]
 
     def init_vars(self):
@@ -430,13 +426,22 @@ class RealspaceDataDiag(FlucsDiagnostic):
                     ifield
                 ],
                 f"{loc_name}/z": np.linspace(
-                    0, self.system.input["dimensions.Lz"], self.system.nz
+                    0,
+                    self.system.input["dimensions.Lz"],
+                    self.system.nz,
+                    endpoint=False,
                 )[iz],
                 f"{loc_name}/x": np.linspace(
-                    0, self.system.input["dimensions.Lx"], self.system.nx
+                    0,
+                    self.system.input["dimensions.Lx"],
+                    self.system.nx,
+                    endpoint=False,
                 )[ix],
                 f"{loc_name}/y": np.linspace(
-                    0, self.system.input["dimensions.Ly"], self.system.ny
+                    0,
+                    self.system.input["dimensions.Ly"],
+                    self.system.ny,
+                    endpoint=False,
                 )[iy],
             }
 

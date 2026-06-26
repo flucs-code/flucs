@@ -6,13 +6,17 @@
 #ifdef DOUBLE_PRECISION
     #define FLUCS_FLOAT double
     #define flucs_fabs(x) fabs(x)
+    #define flucs_sqrt(x) sqrt(x)
     #define flucs_fmax(x, y) fmax(x, y)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
+    #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
+    #define flucs_sqrt(x) sqrtf(x)
     #define flucs_fmax(x, y) fmaxf(x, y)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
+    #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
 #endif
 
 #define FLUCS_COMPLEX complex<FLUCS_FLOAT>
@@ -210,8 +214,8 @@ void add_hyperdissipation(
     const FLUCS_FLOAT adaptive_rate,
     FLUCS_COMPLEX* current_fields
 ) {
-    #if !(defined(HYPERDISSIPATION_PERP) || defined(HYPERDISSIPATION_KX) || \
-          defined(HYPERDISSIPATION_KY)   || defined(HYPERDISSIPATION_KZ))
+    #if !(defined(HYPERDISSIPATION_KPERP) || defined(HYPERDISSIPATION_KX) || \
+          defined(HYPERDISSIPATION_KY)    || defined(HYPERDISSIPATION_KZ))
         return;
     #endif
 

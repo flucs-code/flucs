@@ -23,7 +23,7 @@ from flucs import FlucsInput
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
-from flucs.utilities.cupy import ModuleOptions
+from flucs.utilities.cupy import KernelCollection, ModuleOptions
 from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
@@ -61,6 +61,13 @@ class FlucsSystem(ABC):
 
     # Compile options for CUDA
     module_options: ModuleOptions
+
+    # CUDA arrays for intermediate calculations
+    # typically used by diagnostics
+    temp_arrays: dict[str, cp.ndarray]
+
+    # CUDA kernels
+    kernels: KernelCollection
 
     # CUFFT plan types
     fft_c2r_plan_type: int
@@ -178,6 +185,19 @@ class FlucsSystem(ABC):
             output_to_execute.execute()
             heapq.heappush(self.output_heap, output_to_execute)
 
+    def get_temp_array(self, size: int, is_complex=True) -> cp.ndarray:
+        array_key = (size, is_complex)
+
+        if array_key not in self.temp_arrays:
+            if is_complex:
+                temp_array = cp.zeros(size, dtype=self.complex)
+            else:
+                temp_array = cp.zeros(size, dtype=self.float)
+
+            self.temp_arrays[array_key] = temp_array
+
+        return self.temp_arrays[array_key]
+
     def setup(self) -> None:
         """
         Sets up the initial time data, calls the restart manager,
@@ -246,21 +266,36 @@ class FlucsSystem(ABC):
         # Add the current date at the end of the source to force recompilation
         cuda_module += f"\n// {datetime.datetime.now()}"
 
+        self.setup_cuda_definitions()
+        self.register_kernels()
+
         self.cupy_module = cp.RawModule(
-            code=cuda_module, options=self.module_options.get_options()
+            code=cuda_module,
+            options=self.module_options.get_options(),
+            name_expressions=self.module_options.name_expressions,
         )
 
         self.cupy_module.compile(log_stream=sys.stdout)
-        self.setup_cuda_grids()
+        self.setup_kernels()
 
     @abstractmethod
-    def setup_cuda_grids(self) -> None:
-        """Sets up the grids and blocks for CUDA kernels.
-
-        In the future, this may be the place to do some automatic optimisation.
-        As it stands, this is sysem-specific.
+    def setup_cuda_definitions(self) -> None:
+        """
+        Sets up any CUDA definitions (e.g., compile-time constants, flags, etc)
         """
         pass
+
+    @abstractmethod
+    def register_kernels(self) -> None:
+        """Registers kernels (incl. templated kernels) that are to be used."""
+        pass
+
+    def setup_kernels(self) -> None:
+        """Sets up the CUDA kernels.
+
+        In the future, this may be the place to do some automatic optimisation.
+        """
+        self.kernels.bind()
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """
@@ -434,6 +469,8 @@ class FlucsSystem(ABC):
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
+        self.temp_arrays = {}
+        self.kernels = KernelCollection(self)
         self.module_options = ModuleOptions()
         self._add_include_dirs()
         self._interpret_input()
