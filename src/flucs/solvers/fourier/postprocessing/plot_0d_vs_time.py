@@ -41,8 +41,8 @@ def plot_0d_vs_time(post, args):
         # Validate dimension
         if data.ndim != 1:
             raise ValueError(
-                f"Expected a 0D time-dependent variable, but '{variable}' loaded "
-                f"with shape {data.shape}."
+                f"Expected a 0D time-dependent variable, but '{variable}' "
+                f"loaded with shape {data.shape}."
             )
 
         # Plot data

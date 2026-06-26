@@ -413,7 +413,8 @@ class FlucsPostProcessing:
 
             raise KeyError(
                 f"Dimension variable '{dim}' not found for variable "
-                f"'{var_obj.name}' in diagnostic group '{var_obj.group().path}'."
+                f"'{var_obj.name}' in diagnostic group "
+                f"'{var_obj.group().path}'."
             )
 
         # Handle a single group

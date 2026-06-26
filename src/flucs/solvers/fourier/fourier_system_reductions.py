@@ -520,7 +520,8 @@ class FourierReductions:
 
             case _:
                 raise ValueError(
-                    f"{reduce_axis} is an invalid specification of reduction axes."
+                    f"{reduce_axis} is an invalid specification "
+                    "of reduction axes."
                 )
 
         return reduction
@@ -655,9 +656,9 @@ class FourierReductions:
         kperp_max: float | None = None,
     ) -> Callable[..., cp.ndarray]:
         """
-        Creates a kperp shell-reduction function, typically used for diagnostics,
-        that constructs an implicit unpadded Fourier-space array using a functor
-        with arbitrary parameters.
+        Creates a kperp shell-reduction function, typically used for diagnostics
+        that constructs an implicit unpadded Fourier-space array using
+        a functor with arbitrary parameters.
 
         The shell reduction itself is a function that can be called as
         reduction(*args), where *args are passed onto the functor constructor,

@@ -280,7 +280,9 @@ class FlucsSystem(ABC):
 
     @abstractmethod
     def setup_cuda_definitions(self) -> None:
-        """Sets up any CUDA definitions (e.g., compile-time constants, flags, etc)"""
+        """
+        Sets up any CUDA definitions (e.g., compile-time constants, flags, etc)
+        """
         pass
 
     @abstractmethod
