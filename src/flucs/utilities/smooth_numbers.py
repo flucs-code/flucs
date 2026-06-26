@@ -2,9 +2,9 @@ import heapq
 
 
 def next_smooth_number(n: int, primes: list | None = None) -> int:
-    """Returns the smallest number that is strictly bigger
-    than a given number n and divisible only by
-    the prime numbers specified in primes.
+    """
+    Returns the smallest number that is greater than or equal to a given number
+    n and divisible only by the prime numbers specified in primes.
 
     Parameters
     ----------
@@ -17,7 +17,7 @@ def next_smooth_number(n: int, primes: list | None = None) -> int:
     Returns
     -------
     int
-        The smallest 3-smooth number bigger than n.
+        The smallest 3-smooth number greater than or equal to n.
 
     """
 
@@ -31,7 +31,7 @@ def next_smooth_number(n: int, primes: list | None = None) -> int:
     while True:
         guess = heapq.heappop(heap)
 
-        if n < guess:
+        if n <= guess:
             return guess
 
         for p in primes:

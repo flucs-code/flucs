@@ -1,5 +1,26 @@
 #pragma once
 
+// No-op conj for floats
+__device__ __forceinline__
+FLUCS_FLOAT conj(FLUCS_FLOAT x)  { return x; }
+
+// Atomic addition for complex numbers
+__device__ __forceinline__
+void atomicAdd(FLUCS_COMPLEX* address, FLUCS_COMPLEX val) {
+    // Cast complex to float to allow easy access to real and imag parts
+    FLUCS_FLOAT* ptr = reinterpret_cast<FLUCS_FLOAT*>(address);
+
+    atomicAdd(&ptr[0], val.real());
+    atomicAdd(&ptr[1], val.imag());
+}
+
+// Fixing the annoyances with templated shared memory
+template <typename T>
+__device__ __forceinline__ T* templated_shared_memory() {
+    extern __shared__ unsigned char shared[];
+    return reinterpret_cast<T*>(shared);
+}
+
 __device__ float atomicMaxFloat(float* addr, float value) {
     int* address_as_int = (int*) addr;
     int old = *address_as_int, assumed;

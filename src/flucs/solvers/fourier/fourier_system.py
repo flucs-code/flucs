@@ -2,6 +2,8 @@
 Abstract base class for a system that can be solved by FourierSolver.
 """
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from typing import ClassVar
 
@@ -12,7 +14,8 @@ from cupy.cuda import cufft
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
-from flucs.utilities.cupy import cupy_set_device_pointer
+from flucs.utilities.cupy import KernelWrapper, cupy_set_device_pointer
+from flucs.utilities.messages import flucsprint
 from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
@@ -20,19 +23,22 @@ from .fourier_system_diagnostics import (
     LinearEigensystemDiag,
     RealspaceDataDiag,
 )
+from .fourier_system_forcing import FourierSystemForcing
 
 
 class FourierSystem(FlucsSystem):
-    """A generic system of equations solved using pseudospectral Fourier
-    methods."""
+    """
+    A generic system of equations solved using pseudospectral Fourier
+    methods.
+    """
 
     # Number of fields that the solver is solving for
     number_of_fields: int
 
-    # Number of fields whose equations contain nonlinear terms. This is
+    # Number of fields whose equations contain explicit terms. This is
     # typically the same as number_of_fields, but can be smaller for some
     # systems
-    number_of_fields_nonlinear: int
+    number_of_fields_explicit: int
 
     # Derivatives and bits used for the nonlinear terms
     number_of_dft_derivatives: int
@@ -84,10 +90,14 @@ class FourierSystem(FlucsSystem):
     dt_array: np.ndarray
     ab3_coefficients: np.ndarray
 
+    # Hyperdissipation variables
+    hyperdissipation_components = ("kz", "kx", "ky", "kperp")
+    adaptive_rate: float
+
     # CUDA kernels
-    precompute_iteration_matrices_kernel: cp.RawKernel
-    finish_step_kernel: cp.RawKernel
-    compute_linear_matrix_kernel: cp.RawKernel
+    finish_step_kernel: KernelWrapper
+    precompute_iteration_matrices_kernel: KernelWrapper
+    compute_linear_matrix_kernel: KernelWrapper
     cuda_block_size: int = 512
 
     # CUDA grids
@@ -127,6 +137,12 @@ class FourierSystem(FlucsSystem):
     ky: np.ndarray
     kz: np.ndarray
 
+    # kperp shells
+    shell_kperp_min: float
+    shell_kperp_max: float
+    shell_nkperp: int
+    shell_kperp: np.ndarray
+
     # Diagnostics available to all FourierSystems
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
         LinearEigensystemDiag,
@@ -134,12 +150,17 @@ class FourierSystem(FlucsSystem):
         RealspaceDataDiag,
     }
 
+    # Forcing methods
+    forcing_object: FourierSystemForcing
+    solver_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
+    system_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
+
     def _interpret_input(self):
-        """Validates and sets up the number of lattice points."""
+        """Validates inputs and sets up the number of lattice points."""
 
         # Check for conflicts in time-stepping input parameters
         if self.input["time.dt_method"] == "discrete":
-            print("Using discrete time stepping.")
+            flucsprint("Using discrete time stepping.")
 
         elif self.input["time.dt_method"] == "continuous":
             if self.input["setup.precompute_linear_matrix"]:
@@ -147,7 +168,7 @@ class FourierSystem(FlucsSystem):
                     "Cannot have setup.precompute_linear_matrix = true if "
                     "time.dt_method = 'continuous'."
                 )
-            print("Using continuous time stepping.")
+            flucsprint("Using continuous time stepping.")
 
         else:
             raise InvalidFlucsInputFileError(
@@ -156,14 +177,14 @@ class FourierSystem(FlucsSystem):
             )
 
         # Check for conflicts in hyperdissipation parameters
-        if self.input["hyperdissipation.perp"] > 0.0 and (
+        if self.input["hyperdissipation.kperp"] > 0.0 and (
             self.input["hyperdissipation.kx"] > 0.0
             or self.input["hyperdissipation.ky"] > 0.0
         ):
             raise InvalidFlucsInputFileError(
-                "Cannot enable both hyperdissipation.perp "
+                "Cannot enable both hyperdissipation.kperp "
                 "and hyperdissipation.kx/ky simultaneously. "
-                "Use either perp or kx/ky. "
+                "Use either kperp or kx/ky. "
             )
 
         # Set resolutions appropriately
@@ -203,7 +224,9 @@ class FourierSystem(FlucsSystem):
 
                     half_padded_n = padded_n // 2 + 1
 
-                    print(f"Found padded_n{dim} = {padded_n} for n{dim} = {n}")
+                    flucsprint(
+                        f"Found padded_n{dim} = {padded_n} for n{dim} = {n}"
+                    )
 
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
@@ -219,7 +242,9 @@ class FourierSystem(FlucsSystem):
                     half_n = _x + 1
                     n = 2 * _x + 1
 
-                    print(f"Found n{dim} = {n} for padded_n{dim} = {padded_n}")
+                    flucsprint(
+                        f"Found n{dim} = {n} for padded_n{dim} = {padded_n}"
+                    )
 
                 case (False, False):
                     raise ValueError(
@@ -260,8 +285,28 @@ class FourierSystem(FlucsSystem):
             self.padded_ny,
         )
 
-        # Finally, precompute wavenumbers (useful for many things)
+        # Precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
+
+        # Setup forcing
+        self._setup_forcing()
+
+    def _setup_forcing(self):
+        """Sets up the forcing method."""
+        forcing_method = self.input["forcing.method"]
+        if not forcing_method:
+            return
+
+        if forcing_method not in (
+            self.solver_forcing_methods | self.system_forcing_methods
+        ):
+            raise InvalidFlucsInputFileError(
+                f"Invalid forcing.method: {self.input['forcing.method']}."
+            )
+
+        self.forcing_object = (
+            self.solver_forcing_methods | self.system_forcing_methods
+        )[forcing_method](self)
 
     def setup(self) -> None:
         """
@@ -271,6 +316,10 @@ class FourierSystem(FlucsSystem):
         # Base FlucsSystem setup
         super().setup()
 
+        # Initialise shell grids for diagnostics
+        self._compute_kperp_shells()
+
+        # Setup initial conditions
         self._set_initial_conditions()
         self._check_initial_conditions()
 
@@ -292,6 +341,16 @@ class FourierSystem(FlucsSystem):
 
         # Allocate memory
         self._allocate_memory()
+
+    @property
+    def requires_explicit_terms(self) -> bool:
+        """
+        Whether explicit terms need to be allocated and computed for this system
+        """
+
+        return not self.input["setup.linear"] or (
+            bool(self.input["forcing.method"]) and self.forcing_object.explicit
+        )
 
     def _allocate_memory(
         self,
@@ -325,20 +384,20 @@ class FourierSystem(FlucsSystem):
             for i in range(self.fields_history_size)
         ]
 
-        if self.input["setup.linear"]:
+        if not self.requires_explicit_terms:
             # Dummy placeholder that is passed to the kernels
-            # when running linearly
+            # when running with no explicit terms
             self.dft_bits = cp.zeros(1, dtype=self.complex)
             return
 
-        # For the nonlinear terms, we need to keep terms at the current
+        # For the explicit terms, we need to keep terms at the current
         # time step + terms from the past 2 time steps since we are
         # using AB3.
-        # The nonlinear terms are indexed as (step, field, kz, kx, ky)
-        self.multistep_nonlinear_terms = cp.zeros(
+        # The explicit terms are indexed as (step, field, kz, kx, ky)
+        self.multistep_explicit_terms = cp.zeros(
             (
                 3,
-                self.number_of_fields_nonlinear,
+                self.number_of_fields_explicit,
                 self.nz,
                 self.nx,
                 self.half_ny,
@@ -348,6 +407,12 @@ class FourierSystem(FlucsSystem):
 
         # CFL in GPU memory
         self.cfl_rate = cp.zeros([1], dtype=self.float)
+
+        if self.input["setup.linear"]:
+            # Dummy placeholder that is passed to the kernels
+            # when running linearly
+            self.dft_bits = cp.zeros(1, dtype=self.complex)
+            return
 
         # Don't do anything if the user wants to handle this manually
         if not allocate_derivatives_and_bits:
@@ -529,6 +594,69 @@ class FourierSystem(FlucsSystem):
             / self.input["dimensions.Ly"]
         )
 
+    def _compute_kperp_shells(self):
+        """
+        Sets the default kperp shell grid used.
+
+        The CUDA shell-sum kernels use uniform half-open bins,
+
+            [kperp_min, kperp_max),
+
+        with bin index
+
+            floor((kperp - kperp_min) * nkperp / (kperp_max - kperp_min)).
+
+        The default kperp_max is padded above the largest resolved diagonal mode
+        so that summing all bins includes all resolved modes.
+        """
+
+        # TODO: if adding NS/isotropic systems, either add to this or add a
+        # separate method for isotropic systems (_precompute_shells_isotropic)
+        # alongside the appropriate kernels to do the isotropic shell calcs, as
+        # well as create_shell_reduction_isotropic
+
+        # Check if we have already done this
+        if hasattr(self, "shell_kperp"):
+            return
+
+        # kperp grid spacing
+        dkperp = min(self.kx[1], self.ky[1])
+
+        # Minimum kperp
+        kperp_min = self.float(0.0)
+
+        # Maximum kperp
+        kx_max = abs(self.kx[self.half_nx - 1])
+        ky_max = abs(self.ky[self.half_ny - 1])
+
+        kperp_max = np.sqrt(kx_max**2 + ky_max**2)
+        kperp_max += dkperp  # Adding padding for diagonal
+
+        # Number of kperp shells
+        nkperp_from_dkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
+        nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
+
+        # Maximum kperp from bin width
+        bin_width = (
+            dkperp
+            if nkperp_from_dkperp <= self.cuda_block_size
+            else (kperp_max - kperp_min) / nkperp
+        )
+
+        kperp_max = self.float(kperp_min + nkperp * bin_width)
+
+        # kperp grid
+        kperp = kperp_min + bin_width * np.arange(nkperp, dtype=self.float)
+
+        # Assign attributes
+        self.shell_kperp_min = kperp_min
+        self.shell_kperp_max = kperp_max
+        self.shell_nkperp = nkperp
+        self.shell_kperp = kperp
+        self.shell_last_complete_bin = int(
+            (min(kx_max, ky_max) - kperp_min) * nkperp / (kperp_max - kperp_min)
+        )
+
     def get_broadcast_wavenumbers(self):
         """Returns wavenumber arrays broadcast to (nz, nx, half_ny)
 
@@ -553,10 +681,19 @@ class FourierSystem(FlucsSystem):
         return kx_broadcast, ky_broadcast, kz_broadcast
 
     def check_health(self) -> None:
-        """Basic consistency/health checks before running.
+        """
+        Basic consistency/health checks before running.
         Alerts the user if anything needs their attention.
 
         """
+
+        if not self.input["setup.check_linear_matrix"]:
+            flucsprint(
+                "Skipping linear matrix check.",
+                source=self,
+                message_type="warning",
+            )
+            return
 
         # Check consistency of linear matrices
         matrix_solver = self.compute_linear_matrix()
@@ -564,26 +701,6 @@ class FourierSystem(FlucsSystem):
 
         # Check against the reference linear matrix if provided by the user
         if matrix_reference is not None:
-            kx, ky, kz = self.get_broadcast_wavenumbers()
-            hyperdissipation = np.zeros(
-                self.half_unpadded_tuple, dtype=self.float
-            )
-
-            for component, ks in [
-                ("perp", kx**2 + ky**2),
-                ("kx", kx**2),
-                ("ky", ky**2),
-                ("kz", kz**2),
-            ]:
-                coeff = self.input[f"hyperdissipation.{component}"]
-                if coeff > 0.0:
-                    hyperdissipation += coeff * (
-                        ks ** self.input[f"hyperdissipation.{component}_power"]
-                    )
-
-            diag = np.arange(self.number_of_fields)
-            matrix_reference[diag, diag, :, :, :] += hyperdissipation
-
             if not np.allclose(matrix_reference, matrix_solver):
                 raise ValueError(
                     "The linear matrix computed by CUDA disagrees "
@@ -596,7 +713,7 @@ class FourierSystem(FlucsSystem):
         max_damping = np.max(-eigvals.imag)
         max_real_frequency = np.max(np.abs(eigvals.real))
 
-        print(
+        flucsprint(
             "Linear rates (max.):          "
             f"(growth, damping, frequency) = "
             f"({max_growth:.3e}, "
@@ -604,7 +721,7 @@ class FourierSystem(FlucsSystem):
             f"{max_real_frequency:.3e})"
         )
 
-        print(
+        flucsprint(
             "Linear rates (max.): dt_max * "
             f"(growth, damping, frequency) = "
             f"({self.dt_max * max_growth:.3e}, "
@@ -635,12 +752,7 @@ class FourierSystem(FlucsSystem):
             [self.current_dt, 10**10, 10**10], dtype=self.float
         )
         self.ab3_coefficients = np.array([1, 0, 0], dtype=self.float)
-
-        # Print starting message
-        print(
-            f"Starting at time {float(self.init_time):.3e}, "
-            f"dt {float(self.init_dt):.3e}"
-        )
+        self.adaptive_rate = self.float(1.0) / self.current_dt
 
         # Reset CFL
         self.current_cfl = 0.0
@@ -650,9 +762,14 @@ class FourierSystem(FlucsSystem):
             np.reshape(self.fields_initial, self.fields[0].shape)
         )
 
-        # Reset AB3 nonlinear history
-        if not self.input["setup.linear"]:
-            self.multistep_nonlinear_terms.fill(self.float(0.0))
+        # Reset AB3 history
+        if self.requires_explicit_terms:
+            self.multistep_explicit_terms.fill(self.complex(0.0))
+            cupy_set_device_pointer(
+                self.cupy_module,
+                "multistep_explicit_terms",
+                self.multistep_explicit_terms,
+            )
 
         super().ready()
 
@@ -686,31 +803,29 @@ class FourierSystem(FlucsSystem):
 
             cupy_set_device_pointer(self.cupy_module, "rhs_precomp", self.rhs)
 
-            self.precompute_iteration_matrices_kernel = (
-                self.cupy_module.get_function("precompute_iteration_matrices")
-            )
-
             self.precompute_iteration_matrices()
+
+        # Print starting message
+        flucsprint(
+            f"Starting at time {float(self.init_time):.3e}, "
+            f"dt {float(self.init_dt):.3e}"
+        )
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""
         if not self.input["setup.precompute_linear_matrix"]:
             return
 
-        self.precompute_iteration_matrices_kernel(
-            (self.half_unpadded_cuda_grid_size,),
-            (self.cuda_block_size,),
-            (self.float(self.current_dt),),
-        )
+        self.precompute_iteration_matrices_kernel(self.float(self.current_dt))
 
-    def compile_cupy_module(self) -> None:
+    def setup_cuda_definitions(self) -> None:
         # FourierSystem specific constants
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
         )
 
         self.module_options.define_int(
-            "NUMBER_OF_FIELDS_NONLINEAR", self.number_of_fields_nonlinear
+            "NUMBER_OF_FIELDS_EXPLICIT", self.number_of_fields_explicit
         )
 
         self.module_options.define_dimension(
@@ -751,9 +866,13 @@ class FourierSystem(FlucsSystem):
             )
 
         # Hyperdissipation
-        for component in ["perp", "kx", "ky", "kz"]:
+        for index, component in enumerate(self.hyperdissipation_components):
+            self.module_options.define_int(
+                f"HYPERDISSIPATION_{component.upper()}_INT", index
+            )
+
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                print(f"Using hyperdissipation in {component}.")
+                message = f"Using hyperdissipation in {component:<5}"
 
                 self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
@@ -764,6 +883,40 @@ class FourierSystem(FlucsSystem):
                     self.input[f"hyperdissipation.{component}_power"],
                 )
 
+                if self.input[f"hyperdissipation.{component}_adaptive"]:
+                    self.module_options.define_flag(
+                        f"HYPERDISSIPATION_{component.upper()}_ADAPTIVE"
+                    )
+                    message += " (adaptive)"
+
+                if self.input[f"hyperdissipation.{component}_normalised"]:
+                    self.module_options.define_flag(
+                        f"HYPERDISSIPATION_{component.upper()}_NORMALISED"
+                    )
+                    message += " (normalised)"
+
+                flucsprint(message)
+
+        # Forcing
+        if self.input["forcing.method"]:
+            flucsprint(f"Using forcing method: {self.input['forcing.method']}")
+
+            self.module_options.define_flag("FORCING")
+            self.module_options.define_flag(
+                f"FORCING_METHOD_{self.input['forcing.method'].upper()}"
+            )
+
+            if self.input["forcing.method"] in self.solver_forcing_methods:
+                self.module_options.define_flag("FORCING_FROM_SOLVER")
+
+            if self.forcing_object.linear:
+                self.module_options.define_flag("FORCING_LINEAR")
+
+            if self.forcing_object.explicit:
+                self.module_options.define_flag("FORCING_EXPLICIT")
+
+            self.forcing_object.setup_cuda_definitions()
+
         # Setup
         self.module_options.define_float("ALPHA", self.input["setup.alpha"])
 
@@ -771,19 +924,11 @@ class FourierSystem(FlucsSystem):
             self.module_options.define_flag("NONLINEAR")
 
         if self.input["setup.precompute_linear_matrix"]:
-            print("Linear matrices will be precomputed.")
+            flucsprint("Linear matrices will be precomputed.")
             self.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
-        super().compile_cupy_module()
-
-        self.finish_step_kernel = self.cupy_module.get_function("finish_step")
-
-    def setup_cuda_grids(self) -> None:
-        """Sets up the grids and blocks for CUDA kernels.
-
-        In the future, this may be the place to do some automatic optimisation.
-        As it stands, this is sysem-specific.
-        """
+    def register_kernels(self) -> None:
+        """Registers the CUDA kernels."""
 
         # Setup kernel parameters (grid, block, shared memory)
         self.half_unpadded_cuda_grid_size = (
@@ -797,6 +942,27 @@ class FourierSystem(FlucsSystem):
         self.full_padded_cuda_grid_size = (
             self.full_padded_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
+
+        self.compute_linear_matrix_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_linear_matrix",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.precompute_iteration_matrices_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="precompute_iteration_matrices",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.finish_step_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="finish_step",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
 
     def compute_linear_matrix(self) -> np.ndarray:
         """
@@ -821,16 +987,10 @@ class FourierSystem(FlucsSystem):
             dtype=self.complex,
         )
 
-        # Get kernel
-        compute_linear_matrix_kernel = self.cupy_module.get_function(
-            "compute_linear_matrix"
-        )
-
         # Compute
-        compute_linear_matrix_kernel(
-            (self.half_unpadded_cuda_grid_size,),
-            (self.cuda_block_size,),
-            (self.init_dt, linear_matrix_cupy),
+        self.compute_linear_matrix_kernel(
+            self.float(self.init_dt),
+            linear_matrix_cupy,
         )
 
         self.linear_matrix = cp.asnumpy(linear_matrix_cupy)
@@ -937,19 +1097,64 @@ class FourierSystem(FlucsSystem):
 
             return
 
-        # Handle known initialisation types
-        match self.input["init.type"]:
+        # Handle known initialisation methods
+        match self.input["init.method"]:
             case "white_noise":
+                # Set random seed
                 np.random.seed(self.input["init.rand_seed"])
+
+                # Set initial fields
                 self.fields_initial = self.input[
                     "init.amplitude"
                 ] * np.random.random(
                     (self.number_of_fields, *self.half_unpadded_tuple)
                 )
 
+            case "gaussian":
+                # Construct wavenumbers
+                kx, ky, kz = self.get_broadcast_wavenumbers()
+
+                try:
+                    k2 = sum(
+                        {"kx": kx**2, "ky": ky**2, "kz": kz**2}[component]
+                        for component in self.input["init.components"]
+                    )
+                except KeyError:
+                    raise InvalidFlucsInputFileError(
+                        "init.components entries must be one of kx, ky, or kz."
+                    )
+
+                # Envelope
+                envelope = (k2 ** self.input["init.power"]) * np.exp(
+                    -2.0 * (k2 / self.input["init.width"] ** 2)
+                )
+                envelope[k2 == 0] = 0.0
+
+                # Phase
+                phase = self.input["init.phase"]
+                if phase == "random":
+                    random = np.random.default_rng(self.input["init.rand_seed"])
+                    angle = random.uniform(
+                        0.0,
+                        2.0 * np.pi,
+                        size=(self.number_of_fields, *self.half_unpadded_tuple),
+                    )
+                else:
+                    angle = self.float(phase) / (2.0 * np.pi)
+
+                # Normalise fields to the requested amplitude
+                self.fields_initial = (
+                    envelope[None, ...] * np.exp(1j * angle)
+                ).astype(self.complex)
+
+                norm = np.sqrt(np.sum(np.abs(self.fields_initial) ** 2))
+
+                self.fields_initial *= self.input["init.amplitude"] / norm
+
             case _:
-                # Exotic initialisation types should be handled by each solver
-                # separately.
+                raise InvalidFlucsInputFileError(
+                    f"Invalid init.method: {self.input['init.method']}."
+                )
                 pass
 
     def _check_initial_conditions(self) -> None:
@@ -992,7 +1197,7 @@ class FourierSystem(FlucsSystem):
                 fields_initial_ky0 - np.conj(fields_initial_ky0[:, ::-1, ::-1])
             )
         )
-        print(f"Init. condition reality error: {error:.3e}")
+        flucsprint(f"Init. condition reality error: {error:.3e}")
 
     def get_restart_data(self) -> dict[str, np.ndarray]:
         """
@@ -1058,7 +1263,7 @@ class FourierSystem(FlucsSystem):
         # If CFL condition is violated
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
-            print(
+            flucsprint(
                 f"dt: {self.current_dt:.3e} -> "
                 f"{new_dt:.3e} (-, {self.current_step:.3e})"
             )
@@ -1078,7 +1283,7 @@ class FourierSystem(FlucsSystem):
             )
 
             if new_dt > self.current_dt:
-                print(
+                flucsprint(
                     f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
                     f"(+, {self.current_step:.3e})"
                 )
@@ -1100,7 +1305,7 @@ class FourierSystem(FlucsSystem):
 
         self._compute_current_dt()
         if self.current_dt < self.dt_min:
-            print(
+            flucsprint(
                 f"({self.current_step}) Required time step "
                 f"{self.current_dt:.3e} is below dt_min. Exiting."
             )
@@ -1108,6 +1313,7 @@ class FourierSystem(FlucsSystem):
 
         self.current_cfl = self.cfl_rate_float * self.current_dt
         self.dt_array[self.current_step % 3] = self.current_dt
+        self.adaptive_rate = self.float(1.0) / self.current_dt
 
     def _update_ab3_coefficients(self) -> None:
         """
@@ -1155,7 +1361,8 @@ class FourierSystem(FlucsSystem):
 
     @abstractmethod
     def begin_time_step(self) -> None:
-        """Executed in the beginning of the time step. Should be used to
+        """
+        Executed in the beginning of the time step. Should be used to
         advance any system-specific counters.
 
         """
@@ -1166,34 +1373,43 @@ class FourierSystem(FlucsSystem):
         self.realspace_fields = None
 
     @abstractmethod
-    def calculate_nonlinear_terms(self) -> None:
-        """Computes the nonlinear terms and adjusts the time step if
-        necessary.
-
-        Called in the beginning of a time step.
+    def compute_nonlinear_terms(self, fields: cp.ndarray) -> None:
+        """
+        Computes the nonlinear terms for the supplied fields.
 
         """
+
+    def prepare_nonlinear_terms(self) -> None:
+        """
+        Computes the nonlinear terms and adjusts the time step if
+        necessary.
+
+        """
+
+        fields = self.fields[(self.current_step - 1) % self.fields_history_size]
+        self.compute_nonlinear_terms(fields)
 
         self._update_dt()
         self._update_ab3_coefficients()
 
     @abstractmethod
     def finish_time_step(self) -> None:
-        """Combines the nonlinear and linear terms in order to finish the time
-        step"""
+        """
+        Combines the explicit and linear terms in order to finish the time
+        step
+
+        """
+
         self.finish_step_kernel(
-            (self.half_unpadded_cuda_grid_size,),
-            (self.cuda_block_size,),
-            (
-                self.float(self.current_dt),
-                self.current_step,
-                self.ab3_coefficients[0],
-                self.ab3_coefficients[1],
-                self.ab3_coefficients[2],
-                self.fields[self.current_step % self.fields_history_size - 1],
-                self.dft_bits,
-                self.fields[self.current_step % self.fields_history_size],
-            ),
+            self.float(self.current_dt),
+            self.float(self.adaptive_rate),
+            self.current_step,
+            self.ab3_coefficients[0],
+            self.ab3_coefficients[1],
+            self.ab3_coefficients[2],
+            self.fields[self.current_step % self.fields_history_size - 1],
+            self.dft_bits,
+            self.fields[self.current_step % self.fields_history_size],
         )
 
         self.current_time += self.current_dt

@@ -7,15 +7,26 @@ import numpy as np
 from flucs.postprocessing import FlucsPostProcessing
 
 
-def plot_0d_vs_time(post, variable=None):
+def plot_0d_vs_time(post, args):
+    # Get variable
+    variable = args.variable
+    if variable is None:
+        raise ValueError(
+            "Please specify a variable to plot using --variable/-v."
+        )
+    variable = str(variable)
+
     # Get valid files for the specified variable
-    nc_paths = post.get_valid_netcdf_paths(str(variable))
+    nc_paths = post.get_valid_netcdf_paths(variable)
 
     # Initialise plotting
     fig, ax = plt.subplots(1, 1, layout="constrained")
 
-    figure_name = f"{str(variable).split('/', 1)[-1]}_vs_time"
+    figure_name = f"{variable.split('/', 1)[-1]}_vs_time"
     fig.canvas.manager.set_window_title(figure_name)
+
+    min_time = np.nan
+    max_time = np.nan
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
@@ -27,6 +38,13 @@ def plot_0d_vs_time(post, variable=None):
         time = post.load_netcdf_variable(nc_path, "time")[0]
         data = post.load_netcdf_variable(nc_path, variable)[0]
 
+        # Validate dimension
+        if data.ndim != 1:
+            raise ValueError(
+                f"Expected a 0D time-dependent variable, but '{variable}' "
+                f"loaded with shape {data.shape}."
+            )
+
         # Plot data
         ax.plot(
             time,
@@ -37,12 +55,15 @@ def plot_0d_vs_time(post, variable=None):
             linestyle="solid",
         )
 
+        # Change x axis lims if needed
+        min_time = np.nanmin((min_time, np.min(time)))
+        max_time = np.nanmax((max_time, np.max(time)))
+
     # Setting plot options
     ax.set_xlabel("Time")
     ax.set_ylabel(variable)
 
-    ax.set_xlim(np.min(time), np.max(time))
-    ax.set_ylim(ymin=0.0)
+    ax.set_xlim((min_time, max_time))
 
     ax.legend()
 
@@ -99,4 +120,4 @@ if __name__ == "__main__":
         exit()
 
     # Call function
-    plot_0d_vs_time(post, variable=args.variable)
+    plot_0d_vs_time(post, args)
