@@ -62,17 +62,19 @@ def plot_eigensystem(post):
         eigvals_sol_plot = eigvals_sol[:, ikz, ikx, :]
         eigvals_run_plot = eigvals_run[it, :, ikz, ikx, :]
         eigvals_tol_plot = eigvals_tol[it, :, ikz, ikx, :]
+        eigvals_abs_err_plot = np.abs(eigvals_sol_plot - eigvals_run_plot)
 
         # Plotting
         data_to_plot = (eigvals_sol_plot, eigvals_run_plot)
         markers = ("s", "x")
+        labels = ("solver", "numpy")
 
         for mode in range(n_modes):
-            for data, marker in zip(data_to_plot, markers):
+            for data, marker, data_label in zip(data_to_plot, markers, labels):
                 axs[0, mode].plot(
                     ky,
                     data[mode, :].imag,
-                    label=None,
+                    label=f"{sim_label}, {data_label}",
                     color=sim_color,
                     linestyle="none",
                     marker=marker,
@@ -82,7 +84,7 @@ def plot_eigensystem(post):
                 axs[1, mode].plot(
                     ky,
                     data[mode, :].real,
-                    label=None,
+                    label=f"{sim_label}, {data_label}",
                     color=sim_color,
                     linestyle="none",
                     marker=marker,
@@ -92,10 +94,20 @@ def plot_eigensystem(post):
             axs[2, mode].plot(
                 ky,
                 eigvals_tol_plot[mode, :],
-                label=sim_label,
+                label=f"{sim_label}, tolerance",
                 color=sim_color,
                 linestyle="none",
                 marker=markers[-1],
+                markerfacecolor="none",
+            )
+
+            axs[2, mode].plot(
+                ky,
+                eigvals_abs_err_plot[mode, :],
+                label=f"{sim_label}, abs error",
+                color=sim_color,
+                linestyle="none",
+                marker=markers[0],
                 markerfacecolor="none",
             )
 
@@ -110,6 +122,7 @@ def plot_eigensystem(post):
         axs[-1, i].set_xlabel(r"$k_y$")
         axs[-1, i].set_yscale("log")
 
+    axs[0, 1].legend()
     axs[-1, 1].legend()
 
     # Save figures if required
