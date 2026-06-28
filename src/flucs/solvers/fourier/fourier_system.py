@@ -620,7 +620,10 @@ class FourierSystem(FlucsSystem):
             return
 
         # kperp grid spacing
-        dkperp = min(self.kx[1], self.ky[1])
+        dkperp = min(
+            (k[1] for k in (self.kx, self.ky) if k.size > 1), 
+            default=self.float(1.0)
+        )
 
         # Minimum kperp
         kperp_min = self.float(0.0)
