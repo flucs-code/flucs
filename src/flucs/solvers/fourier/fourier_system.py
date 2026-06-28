@@ -919,8 +919,7 @@ class FourierSystem(FlucsSystem):
 
         # Setup
         self.module_options.define_flag(
-            "LINEAR_PADE_DEGREE",
-            str(self.input["setup.linear_pade_degree"])
+            "LINEAR_PADE_DEGREE", str(self.input["setup.linear_pade_degree"])
         )
 
         if not self.input["setup.linear"]:
