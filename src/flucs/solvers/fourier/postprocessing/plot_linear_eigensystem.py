@@ -67,7 +67,7 @@ def plot_eigensystem(post):
         # Plotting
         data_to_plot = (eigvals_sol_plot, eigvals_run_plot)
         markers = ("s", "x")
-        labels = ("solver", "numpy")
+        labels = ("numpy", "runtime")
 
         for mode in range(n_modes):
             for data, marker, data_label in zip(data_to_plot, markers, labels):
