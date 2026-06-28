@@ -918,7 +918,10 @@ class FourierSystem(FlucsSystem):
             self.forcing_object.setup_cuda_definitions()
 
         # Setup
-        self.module_options.define_float("ALPHA", self.input["setup.alpha"])
+        self.module_options.define_flag(
+            "LINEAR_PADE_DEGREE",
+            str(self.input["setup.linear_pade_degree"])
+        )
 
         if not self.input["setup.linear"]:
             self.module_options.define_flag("NONLINEAR")

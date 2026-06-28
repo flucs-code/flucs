@@ -29,6 +29,7 @@
 #include "flucs/solvers/fourier/fourier_system_indexing.cuh"
 #include "flucs/solvers/fourier/fourier_system_reductions.cuh"
 #include "flucs/solvers/fourier/fourier_system_hyperdissipation.cuh"
+#include "flucs/solvers/fourier/fourier_system_linear_pade.cuh"
 
 
 extern "C" {
@@ -129,10 +130,12 @@ __device__ void add_explicit_terms(
 
 }
 
-// Wrapper for get_linear_matrix that adds forcing if needed
+// Wrapper for get_linear_matrix that adds an overall scaling factor
+// and forcing (if needed)
 __device__ __forceinline__
 void get_linear_matrix_wrapped(const size_t index,
                        const FLUCS_FLOAT dt,
+                       const FLUCS_FLOAT scale,
                        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]) {
 
     get_linear_matrix(index, dt, matrix);
@@ -140,6 +143,14 @@ void get_linear_matrix_wrapped(const size_t index,
 #ifdef FORCING_LINEAR
     add_forcing_linear(index, dt, matrix);
 #endif
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+            matrix[i][j] *= scale;
+        }
+    }
 }
 
 
@@ -153,7 +164,7 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
         return;
 
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_linear_matrix_wrapped(index, dt, matrix);
+    get_linear_matrix_wrapped(index, dt, FLOAT_ONE, matrix);
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
@@ -161,7 +172,6 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
         }
     }
 }
-
 
 // Precomputes the rhs and inverse_lhs matrices.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
@@ -172,29 +182,23 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         return;
 
     FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX inverse_lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
-    { // Compiler hint
-        const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
-        const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
-    
-        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix_wrapped(index, dt, matrix);
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    get_linear_matrix_wrapped(index, dt, dt, matrix);
 
+    pade_lhs_rhs(matrix, lhs, rhs);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
-        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-
-            #pragma unroll
-            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-
-                rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
-                    (FLUCS_FLOAT)(i == j) + ALPHAMINUS1_DT * matrix[i][j];
-
-                lhs[i][j] = (FLUCS_FLOAT)(i == j) + ALPHA_DT * matrix[i][j];
-            }
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
+                rhs[i][j];
         }
     }
 
+    FLUCS_COMPLEX inverse_lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     invert_matrix(lhs, inverse_lhs);
 
     #pragma unroll
@@ -263,6 +267,14 @@ __global__ void finish_step(
     if (!(index < HALFUNPADDEDSIZE))
         return;
 
+
+    FLUCS_COMPLEX prev[NUMBER_OF_FIELDS];
+    // Load previous_fields from global memory
+    #pragma unroll
+    for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+        prev[j] = previous_fields[index + j*HALFUNPADDEDSIZE];
+    }
+
     FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS];
 
 #ifdef PRECOMPUTE_LINEAR_MATRIX
@@ -273,7 +285,7 @@ __global__ void finish_step(
 
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            sum += rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * previous_fields[index + j*HALFUNPADDEDSIZE];
+            sum += rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] * prev[j];
         }
         rhs_fields[i] = sum;
     }
@@ -298,11 +310,11 @@ __global__ void finish_step(
 
     // Help the compiler a bit with the registers
     {
+        FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix_wrapped(index, dt, matrix);
 
-        const FLUCS_FLOAT ALPHA_DT = ALPHA*dt;
-        const FLUCS_FLOAT ALPHAMINUS1_DT = (ALPHA - 1)*dt;
+        get_linear_matrix_wrapped(index, dt, dt, matrix);
+        pade_lhs_rhs(matrix, lhs, rhs);
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -310,10 +322,7 @@ __global__ void finish_step(
 
             #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-                lhs[i][j] = (FLUCS_FLOAT)(i == j) + ALPHA_DT * matrix[i][j];
-
-                sum += ( (FLUCS_FLOAT)(i == j) + ALPHAMINUS1_DT * matrix[i][j] )\
-                    * previous_fields[index + j*HALFUNPADDEDSIZE];
+                sum += rhs[i][j] * prev[j];
             }
 
             rhs_fields[i] = sum;
