@@ -129,3 +129,24 @@ void invert_matrix(const T A[N][N], T inv_A[N][N]) {
     }
 }
 
+
+template<int N, int M, int K, typename T>
+__device__ __forceinline__
+void small_matmul(const T A[N][K], const T B[K][M], T C[N][M]) {
+
+    #pragma unroll
+    for (int i = 0; i < N; i++) {
+        #pragma unroll
+        for (int j = 0; j < M; j++) {
+            T sum = 0;
+
+            #pragma unroll
+            for (int k = 0; k < K; k++) {
+                sum += A[i][k] * B[k][j];
+            }
+
+            C[i][j] = sum;
+        }
+    }
+}
+
