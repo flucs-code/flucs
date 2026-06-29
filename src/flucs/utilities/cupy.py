@@ -89,19 +89,22 @@ class ModuleOptions:
     def define_flag(
         self,
         name: str,
+        value: str = "",
     ):
         """Adds a flag-like macro to the compiler flags.
         Equivalent to
 
-            #define name
+            #define name value
 
         Parameters
         ----------
         name: str
             Name of the macro/constant to be defined.
+        value: str
+            Optional value for the macro/constant.
 
         """
-        self._define_constant(name)
+        self._defs[name] = value
 
     def define_float(self, name: str, value):
         """Adds a definition to the compiler flags.

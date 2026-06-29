@@ -89,7 +89,7 @@ class FlucsInput:
                 raise ValueError(f"Parameter {arg} does not exist.")
 
         try:
-            _dict[split_arg[-1]] = type(_dict[split_arg[-1]])(value)
+            _dict[split_arg[-1]] = self._parse_as(value, _dict[split_arg[-1]])
         except KeyError as e:
             raise ValueError(f"Parameter {arg} does not exist.") from e
         except ValueError as e:
@@ -98,6 +98,38 @@ class FlucsInput:
                 f"'{type(_dict[split_arg[-1]])}' for "
                 f"parameter '{arg}'."
             ) from e
+
+    def _parse_as(self, value, reference):
+        """Parses a value using another reference value. Used for type checking.
+        Currently, only handles the annoyance of parsing strings to bools.
+
+        Parameters
+        ----------
+        value
+            Value to be parsed.
+        reference
+            Reference used to get a type to which value is parsed.
+
+        Returns
+        -------
+        Value parsed to the type of the reference.
+
+        """
+        if isinstance(reference, bool) and not isinstance(value, bool):
+            value = str(value)
+
+            true_values = {"true", "True", "t", "T"}
+            false_values = {"false", "False", "f", "F"}
+
+            if value in true_values:
+                return True
+
+            if value in false_values:
+                return False
+
+            raise ValueError(f"Cannot interpet {value} as bool.")
+
+        return type(reference)(value)
 
     def load_toml_str(self, toml_str: str, default=False):
         """
