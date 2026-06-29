@@ -276,7 +276,7 @@ def main():
 
     # Cleanup
     if args.clean:
-        clean_directory(io_path, ("restart.*", "output.*"))
+        clean_directory(io_path, ("restart.*", "output.*", "STOP"))
         return
 
     # Input-file reconstruction

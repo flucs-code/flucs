@@ -230,6 +230,13 @@ class FlucsSystem(ABC):
             for output in self.output_heap:
                 output.write()
 
+        # Check if a STOP file has been created
+        stop_file_location = self.input.io_path / "STOP"
+        if stop_file_location.is_file():
+            flucsprint("\nFound a STOP file. Exiting cleanly.")
+            self.solver.interrupted = True
+            stop_file_location.unlink()
+
     def setup_output(self) -> None:
         """Initialise outputs."""
 
