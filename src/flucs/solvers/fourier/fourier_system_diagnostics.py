@@ -380,7 +380,8 @@ class RealspaceDataDiag(FlucsDiagnostic):
 
     name = "realspace_data"
     system: FourierSystem
-    option_defaults: ClassVar[dict[str, object]] = {"locations": list()}
+    option_defaults: ClassVar[dict[str, object]] = {"locations": list(),
+                                                    "on_gpu": True}
 
     slice_calculators: list[Callable[[], None]]
 
@@ -471,7 +472,10 @@ class RealspaceDataDiag(FlucsDiagnostic):
         pass
 
     def execute(self):
-        self.system.get_realspace_fields()
+        if self.on_gpu:
+            self.system.get_realspace_fields_gpu()
+        else:
+            self.system.get_realspace_fields_cpu()
 
         for slice_calculator in self.slice_calculators:
             slice_calculator()

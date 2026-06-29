@@ -1338,7 +1338,30 @@ class FourierSystem(FlucsSystem):
         self.ab3_coefficients[2] =   + (dt0 / dt2) * ((2.0 / 6.0) * dt0 + (3.0 / 6.0) * dt1                    ) / (dt1 + dt2) # noqa: E501
         # fmt: on
 
-    def get_realspace_fields(self):
+    def get_realspace_fields_gpu(self):
+        """
+        Calculates the real-space fields at the current time step as a
+        NumPy array. The FFTs are done on the GPU to save time, but this
+        wastes some GPU memory.
+
+        The data is saved in FourierSystem.realspace_fields
+
+        """
+
+        # If not None, then we have already called it this time step
+        if self.realspace_fields is not None:
+            return
+
+        self.realspace_fields = cp.fft.irfftn(
+            self.fields[
+                self.current_step % self.fields_history_size
+            ],
+            norm="forward",
+            axes=(1, 2, 3),
+            s=self.full_unpadded_tuple,
+        ).get()
+
+    def get_realspace_fields_cpu(self):
         """
         Calculates the real-space fields at the current time step as a
         NumPy array. The FFTs are done on the CPU in order to save GPU memory.
@@ -1373,7 +1396,7 @@ class FourierSystem(FlucsSystem):
         """
         self.current_step += 1
 
-        # Set this to None so that get_realspace_fields() knows
+        # Set this to None so that get_realspace_fields_*() knows
         # whether it has already been called. Saves some time.
         self.realspace_fields = None
 
