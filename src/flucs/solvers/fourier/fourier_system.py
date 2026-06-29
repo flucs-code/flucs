@@ -1353,9 +1353,7 @@ class FourierSystem(FlucsSystem):
             return
 
         self.realspace_fields = cp.fft.irfftn(
-            self.fields[
-                self.current_step % self.fields_history_size
-            ],
+            self.fields[self.current_step % self.fields_history_size],
             norm="forward",
             axes=(1, 2, 3),
             s=self.full_unpadded_tuple,
