@@ -52,13 +52,7 @@ __device__ void get_linear_matrix(const size_t index,
 __device__ void add_nonlinear_terms(
     const size_t index,
     const FLUCS_COMPLEX* dft_bits,
-    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS_EXPLICIT]);
-
-// Provides a mapping from the explicit term index 
-// to the field index that it contributes to.
-// Must be implemented by the user.
-__device__ __forceinline__
-int explicit_term_field_index(const int term_index);
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
 
 // Forcing terms
 #ifdef FORCING
@@ -73,7 +67,7 @@ __device__ void add_forcing_explicit(
     const FLUCS_FLOAT dt,
     const long long current_step,
     const FLUCS_COMPLEX* previous_fields,
-    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS_EXPLICIT]);
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
 #endif
 
 #ifdef FORCING_LINEAR
@@ -100,7 +94,7 @@ __device__ void add_explicit_terms(
     FLUCS_COMPLEX rhs_fields[NUMBER_OF_FIELDS]
 )
 {
-    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS_EXPLICIT] = {0};
+    FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS] = {0};
 
 #ifdef NONLINEAR
     add_nonlinear_terms(index, dft_bits, explicit_terms);
@@ -110,16 +104,15 @@ __device__ void add_explicit_terms(
     add_forcing_explicit(index, dt, current_step, previous_fields, explicit_terms);
 #endif
 
-    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
-    const size_t multistep_index_1 = ((current_step + 2) % 3)          * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
-    const size_t multistep_index_2 = ((current_step + 1) % 3)          * NUMBER_OF_FIELDS_EXPLICIT * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_1 = ((current_step + 2) % 3)          * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_2 = ((current_step + 1) % 3)          * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
 
     #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS_EXPLICIT; i++) {
-        const int field = explicit_term_field_index(i);
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
         const size_t offset = i * HALFUNPADDEDSIZE;
 
-        rhs_fields[field] -= dt * (
+        rhs_fields[i] -= dt * (
             + AB0 * explicit_terms[i]
             + AB1 * multistep_explicit_terms[multistep_index_1 + offset]
             + AB2 * multistep_explicit_terms[multistep_index_2 + offset]

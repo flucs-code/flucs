@@ -35,11 +35,6 @@ class FourierSystem(FlucsSystem):
     # Number of fields that the solver is solving for
     number_of_fields: int
 
-    # Number of fields whose equations contain explicit terms. This is
-    # typically the same as number_of_fields, but can be smaller for some
-    # systems
-    number_of_fields_explicit: int
-
     # Derivatives and bits used for the nonlinear terms
     number_of_dft_derivatives: int
     dft_derivatives: cp.ndarray
@@ -397,7 +392,7 @@ class FourierSystem(FlucsSystem):
         self.multistep_explicit_terms = cp.zeros(
             (
                 3,
-                self.number_of_fields_explicit,
+                self.number_of_fields,
                 self.nz,
                 self.nx,
                 self.half_ny,
@@ -825,10 +820,6 @@ class FourierSystem(FlucsSystem):
         # FourierSystem specific constants
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
-        )
-
-        self.module_options.define_int(
-            "NUMBER_OF_FIELDS_EXPLICIT", self.number_of_fields_explicit
         )
 
         self.module_options.define_dimension(
