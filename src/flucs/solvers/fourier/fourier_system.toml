@@ -47,6 +47,10 @@ linear = false
 # Degree N of the [N,N] Pade approximant for the linear propagator
 linear_pade_degree = 2  # [1,1] is Crank-Nicolson
 
+# Timestepper method
+# Currently supported are ab3 and ab3_if
+time_integrator = "ab3"
+
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false
 

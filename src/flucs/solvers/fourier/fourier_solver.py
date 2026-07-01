@@ -7,7 +7,9 @@ pseudospectral Fourier methods.
 """
 
 import time
+from typing import ClassVar
 
+from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.messages import flucsprint
@@ -20,6 +22,12 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
     """
 
+    # Supported time steppers
+    timesteppers: ClassVar[dict[str, str]] = {
+        "ab3": "Adams-Bashforth 3",
+        "ab3_if": "Integrating-factor Adams-Bashforth 3",
+    }
+
     def run(self):
         """Run the main solver loop."""
 
@@ -28,6 +36,21 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         # Get the system ready
         self.system.setup()
+
+        # Check choice of timestepper
+        if self.system.input["setup.time_integrator"] not in self.timesteppers:
+            raise InvalidFlucsInputFileError(
+                f"{self.input['setup.time_integrator']} is not"
+                " a supported time integrator. "
+                f'Supported integrators: {", ".join(self.timesteppers)}.'
+            )
+
+        flucsprint(
+            "Time integrator: "
+            f"{self.timesteppers[self.input['setup.time_integrator']]}",
+            source=self
+        )
+
         self.system.setup_output()
         self.system.compile_cupy_module()
         self.system.check_health()

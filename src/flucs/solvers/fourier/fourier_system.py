@@ -836,6 +836,10 @@ class FourierSystem(FlucsSystem):
             "DFT_PADDEDSIZE_FACTOR", self.float(1.0 / self.full_padded_size)
         )
 
+        self.module_options.define_flag(
+            self.input["setup.time_integrator"].upper()
+        )
+
         # Dimensions
         for dim in ["x", "y", "z"]:
             box_size = self.float(self.input[f"dimensions.L{dim}"])
