@@ -831,6 +831,9 @@ class FourierSystem(FlucsSystem):
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""
+        if not self.input["setup.precompute_linear_matrix"]:
+            return
+
         self.precompute_iteration_matrices_kernel(self.float(self.current_dt))
 
     def setup_cuda_definitions(self) -> None:
@@ -981,7 +984,7 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
-    def compute_linear_matrix(self) -> np.ndarray:
+    def compute_linear_matrix(self, dt=0.0, time=0.0, step=0) -> np.ndarray:
         """
         Computes the linear matrix used by the solver and stores it in
         self.linear_matrix. Note that this is not used directly in the
@@ -1006,7 +1009,9 @@ class FourierSystem(FlucsSystem):
 
         # Compute
         self.compute_linear_matrix_kernel(
-            self.float(self.init_dt),
+            self.float(dt),
+            self.float(time),
+            self.int(step),
             linear_matrix_cupy,
         )
 
@@ -1440,8 +1445,9 @@ class FourierSystem(FlucsSystem):
 
         self.finish_step_kernel(
             self.float(self.current_dt),
+            self.float(self.current_time),
+            self.int(self.current_step),
             self.float(self.adaptive_rate),
-            self.current_step,
             self.ab3_coefficients[0],
             self.ab3_coefficients[1],
             self.ab3_coefficients[2],

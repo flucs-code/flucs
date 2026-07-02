@@ -26,7 +26,9 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        get_linear_matrix_wrapped(index, dt, dt, matrix);
+
+        // Precomputing should not be used with time-dependent linear matrices
+        get_linear_matrix_wrapped(index, dt, (FLUCS_FLOAT)0, 0, dt, matrix);
 
         pade_lhs_rhs(matrix, lhs, propagator);
 
@@ -48,6 +50,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 __device__ void add_explicit_terms(
     const size_t index,
     const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
     const long long current_step,
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
@@ -62,11 +65,11 @@ __device__ void add_explicit_terms(
     FLUCS_COMPLEX explicit_terms_0[NUMBER_OF_FIELDS] = {0};
 
 #ifdef NONLINEAR
-    add_nonlinear_terms(index, dft_bits, explicit_terms_0);
+    add_nonlinear_terms(index, dt, current_time, current_step, dft_bits, explicit_terms_0);
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_forcing_explicit(index, dt, current_step, previous_fields, explicit_terms);
+    add_forcing_explicit(index, dt, current_time, current_step, previous_fields, explicit_terms);
 #endif
 
     const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
@@ -132,8 +135,9 @@ __device__ void add_explicit_terms(
 // terms to find the fields at the current time step.
 __global__ void finish_step(
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT adaptive_rate,
+    const FLUCS_FLOAT current_time,
     const long long current_step,
+    const FLUCS_FLOAT adaptive_rate,
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
@@ -174,7 +178,7 @@ __global__ void finish_step(
     }
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    add_explicit_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
+    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
 #endif
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
@@ -184,7 +188,7 @@ __global__ void finish_step(
         FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
-        get_linear_matrix_wrapped(index, dt, dt, matrix);
+        get_linear_matrix_wrapped(index, dt, current_time, current_step, dt, matrix);
         pade_lhs_rhs(matrix, lhs, propagator);
 
         // In-place gaussian elimination
@@ -205,7 +209,7 @@ __global__ void finish_step(
 
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    add_explicit_terms(index, dt, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
+    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
 #endif
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
@@ -217,7 +221,7 @@ __global__ void finish_step(
 
 
     complete_finish_step(
-        index, dt, adaptive_rate, current_step, current_fields
+        index, dt, current_time, current_step, adaptive_rate, current_fields
     );
 
 }

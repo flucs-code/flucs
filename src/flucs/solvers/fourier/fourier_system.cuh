@@ -38,12 +38,17 @@ extern "C" {
 // Must be implemented by the user.
 __device__ void get_linear_matrix(const size_t index,
                                   const FLUCS_FLOAT dt,
+                                  const FLUCS_FLOAT current_time,
+                                  const long long current_step,
                                   FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 
 // Finds the nonlinear terms for the current time.
 // Must be implemented by the user.
 __device__ void add_nonlinear_terms(
     const size_t index,
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
     const FLUCS_COMPLEX* dft_bits,
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
 
@@ -58,6 +63,7 @@ __device__ void add_nonlinear_terms(
 __device__ void add_forcing_explicit(
     const size_t index,
     const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
     const long long current_step,
     const FLUCS_COMPLEX* previous_fields,
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
@@ -67,6 +73,8 @@ __device__ void add_forcing_explicit(
 __device__ void add_forcing_linear(
     const size_t index,
     const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 #endif
 
@@ -76,15 +84,19 @@ __device__ void add_forcing_linear(
 // Wrapper for get_linear_matrix that adds an overall scaling factor
 // and forcing (if needed)
 __device__ __forceinline__
-void get_linear_matrix_wrapped(const size_t index,
-                       const FLUCS_FLOAT dt,
-                       const FLUCS_FLOAT scale,
-                       FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]) {
+void get_linear_matrix_wrapped(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    const FLUCS_FLOAT scale,
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
+) {
 
-    get_linear_matrix(index, dt, matrix);
+    get_linear_matrix(index, dt, current_time, current_step, matrix);
 
 #ifdef FORCING_LINEAR
-    add_forcing_linear(index, dt, matrix);
+    add_forcing_linear(index, dt, current_time, current_step, matrix);
 #endif
 
     #pragma unroll
@@ -98,7 +110,10 @@ void get_linear_matrix_wrapped(const size_t index,
 
 // Returns the full (for all modes) linear matrix.
 // Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
-__global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linear_matrix){
+__global__ void compute_linear_matrix(const FLUCS_FLOAT dt,
+                                      const FLUCS_FLOAT current_time,
+                                      const long long current_step,
+                                      FLUCS_COMPLEX* linear_matrix) {
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -106,7 +121,7 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
         return;
 
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_linear_matrix_wrapped(index, dt, FLOAT_ONE, matrix);
+    get_linear_matrix_wrapped(index, dt, current_time, current_step, FLOAT_ONE, matrix);
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
@@ -143,8 +158,9 @@ __device__ __forceinline__
 void complete_finish_step(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT adaptive_rate,
+    const FLUCS_FLOAT current_time,
     const long long current_step,
+    const FLUCS_FLOAT adaptive_rate,
     FLUCS_COMPLEX* current_fields
 ) {
     add_hyperdissipation(index, dt, adaptive_rate, current_fields);
