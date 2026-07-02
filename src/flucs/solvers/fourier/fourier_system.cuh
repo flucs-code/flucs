@@ -34,10 +34,6 @@
 
 extern "C" {
 
-// Precomputed matrices stored in global memory
-__constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
-__constant__ FLUCS_COMPLEX* inverse_lhs_precomp = NULL;
-
 // Gets the linear matrix for a single mode.
 // Must be implemented by the user.
 __device__ void get_linear_matrix(const size_t index,
@@ -118,44 +114,6 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt, FLUCS_COMPLEX* linea
         }
     }
 }
-
-// Precomputes the rhs and inverse_lhs matrices.
-__global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
-    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
-
-    // Check if we are within bounds
-    if (!(index < HALFUNPADDEDSIZE))
-        return;
-
-    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-
-    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    get_linear_matrix_wrapped(index, dt, dt, matrix);
-
-    pade_lhs_rhs(matrix, lhs, rhs);
-
-    #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        #pragma unroll
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
-                rhs[i][j];
-        }
-    }
-
-    FLUCS_COMPLEX inverse_lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    invert_matrix(lhs, inverse_lhs);
-
-    #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        #pragma unroll
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            inverse_lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = inverse_lhs[i][j];
-        }
-    }
-}
-
 // Adds hyperdissipation to the final fields
 __device__ __forceinline__
 void add_hyperdissipation(

@@ -8,6 +8,48 @@ extern "C" {
 // Multistep explicit terms stored in global memory
 __constant__ FLUCS_COMPLEX* multistep_explicit_terms;
 
+// Precomputed matrices stored in global memory
+__constant__ FLUCS_COMPLEX* rhs_precomp = NULL;
+__constant__ FLUCS_COMPLEX* inverse_lhs_precomp = NULL;
+
+// Precomputes the rhs and inverse_lhs matrices.
+__global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(index < HALFUNPADDEDSIZE))
+        return;
+
+    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX rhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    get_linear_matrix_wrapped(index, dt, dt, matrix);
+
+    pade_lhs_rhs(matrix, lhs, rhs);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            rhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
+                rhs[i][j];
+        }
+    }
+
+    FLUCS_COMPLEX inverse_lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    invert_matrix_inplace(lhs, inverse_lhs);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            inverse_lhs_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = inverse_lhs[i][j];
+        }
+    }
+}
+
+
 // Adds the explicit terms to the rhs and updates the AB3 history
 __device__ void add_explicit_terms(
     const size_t index,
@@ -138,7 +180,7 @@ __global__ void finish_step(
 #endif
 
     FLUCS_COMPLEX result[NUMBER_OF_FIELDS];
-    gaussian_elimination(lhs, result, rhs_fields);
+    gaussian_elimination_inplace(lhs, result, rhs_fields);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){

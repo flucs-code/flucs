@@ -773,33 +773,53 @@ class FourierSystem(FlucsSystem):
 
         # Allocate precomputation matrices
         if self.input["setup.precompute_linear_matrix"]:
-            if not hasattr(self, "rhs"):
-                self.rhs = cp.zeros(
-                    (
-                        self.number_of_fields,
-                        self.number_of_fields,
-                        self.nz,
-                        self.nx,
-                        self.half_ny,
-                    ),
-                    dtype=self.complex,
-                )
-                self.inverse_lhs = cp.zeros(
-                    (
-                        self.number_of_fields,
-                        self.number_of_fields,
-                        self.nz,
-                        self.nx,
-                        self.half_ny,
-                    ),
-                    dtype=self.complex,
+            # Allocate according to method
+            # TODO: move this to fourier_solver instead?
+
+            if self.input["setup.time_integrator"] == "ab3":
+                if not hasattr(self, "rhs"):
+                    self.rhs = cp.zeros(
+                        (
+                            self.number_of_fields,
+                            self.number_of_fields,
+                            self.nz,
+                            self.nx,
+                            self.half_ny,
+                        ),
+                        dtype=self.complex,
+                    )
+                    self.inverse_lhs = cp.zeros(
+                        (
+                            self.number_of_fields,
+                            self.number_of_fields,
+                            self.nz,
+                            self.nx,
+                            self.half_ny,
+                        ),
+                        dtype=self.complex,
+                    )
+
+                cupy_set_device_pointer(
+                    self.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
                 )
 
-            cupy_set_device_pointer(
-                self.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
-            )
+                cupy_set_device_pointer(self.cupy_module, "rhs_precomp", self.rhs)
+            elif self.input["setup.time_integrator"] == "ab3_if":
+                if not hasattr(self, "propagator"):
+                    self.propagator = cp.zeros(
+                        (
+                            self.number_of_fields,
+                            self.number_of_fields,
+                            self.nz,
+                            self.nx,
+                            self.half_ny,
+                        ),
+                        dtype=self.complex,
+                    )
 
-            cupy_set_device_pointer(self.cupy_module, "rhs_precomp", self.rhs)
+                cupy_set_device_pointer(
+                    self.cupy_module, "propagator_precomp", self.propagator
+                )
 
             self.precompute_iteration_matrices()
 
@@ -811,9 +831,6 @@ class FourierSystem(FlucsSystem):
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""
-        if not self.input["setup.precompute_linear_matrix"]:
-            return
-
         self.precompute_iteration_matrices_kernel(self.float(self.current_dt))
 
     def setup_cuda_definitions(self) -> None:
