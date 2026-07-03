@@ -58,19 +58,19 @@ class FlucsSolver(Generic[T_System], ABC):
         """Registers kernels (incl. templated kernels) that are to be used."""
 
     def _create_timestepper(self):
-        timestepper_name = self.input["setup.timestepper"]
+        timestepping_method = self.input["timestepping.method"]
 
         # Check choice of timestepper
-        if timestepper_name not in self._supported_timesteppers:
+        if timestepping_method not in self._supported_timesteppers:
             raise InvalidFlucsInputFileError(
-                f"{self.input['setup.timestepper']} is not"
+                f"{self.input['timestepping.method']} is not"
                 " a supported timestepper. Supported "
                 f"choices are {', '.join(self._supported_timesteppers)}."
             )
 
-        self.timestepper = self._supported_timesteppers[timestepper_name](self)
+        self.timestepper = self._supported_timesteppers[timestepping_method](self)
 
-        flucsprint(f"Time integrator: {self.timestepper!s}", source=self)
+        flucsprint(f"Using timestepping method: {self.timestepper!s}")
 
     def __init__(self, flucs_input: FlucsInput, flucs_system: T_System) -> None:
         self.input = flucs_input

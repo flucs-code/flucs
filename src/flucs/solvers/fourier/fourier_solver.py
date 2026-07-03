@@ -205,7 +205,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
 
     def __init__(self, solver: FlucsSolver[FourierSystem]):
         super().__init__(solver)
-        self.ab3_type = self.input["setup.timestepper"]
+        self.ab3_type = self.input["timestepping.method"]
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
