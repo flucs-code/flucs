@@ -69,7 +69,7 @@ __device__ void add_explicit_terms(
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_forcing_explicit(index, dt, current_time, current_step, previous_fields, explicit_terms);
+    add_forcing_explicit(index, dt, current_time, current_step, previous_fields, explicit_terms_0);
 #endif
 
     const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
