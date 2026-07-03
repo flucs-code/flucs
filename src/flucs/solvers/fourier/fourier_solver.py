@@ -176,7 +176,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             block=(self.system.cuda_block_size,),
         )
 
-    def perform_timestep(self):
+    def execute_timestep(self):
         system = self.system
 
         if self.is_nonlinear:
@@ -312,7 +312,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             self.system.begin_time_step()
 
             # Perform a step
-            self.timestepper.perform_timestep()
+            self.timestepper.execute_timestep()
 
             # Update current_time to reflect the time
             # of current_step

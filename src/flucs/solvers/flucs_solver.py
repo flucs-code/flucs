@@ -102,9 +102,9 @@ class FlucsTimestepper(Generic[T_System], ABC):
         """
 
     @abstractmethod
-    def perform_timestep(self):
+    def execute_timestep(self):
         """
-        Performs a complete time step
+        Executes a complete time step
         """
 
     @abstractmethod
