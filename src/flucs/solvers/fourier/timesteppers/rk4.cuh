@@ -117,17 +117,17 @@ __device__ void get_explicit_terms(
         }
 
         if constexpr (stage == 1 || stage == 3) {
-            stage_fields[i] = stage_weight * stage_sum;
+            stage_fields[i] += stage_weight * stage_sum;
         }
-        if constexpr (stage == 2) {
-            stage_fields[i] = stage_weight * explicit_terms[i];
+        else if constexpr (stage == 2) {
+            stage_fields[i] += stage_weight * explicit_terms[i];
         }
 
         if constexpr (stage < 4) {
-            current_fields[i] = current_weight * current_sum;
+            current_fields[i] += current_weight * current_sum;
         }
         else {
-            current_fields[i] = current_weight * explicit_terms[i];
+            current_fields[i] += current_weight * explicit_terms[i];
         }
     }
 }
@@ -161,8 +161,8 @@ __global__ void finish_stage(
         previous_fields[j] = previous_fields_global[index + j*HALFUNPADDEDSIZE];
     }
 
-    FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX current_fields[NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS] = {0};
+    FLUCS_COMPLEX current_fields[NUMBER_OF_FIELDS] = {0};
     FLUCS_COMPLEX propagator_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     FLUCS_COMPLEX propagator_full[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
@@ -196,7 +196,7 @@ __global__ void finish_stage(
 
         // Half propagator needed if stage < 4
         if constexpr (stage < 4) {
-            get_linear_matrix_wrapped(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, dt, matrix);
+            get_linear_matrix_wrapped(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, (FLUCS_FLOAT)(dt/2.0), matrix);
             pade_lhs_rhs(matrix, lhs, propagator_half);
 
             // In-place gaussian elimination
@@ -226,11 +226,11 @@ __global__ void finish_stage(
 
             #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-                if constexpr (stage == 1 || stage == 3) {
-                    sum += propagator_full[i][j] * previous_fields[j];
+                if constexpr (stage < 3) {
+                    sum += propagator_half[i][j] * previous_fields[j];
                 }
                 else {
-                    sum += propagator_half[i][j] * previous_fields[j];
+                    sum += propagator_full[i][j] * previous_fields[j];
                 }
             }
 

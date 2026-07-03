@@ -148,11 +148,12 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Stage 1
 
-        system.compute_nonlinear_terms(previous_fields)
+        if self.is_nonlinear:
+            system.compute_nonlinear_terms(previous_fields)
 
-        # Update dt as necessary
-        if system._update_dt():
-            self.precompute_iteration_matrices()
+            # Update dt as necessary
+            if system._update_dt():
+                self.precompute_iteration_matrices()
 
         self.finish_stage1_kernel(
             system.float(system.current_dt),
@@ -167,7 +168,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Stage 2
 
-        system.compute_nonlinear_terms(self.stage_fields)
+        if self.is_nonlinear:
+            system.compute_nonlinear_terms(self.stage_fields)
 
         self.finish_stage2_kernel(
             system.float(system.current_dt),
@@ -182,7 +184,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Stage 3
 
-        system.compute_nonlinear_terms(self.stage_fields)
+        if self.is_nonlinear:
+            system.compute_nonlinear_terms(self.stage_fields)
 
         self.finish_stage3_kernel(
             system.float(system.current_dt),
@@ -197,7 +200,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Stage 4
 
-        system.compute_nonlinear_terms(self.stage_fields)
+        if self.is_nonlinear:
+            system.compute_nonlinear_terms(self.stage_fields)
 
         self.finish_stage4_kernel(
             system.float(system.current_dt),
