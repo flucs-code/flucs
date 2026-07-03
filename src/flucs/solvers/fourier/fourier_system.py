@@ -867,7 +867,7 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
-    def compute_linear_matrix(self, dt=0.0, time=0.0, step=0) -> np.ndarray:
+    def compute_linear_matrix(self, dt=None, time=None, step=None) -> np.ndarray:
         """
         Computes the linear matrix used by the solver and stores it in
         self.linear_matrix. Note that this is not used directly in the
@@ -875,8 +875,19 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        if self.linear_matrix is not None:
+        # Check whether to used a cached matrix
+        use_cached = (dt is None) and (time is None) and (step is None)
+
+        if use_cached and self.linear_matrix is not None:
             return self.linear_matrix
+
+        # Otherwise set init values
+        if dt is None:
+            dt = self.init_dt
+        if time is None:
+            time = self.init_time
+        if step is None:
+            step = self.int(0)
 
         # Linear matrix in GPU memory
         linear_matrix_cupy = cp.zeros(
@@ -898,7 +909,11 @@ class FourierSystem(FlucsSystem):
             linear_matrix_cupy,
         )
 
-        self.linear_matrix = cp.asnumpy(linear_matrix_cupy)
+        linear_matrix = cp.asnumpy(linear_matrix_cupy)
+
+        # Add to cache for reuse
+        if use_cached:
+            self.linear_matrix = linear_matrix
 
         return self.linear_matrix
 
