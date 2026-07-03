@@ -274,7 +274,9 @@ class FlucsSystem(ABC):
         cuda_module += f"\n// {datetime.datetime.now()}"
 
         self.setup_cuda_definitions()
+        self.solver.setup_cuda_definitions()
         self.register_kernels()
+        self.solver.register_kernels()
 
         self.cupy_module = cp.RawModule(
             code=cuda_module,
