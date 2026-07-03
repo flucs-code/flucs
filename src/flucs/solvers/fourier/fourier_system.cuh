@@ -175,3 +175,7 @@ void complete_finish_step(
 #ifdef AB3_IF
 #include "flucs/solvers/fourier/timesteppers/ab3_if.cuh"
 #endif
+
+#ifdef RK4
+#include "flucs/solvers/fourier/timesteppers/rk4.cuh"
+#endif

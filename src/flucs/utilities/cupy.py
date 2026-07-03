@@ -45,7 +45,7 @@ class ModuleOptions:
     """
 
     _defs: dict
-    options = ("--ptxas-options=-O3", "--use_fast_math")
+    options = ("--ptxas-options=-O3", "--use_fast_math", "-std=c++17")
     name_expressions: list
 
     def __init__(self) -> None:

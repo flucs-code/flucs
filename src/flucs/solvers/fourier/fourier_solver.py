@@ -10,6 +10,7 @@ import time
 from typing import ClassVar
 
 from .timesteppers.ab3 import FourierAB3Timestepper
+from .timesteppers.rk4 import FourierRK4Timestepper
 
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
@@ -26,6 +27,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
     # Supported time steppers
     _supported_timesteppers: ClassVar = {
         "ab3": FourierAB3Timestepper,
+        "rk4": FourierRK4Timestepper,
     }
 
     def setup_cuda_definitions(self) -> None:
