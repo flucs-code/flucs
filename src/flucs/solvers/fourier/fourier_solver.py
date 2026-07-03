@@ -50,7 +50,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         # fmt: on
 
     def setup(self):
-        if not self.input["setup.precompute_linear_matrix"]:
+        if not self.input["timestepping.precompute_linear_matrix"]:
             self.precompute_iteration_matrices = lambda: None
 
         self._allocate_memory()
@@ -71,7 +71,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
                 self.multistep_explicit_terms,
             )
 
-        if self.input["setup.precompute_linear_matrix"]:
+        if self.input["timestepping.precompute_linear_matrix"]:
             if self.ab3_type == "ab3":
                 cupy_set_device_pointer(
                     system.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
@@ -105,7 +105,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             )
 
         # Allocate precomputation matrices
-        if self.input["setup.precompute_linear_matrix"]:
+        if self.input["timestepping.precompute_linear_matrix"]:
             # Allocate according to method
             if self.ab3_type == "ab3":
                 if not hasattr(self, "rhs"):
@@ -153,10 +153,12 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         self.system.module_options.define_flag(self.ab3_type.upper())
 
         self.system.module_options.define_flag(
-            "LINEAR_PADE_DEGREE", str(self.input["setup.linear_pade_degree"])
+            "LINEAR_PADE_DEGREE", str(
+                self.input["timestepping.linear_pade_degree"]
+            )
         )
 
-        if self.input["setup.precompute_linear_matrix"]:
+        if self.input["timestepping.precompute_linear_matrix"]:
             flucsprint("Linear matrices will be precomputed.", source=self)
             self.system.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 

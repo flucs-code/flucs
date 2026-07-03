@@ -154,10 +154,10 @@ class FourierSystem(FlucsSystem):
             flucsprint("Using discrete time stepping.")
 
         elif self.input["time.dt_method"] == "continuous":
-            if self.input["setup.precompute_linear_matrix"]:
+            if self.input["timestepping.precompute_linear_matrix"]:
                 raise InvalidFlucsInputFileError(
-                    "Cannot have setup.precompute_linear_matrix = true if "
-                    "time.dt_method = 'continuous'."
+                    "Cannot have timestepping.precompute_linear_matrix = "
+                    "true if time.dt_method = 'continuous'."
                 )
             flucsprint("Using continuous time stepping.")
 

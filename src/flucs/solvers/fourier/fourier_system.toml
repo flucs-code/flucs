@@ -44,18 +44,19 @@ nonlinear_order = 2
 # If true, run a linear-only simulation
 linear = false
 
-# Degree N of the [N,N] Pade approximant for the linear propagator
-linear_pade_degree = 2  # [1,1] is Crank-Nicolson
-
-# Whether the linear matrix should be computed each time step or precomputed
-precompute_linear_matrix = false
-
 # Whether to perform some predefined health checks (e.g., linear spectrum against a reference)
 check_linear_matrix = true
 
 [timestepping]
 # Currently supported are ab3 and ab3_if
 method = "ab3_if"
+
+# Degree N of the [N,N] Pade approximant for the linear propagator
+linear_pade_degree = 2  # [1,1] is Crank-Nicolson
+
+# Whether the linear matrix should be computed each time step or precomputed
+precompute_linear_matrix = false
+
 
 [init]
 
