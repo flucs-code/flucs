@@ -875,19 +875,13 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        # Check whether to used a cached matrix
-        use_cached = (dt is None) and (time is None) and (step is None)
-
-        if use_cached and self.linear_matrix is not None:
-            return self.linear_matrix
-
-        # Otherwise set init values
+        # Set to current values
         if dt is None:
-            dt = self.init_dt
+            dt = getattr(self, "current_dt", self.init_dt)
         if time is None:
-            time = self.init_time
+            time = getattr(self, "current_time", self.init_time)
         if step is None:
-            step = self.int(0)
+            step = getattr(self, "current_step", self.int(0))
 
         # Linear matrix in GPU memory
         linear_matrix_cupy = cp.zeros(
@@ -909,11 +903,7 @@ class FourierSystem(FlucsSystem):
             linear_matrix_cupy,
         )
 
-        linear_matrix = cp.asnumpy(linear_matrix_cupy)
-
-        # Add to cache for reuse
-        if use_cached:
-            self.linear_matrix = linear_matrix
+        self.linear_matrix = cp.asnumpy(linear_matrix_cupy)
 
         return self.linear_matrix
 
