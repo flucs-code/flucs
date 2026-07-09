@@ -5,48 +5,52 @@
 #pragma once
 
 // Precomputed linear propagator stored in global memory
+extern "C" {
+
 __constant__ FLUCS_COMPLEX* propagator_half_precomp = NULL;
 __constant__ FLUCS_COMPLEX* propagator_full_precomp = NULL;
 
-// // Precomputes the rhs and inverse_lhs matrices.
+// Precomputes the half-step and full-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
+    // Check if we are within bounds
+    if (!(index < HALFUNPADDEDSIZE))
+        return;
 
-    // Not implemented
-    __trap();
-    return;
+    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
-    // // Check if we are within bounds
-    // if (!(index < HALFUNPADDEDSIZE))
-    //     return;
-    //
-    // // This will first holds rhs then the propagator = lhs^-1 rhs
-    // FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    //
-    // { // Help those registers
-    //     FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    //
-    //     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    //
-    //     // Precomputing should not be used with time-dependent linear matrices
-    //     get_linear_matrix_wrapped(index, dt, (FLUCS_FLOAT)0, 0, dt, matrix);
-    //
-    //     pade_lhs_rhs(matrix, lhs, propagator);
-    //
-    //     // In-place gaussian elimination
-    //     gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
-    // }
-    //
-    // #pragma unroll
-    // for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-    //     #pragma unroll
-    //     for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-    //         propagator_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
-    //             propagator[i][j];
-    //     }
-    // }
+    // Precomputing should not be used with time-dependent linear matrices.
+    get_linear_matrix_wrapped(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, (FLUCS_FLOAT)(dt/2.0), matrix);
+    pade_lhs_rhs(matrix, lhs, propagator);
+    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            propagator_half_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] \
+            = propagator[i][j];
+        }
+    }
+
+    get_linear_matrix_wrapped(index, dt, (FLUCS_FLOAT)0, 0, dt, matrix);
+    pade_lhs_rhs(matrix, lhs, propagator);
+    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+            propagator_full_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] \
+            = propagator[i][j];
+        }
+    }
 }
+
+} // extern "C"
 
 // Gets the explicit terms for the stage rhs and the current_field update
 template<int stage>
@@ -77,15 +81,15 @@ __device__ void get_explicit_terms(
     FLUCS_FLOAT stage_weight, current_weight;
 
     if constexpr (stage == 1) {
-        stage_weight = (FLUCS_FLOAT)(-dt/2.0);
+        stage_weight   = (FLUCS_FLOAT)(-dt/2.0);
         current_weight = (FLUCS_FLOAT)(-dt/6.0);
     }
     else if constexpr (stage == 2) {
-        stage_weight = (FLUCS_FLOAT)(-dt/2.0);
+        stage_weight   = (FLUCS_FLOAT)(-dt/2.0);
         current_weight = (FLUCS_FLOAT)(-dt/3.0);
     }
     else if constexpr (stage == 3) {
-        stage_weight = (FLUCS_FLOAT)(-dt);
+        stage_weight   = (FLUCS_FLOAT)(-dt);
         current_weight = (FLUCS_FLOAT)(-dt/3.0);
     }
     else if constexpr (stage == 4) {
@@ -168,24 +172,18 @@ __global__ void finish_stage(
 
 #ifdef PRECOMPUTE_LINEAR_MATRIX
 
-#error "not implemented"
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        FLUCS_COMPLEX sum = 0;
-
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            propagator_half[i][j] = propagator_half_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
-            propagator_full[i][j] = propagator_full_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
-
-            sum += propagator[i][j] * prev[j];
+            if constexpr (stage < 4) {
+                propagator_half[i][j] = propagator_half_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
+            }
+            if constexpr (stage == 1 || stage == 3) {
+                propagator_full[i][j] = propagator_full_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
+            }
         }
-        result[i] = sum;
     }
-
-#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
-#endif
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
 
@@ -213,6 +211,8 @@ __global__ void finish_stage(
         }
     }
 
+
+#endif // PRECOMPUTE_LINEAR_MATRIX
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
     get_explicit_terms<stage>(index, dt, current_time, current_step, dft_bits, previous_fields, stage_fields, current_fields, propagator_half, propagator_full);
@@ -252,9 +252,6 @@ __global__ void finish_stage(
             current_fields[i] += sum;
         }
     }
-
-
-#endif // PRECOMPUTE_LINEAR_MATRIX
 
     // Store stage
     if constexpr (stage < 4) {

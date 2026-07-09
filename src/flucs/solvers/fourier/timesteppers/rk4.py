@@ -25,16 +25,20 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
 
         if self.input["timestepping.precompute_linear_matrix"]:
             cupy_set_device_pointer(
-                system.cupy_module, "propagator_precomp", self.propagator
+                system.cupy_module,
+                "propagator_half_precomp",
+                self.propagator_half,
+            )
+            cupy_set_device_pointer(
+                system.cupy_module,
+                "propagator_full_precomp",
+                self.propagator_full,
             )
 
             self.precompute_iteration_matrices()
 
     def _allocate_memory(self):
-        # For the explicit terms, we need to keep terms at the current
-        # time step + terms from the past 2 time steps since we are
-        # using AB3.
-        # The explicit terms are indexed as (step, field, kz, kx, ky)
+        # RK4 needs one temporary field array for intermediate stages.
         system = self.system
         self.stage_fields = cp.zeros(
             (
@@ -48,41 +52,23 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Allocate precomputation matrices
         if self.input["timestepping.precompute_linear_matrix"]:
-            # Allocate according to method
-            if self.lawson_integrating_factors:
-                if not hasattr(self, "propagator"):
-                    self.propagator = cp.zeros(
-                        (
-                            system.number_of_fields,
-                            system.number_of_fields,
-                            system.nz,
-                            system.nx,
-                            system.half_ny,
-                        ),
-                        dtype=system.complex,
-                    )
-            else:
-                if not hasattr(self, "rhs"):
-                    self.rhs = cp.zeros(
-                        (
-                            system.number_of_fields,
-                            system.number_of_fields,
-                            system.nz,
-                            system.nx,
-                            system.half_ny,
-                        ),
-                        dtype=system.complex,
-                    )
-                    self.inverse_lhs = cp.zeros(
-                        (
-                            system.number_of_fields,
-                            system.number_of_fields,
-                            system.nz,
-                            system.nx,
-                            system.half_ny,
-                        ),
-                        dtype=system.complex,
-                    )
+            matrix_shape = (
+                system.number_of_fields,
+                system.number_of_fields,
+                system.nz,
+                system.nx,
+                system.half_ny,
+            )
+            if not hasattr(self, "propagator_half"):
+                self.propagator_half = cp.zeros(
+                    matrix_shape,
+                    dtype=system.complex,
+                )
+            if not hasattr(self, "propagator_full"):
+                self.propagator_full = cp.zeros(
+                    matrix_shape,
+                    dtype=system.complex,
+                )
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""
