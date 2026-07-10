@@ -4,6 +4,21 @@
  */
 #pragma once
 
+__device__ __forceinline__ void compute_propagator(
+    const size_t index,
+    const FLUCS_FLOAT propagator_dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
+){
+    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+
+    get_linear_matrix_wrapped(index, propagator_dt, current_time, current_step, propagator_dt, matrix);
+    pade_lhs_rhs(matrix, lhs, propagator);
+    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
+}
+
 // Precomputed linear propagator stored in global memory
 extern "C" {
 
@@ -18,14 +33,10 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     if (!(index < HALFUNPADDEDSIZE))
         return;
 
-    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
     // Precomputing should not be used with time-dependent linear matrices.
-    get_linear_matrix_wrapped(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, (FLUCS_FLOAT)(dt/2.0), matrix);
-    pade_lhs_rhs(matrix, lhs, propagator);
-    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
+    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -36,9 +47,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 
-    get_linear_matrix_wrapped(index, dt, (FLUCS_FLOAT)0, 0, dt, matrix);
-    pade_lhs_rhs(matrix, lhs, propagator);
-    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
+    compute_propagator(index, dt, (FLUCS_FLOAT)0, 0, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -187,28 +196,14 @@ __global__ void finish_stage(
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
 
-    // Help the compiler a bit with the registers
-    {
-        FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    // Half propagator needed if stage < 4
+    if constexpr (stage < 4) {
+        compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, propagator_half);
+    }
 
-        // Half propagator needed if stage < 4
-        if constexpr (stage < 4) {
-            get_linear_matrix_wrapped(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, (FLUCS_FLOAT)(dt/2.0), matrix);
-            pade_lhs_rhs(matrix, lhs, propagator_half);
-
-            // In-place gaussian elimination
-            gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator_half, propagator_half);
-        }
-
-        // Full propagator needed if stage == 1 or 3
-        if constexpr (stage == 1 || stage == 3) {
-            get_linear_matrix_wrapped(index, dt, current_time, current_step, dt, matrix);
-            pade_lhs_rhs(matrix, lhs, propagator_full);
-
-            // In-place gaussian elimination
-            gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator_full, propagator_full);
-        }
+    // Full propagator needed if stage == 1 or 3
+    if constexpr (stage == 1 || stage == 3) {
+        compute_propagator(index, dt, current_time, current_step, propagator_full);
     }
 
 
