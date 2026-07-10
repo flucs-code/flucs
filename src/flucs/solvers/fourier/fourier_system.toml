@@ -48,7 +48,7 @@ linear = false
 check_linear_matrix = true
 
 [timestepping]
-# Currently supported are ab3 and rk4
+# Currently supported are ab3, rk4, and ssprk3
 method = "ab3"
 
 lawson_integrating_factors = true

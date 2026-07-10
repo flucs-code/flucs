@@ -179,3 +179,7 @@ void complete_finish_step(
 #ifdef RK4
 #include "flucs/solvers/fourier/timesteppers/rk4.cuh"
 #endif
+
+#ifdef SSPRK3
+#include "flucs/solvers/fourier/timesteppers/ssprk3.cuh"
+#endif
