@@ -210,7 +210,9 @@ __global__ void finish_stage(
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    get_explicit_terms<stage>(index, dt, current_time, current_step, dft_bits, previous_fields, stage_fields, current_fields, propagator_half, propagator_full);
+    get_explicit_terms<stage>(
+        index, dt, current_time, current_step, dft_bits, previous_fields_global, stage_fields, current_fields, propagator_half, propagator_full
+    );
 #endif
 
     // Stage update

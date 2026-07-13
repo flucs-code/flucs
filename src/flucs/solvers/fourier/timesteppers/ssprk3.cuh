@@ -172,7 +172,9 @@ __global__ void finish_stage(
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
-    get_explicit_terms<stage>(index, dt, current_time, current_step, dft_bits, previous_fields, explicit_terms);
+    get_explicit_terms<stage>(
+        index, dt, current_time, current_step, dft_bits, previous_fields_global, explicit_terms
+    );
 
     // Stage 1
     if constexpr (stage == 1) {
