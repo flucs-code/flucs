@@ -252,19 +252,25 @@ __global__ void finish_stage(
 
     // Store stage
     if constexpr (stage < 4) {
+        complete_timestep_stage(
+            index, dt, current_time, current_step, stage_fields
+        );
+
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             stage_fields_global[index + i*HALFUNPADDEDSIZE] = stage_fields[i];
         }
     }
 
+    // Store current fields
     if constexpr (stage == 1) {
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             current_fields_global[index + i*HALFUNPADDEDSIZE] = current_fields[i];
         }
     }
-    else {
+
+    if constexpr (stage == 2 || stage == 3) {
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -273,8 +279,27 @@ __global__ void finish_stage(
 #endif
     }
 
-
     if constexpr (stage == 4) {
+        FLUCS_COMPLEX result[NUMBER_OF_FIELDS];
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+            result[i] = current_fields_global[index + i*HALFUNPADDEDSIZE] + current_fields[i];
+#else
+            result[i] = current_fields_global[index + i*HALFUNPADDEDSIZE];
+#endif
+        }
+
+        complete_timestep_stage(
+            index, dt, current_time, current_step, result
+        );
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            current_fields_global[index + i*HALFUNPADDEDSIZE] = result[i];
+        }
+
         complete_finish_step(
             index, dt, current_time, current_step, adaptive_rate, current_fields_global
         );

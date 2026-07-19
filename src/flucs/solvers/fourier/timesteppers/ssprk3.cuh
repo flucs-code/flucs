@@ -120,6 +120,7 @@ __global__ void finish_stage(
     FLUCS_COMPLEX previous_fields[NUMBER_OF_FIELDS];
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS] = {0};
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS] = {0};
+    FLUCS_COMPLEX result[NUMBER_OF_FIELDS] = {0};
 
     // Load previous_fields from global memory
     #pragma unroll
@@ -187,7 +188,16 @@ __global__ void finish_stage(
                 sum += propagator_full[i][j] * (previous_fields[j] - dt*explicit_terms[j]);
             }
 
-            stage_fields_global[index + i*HALFUNPADDEDSIZE] = sum;
+            result[i] = sum;
+        }
+
+        complete_timestep_stage(
+            index, dt, current_time, current_step, result
+        );
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            stage_fields_global[index + i*HALFUNPADDEDSIZE] = result[i];
         }
     }
 
@@ -203,7 +213,16 @@ __global__ void finish_stage(
                       +((FLUCS_FLOAT)(1.0/4.0)) * propagator_minus_half[i][j] * (stage_fields[j] - dt*explicit_terms[j]);
             }
 
-            stage_fields_global[index + i*HALFUNPADDEDSIZE] = sum;
+            result[i] = sum;
+        }
+
+        complete_timestep_stage(
+            index, dt, current_time, current_step, result
+        );
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            stage_fields_global[index + i*HALFUNPADDEDSIZE] = result[i];
         }
     }
 
@@ -223,7 +242,16 @@ __global__ void finish_stage(
 #endif
             }
 
-            current_fields_global[index + i*HALFUNPADDEDSIZE] = sum;
+            result[i] = sum;
+        }
+
+        complete_timestep_stage(
+            index, dt, current_time, current_step, result
+        );
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            current_fields_global[index + i*HALFUNPADDEDSIZE] = result[i];
         }
 
         complete_finish_step(index, dt, current_time, current_step, adaptive_rate, current_fields_global);

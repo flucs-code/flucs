@@ -153,6 +153,25 @@ void add_hyperdissipation(
     }
 }
 
+// Function for end-of-timestep-stage operations (e.g., divergence cleaning)
+#ifdef COMPLETE_TIMESTEP_STAGE
+__device__ void complete_timestep_stage(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    FLUCS_COMPLEX fields[NUMBER_OF_FIELDS]
+);
+#else // no-op if not implemented
+__device__ __forceinline__ void complete_timestep_stage(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    FLUCS_COMPLEX fields[NUMBER_OF_FIELDS]
+) {}
+#endif
+
 // Function for end-of-timestep operations
 __device__ __forceinline__
 void complete_finish_step(

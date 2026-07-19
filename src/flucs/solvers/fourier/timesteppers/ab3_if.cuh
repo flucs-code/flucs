@@ -214,6 +214,8 @@ __global__ void finish_step(
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
+    complete_timestep_stage(index, dt, current_time, current_step, result);
+
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         current_fields[index + i*HALFUNPADDEDSIZE] = result[i];
