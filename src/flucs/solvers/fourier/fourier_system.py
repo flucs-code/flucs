@@ -1114,8 +1114,7 @@ class FourierSystem(FlucsSystem):
         Get the complex Fourier data for the fields at the current step.
         """
 
-        index = int(self.current_step) % self.number_of_fields
-        current_fields = self.fields[index]
+        current_fields = self.get_fields()
 
         data = (
             cp.asnumpy(current_fields)
@@ -1255,6 +1254,32 @@ class FourierSystem(FlucsSystem):
 
         return dt_changed
 
+    def get_fields(self, steps_before_current=0) -> cp.ndarray:
+        """
+        Returns the fields at the specified time step.
+
+        Parameters
+        ----------
+        steps_before_current : int
+            Number of steps before the current step to return.
+            0 returns the current step, 1 returns the previous step, etc.
+
+        Returns
+        -------
+        fields : cp.ndarray
+            The fields at the specified time step.
+
+        """
+
+        #TODO: Add call to function to go from shearing-frame to lab-frame
+        # fourier data when adding flowshear. Though be careful with global vs copy
+
+        index = (
+            self.current_step - int(steps_before_current)
+        ) % self.fields_history_size
+
+        return self.fields[index]
+
     def get_realspace_fields_gpu(self):
         """
         Calculates the real-space fields at the current time step as a
@@ -1270,7 +1295,7 @@ class FourierSystem(FlucsSystem):
             return
 
         self.realspace_fields = cp.fft.irfftn(
-            self.fields[self.current_step % self.fields_history_size],
+            self.get_fields(),
             norm="forward",
             axes=(1, 2, 3),
             s=self.full_unpadded_tuple,
@@ -1291,9 +1316,7 @@ class FourierSystem(FlucsSystem):
             return
 
         # TODO: this needs to be changed if there's flow shear
-        fields_cpu_memory: np.ndarray = self.fields[
-            self.current_step % self.fields_history_size
-        ].get()
+        fields_cpu_memory: np.ndarray = self.get_fields().get()
 
         self.realspace_fields = np.fft.irfftn(
             fields_cpu_memory,

@@ -173,11 +173,12 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
     def execute_timestep(self):
         system = self.system
 
+        # Get fields
+        current_fields = system.get_fields()
+        previous_fields = system.get_fields(1)
+
         if self.is_nonlinear:
-            fields = system.fields[
-                (system.current_step - 1) % system.fields_history_size
-            ]
-            system.compute_nonlinear_terms(fields)
+            system.compute_nonlinear_terms(previous_fields)
 
             if system._update_dt():
                 self.precompute_iteration_matrices()
@@ -192,9 +193,9 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             self.ab3_coefficients[0],
             self.ab3_coefficients[1],
             self.ab3_coefficients[2],
-            system.fields[system.current_step % system.fields_history_size - 1],
+            previous_fields,
             system.dft_bits,
-            system.fields[system.current_step % system.fields_history_size],
+            current_fields,
         )
 
     def __init__(self, solver: FlucsSolver[FourierSystem]):

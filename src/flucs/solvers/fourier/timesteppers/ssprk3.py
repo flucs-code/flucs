@@ -117,12 +117,9 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
     def execute_timestep(self):
         system = self.system
 
-        previous_fields = system.fields[
-            (system.current_step - 1) % system.fields_history_size
-        ]
-        current_fields = system.fields[
-            system.current_step % system.fields_history_size
-        ]
+        # Get fields
+        current_fields = system.get_fields()
+        previous_fields = system.get_fields(1)
 
         # Stage 1
         if self.is_nonlinear:

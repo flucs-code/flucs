@@ -162,13 +162,8 @@ class LinearEigensystemDiag(FlucsDiagnostic):
 
     def execute(self):
         # Get fields
-        current_fields = self.system.fields[
-            self.system.current_step % self.system.fields_history_size
-        ]
-
-        previous_fields = self.system.fields[
-            self.system.current_step % self.system.fields_history_size - 1
-        ]
+        current_fields = self.system.get_fields()
+        previous_fields = self.system.get_fields(1)
 
         # Project onto solver eigenvectors
         current_amplitude = cp.einsum(
@@ -345,9 +340,7 @@ class FourierDataDiag(FlucsDiagnostic):
                 iky=iky,
             ):
                 self.vars[f"{loc_name}/data"].data_cache.append(
-                    system.fields[
-                        system.current_step % system.fields_history_size
-                    ][ifield, ikz, ikx, iky].get()
+                    system.get_fields()[ifield, ikz, ikx, iky].get()
                 )
 
             self.slice_calculators.append(slice_calculator)
