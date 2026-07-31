@@ -32,6 +32,36 @@ def cupy_set_device_pointer(
     )
 
 
+def cupy_get_device_array(
+    module: cp.RawModule, array_name: str, shape: tuple, dtype
+) -> cp.ndarray:
+    """Gets a CuPy array associated with a __device__ array.
+
+    Parameters
+    ----------
+    module : cp.RawModule
+        CuPy module that declares the array.
+    array_name : str
+        Name of the __device__ array.
+    shape : tuple
+        Shape of the array.
+    dtype
+        Data type of the array.
+
+    Returns
+    -------
+    cp.ndarray
+        A CuPy array associated with array_name.
+
+    """
+    array_ptr = module.get_global(array_name)
+    return cp.ndarray(
+        shape=shape,
+        dtype=dtype,
+        memptr=array_ptr,
+    )
+
+
 class ModuleOptions:
     """Helper class that builds the tuple of options needed to compule CuPy's
     RawModule. Useful for defining compile-time macros and definitions.
