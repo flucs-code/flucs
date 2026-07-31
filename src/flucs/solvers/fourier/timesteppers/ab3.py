@@ -3,7 +3,7 @@ import numpy as np
 
 from flucs.solvers import FlucsSolver, FlucsTimestepper
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.cupy import KernelWrapper, cupy_set_device_pointer
+from flucs.utilities.cupy import KernelWrapper, cupy_get_device_array
 from flucs.utilities.messages import flucsprint
 
 
@@ -42,8 +42,6 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         if not self.input["timestepping.precompute_linear_matrix"]:
             self.precompute_iteration_matrices = lambda: None
 
-        self._allocate_memory()
-
     def ready(self):
         system = self.system
         self.dt_array = np.array(
@@ -53,84 +51,22 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Reset AB3 history
         if system.requires_explicit_terms:
-            self.multistep_explicit_terms.fill(system.complex(0.0))
-            cupy_set_device_pointer(
-                system.cupy_module,
-                "multistep_explicit_terms",
-                self.multistep_explicit_terms,
-            )
-
-        if self.input["timestepping.precompute_linear_matrix"]:
-            if self.lawson_integrating_factors:
-                cupy_set_device_pointer(
-                    system.cupy_module, "propagator_precomp", self.propagator
-                )
-            else:
-                cupy_set_device_pointer(
-                    system.cupy_module, "inverse_lhs_precomp", self.inverse_lhs
-                )
-                cupy_set_device_pointer(
-                    system.cupy_module, "rhs_precomp", self.rhs
-                )
-
-            self.precompute_iteration_matrices()
-
-    def _allocate_memory(self):
-        # For the explicit terms, we need to keep terms at the current
-        # time step + terms from the past 2 time steps since we are
-        # using AB3.
-        # The explicit terms are indexed as (step, field, kz, kx, ky)
-        system = self.system
-        if self.system.requires_explicit_terms:
-            self.multistep_explicit_terms = cp.zeros(
-                (
+            self.multistep_explicit_terms = cupy_get_device_array(
+                module=system.cupy_module,
+                array_name="multistep_explicit_terms_global",
+                shape=(
                     3,
                     system.number_of_fields,
                     system.nz,
                     system.nx,
-                    system.half_ny,
+                    system.half_ny
                 ),
                 dtype=system.complex,
             )
+            self.multistep_explicit_terms.fill(system.complex(0.0))
 
-        # Allocate precomputation matrices
         if self.input["timestepping.precompute_linear_matrix"]:
-            # Allocate according to method
-            if self.lawson_integrating_factors:
-                if not hasattr(self, "propagator"):
-                    self.propagator = cp.zeros(
-                        (
-                            system.number_of_fields,
-                            system.number_of_fields,
-                            system.nz,
-                            system.nx,
-                            system.half_ny,
-                        ),
-                        dtype=system.complex,
-                    )
-            else:
-                if not hasattr(self, "rhs"):
-                    self.rhs = cp.zeros(
-                        (
-                            system.number_of_fields,
-                            system.number_of_fields,
-                            system.nz,
-                            system.nx,
-                            system.half_ny,
-                        ),
-                        dtype=system.complex,
-                    )
-                    self.inverse_lhs = cp.zeros(
-                        (
-                            system.number_of_fields,
-                            system.number_of_fields,
-                            system.nz,
-                            system.nx,
-                            system.half_ny,
-                        ),
-                        dtype=system.complex,
-                    )
-
+            self.precompute_iteration_matrices()
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""

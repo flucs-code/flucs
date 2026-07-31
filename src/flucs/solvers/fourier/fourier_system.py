@@ -751,6 +751,20 @@ class FourierSystem(FlucsSystem):
             "NUMBER_OF_FIELDS", self.number_of_fields
         )
 
+        self.module_options.define_int(
+            "NUMBER_OF_DFT_DERIVATIVES",
+            self.number_of_dft_derivatives,
+        )
+        self.module_options.define_int(
+            "NUMBER_OF_DFT_BITS",
+            self.number_of_dft_bits,
+        )
+        self.module_options.define_int(
+            "NUMBER_OF_DFT_COMBINED",
+            max(self.number_of_dft_bits,
+                self.number_of_dft_derivatives)
+        )
+
         self.module_options.define_dimension(
             "HALFUNPADDEDSIZE", self.half_unpadded_size
         )

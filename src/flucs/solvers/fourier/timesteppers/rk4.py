@@ -21,20 +21,7 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         self._allocate_memory()
 
     def ready(self):
-        system = self.system
-
         if self.input["timestepping.precompute_linear_matrix"]:
-            cupy_set_device_pointer(
-                system.cupy_module,
-                "propagator_half_precomp",
-                self.propagator_half,
-            )
-            cupy_set_device_pointer(
-                system.cupy_module,
-                "propagator_full_precomp",
-                self.propagator_full,
-            )
-
             self.precompute_iteration_matrices()
 
     def _allocate_memory(self):
@@ -49,26 +36,6 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
             ),
             dtype=system.complex,
         )
-
-        # Allocate precomputation matrices
-        if self.input["timestepping.precompute_linear_matrix"]:
-            matrix_shape = (
-                system.number_of_fields,
-                system.number_of_fields,
-                system.nz,
-                system.nx,
-                system.half_ny,
-            )
-            if not hasattr(self, "propagator_half"):
-                self.propagator_half = cp.zeros(
-                    matrix_shape,
-                    dtype=system.complex,
-                )
-            if not hasattr(self, "propagator_full"):
-                self.propagator_full = cp.zeros(
-                    matrix_shape,
-                    dtype=system.complex,
-                )
 
     def precompute_iteration_matrices(self):
         """Precomputes the linear matrix."""

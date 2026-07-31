@@ -49,7 +49,7 @@ __device__ void add_nonlinear_terms(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX* dft_bits,
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
 
 // Forcing terms
@@ -65,7 +65,7 @@ __device__ void add_forcing_explicit(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX* previous_fields,
+    const FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
 #endif
 
@@ -110,10 +110,12 @@ void get_linear_matrix_wrapped(
 
 // Returns the full (for all modes) linear matrix.
 // Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
-__global__ void compute_linear_matrix(const FLUCS_FLOAT dt,
-                                      const FLUCS_FLOAT current_time,
-                                      const long long current_step,
-                                      FLUCS_COMPLEX* linear_matrix) {
+__global__ void compute_linear_matrix(
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    FLUCS_COMPLEX linear_matrix_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE])
+{
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -125,7 +127,8 @@ __global__ void compute_linear_matrix(const FLUCS_FLOAT dt,
 
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            linear_matrix[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = matrix[i][j];
+            // linear_matrix[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = matrix[i][j];
+            linear_matrix_global[i][j][index] = matrix[i][j];
         }
     }
 }
@@ -135,7 +138,7 @@ void add_hyperdissipation(
     const size_t index,
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT adaptive_rate,
-    FLUCS_COMPLEX* current_fields
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ) {
     #if !(defined(HYPERDISSIPATION_KPERP) || defined(HYPERDISSIPATION_KX) || \
           defined(HYPERDISSIPATION_KY)    || defined(HYPERDISSIPATION_KZ))
@@ -149,7 +152,7 @@ void add_hyperdissipation(
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
-        current_fields[index + i * HALFUNPADDEDSIZE] *= factor;
+        current_fields_global[i][index] *= factor;
     }
 }
 
@@ -180,9 +183,9 @@ void complete_finish_step(
     const FLUCS_FLOAT current_time,
     const long long current_step,
     const FLUCS_FLOAT adaptive_rate,
-    FLUCS_COMPLEX* current_fields
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ) {
-    add_hyperdissipation(index, dt, adaptive_rate, current_fields);
+    add_hyperdissipation(index, dt, adaptive_rate, current_fields_global);
 }
 
 } // extern "C"

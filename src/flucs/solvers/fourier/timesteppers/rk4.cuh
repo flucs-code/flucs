@@ -22,8 +22,8 @@ __device__ __forceinline__ void compute_propagator(
 // Precomputed linear propagator stored in global memory
 extern "C" {
 
-__constant__ FLUCS_COMPLEX* propagator_half_precomp = NULL;
-__constant__ FLUCS_COMPLEX* propagator_full_precomp = NULL;
+__device__ FLUCS_COMPLEX propagator_half_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
+__device__ FLUCS_COMPLEX propagator_full_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
 
 // Precomputes the half-step and full-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
@@ -42,7 +42,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            propagator_half_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] \
+            propagator_half_precomp_global[i][j][index] \
             = propagator[i][j];
         }
     }
@@ -53,7 +53,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            propagator_full_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] \
+            propagator_full_precomp_global[i][j][index] \
             = propagator[i][j];
         }
     }
@@ -68,8 +68,8 @@ __device__ void get_explicit_terms(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX* dft_bits,
-    const FLUCS_COMPLEX* previous_fields,
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX current_fields[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX propagator_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS],
@@ -80,11 +80,11 @@ __device__ void get_explicit_terms(
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS] = {0};
 
 #ifdef NONLINEAR
-    add_nonlinear_terms(index, dt, current_time, current_step, dft_bits, explicit_terms);
+    add_nonlinear_terms(index, dt, current_time, current_step, dft_bits_global, explicit_terms);
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_forcing_explicit(index, dt, current_time, current_step, previous_fields, explicit_terms);
+    add_forcing_explicit(index, dt, current_time, current_step, previous_fields_global, explicit_terms);
 #endif
 
     FLUCS_FLOAT stage_weight, current_weight;
@@ -154,10 +154,10 @@ __global__ void finish_stage(
     const FLUCS_FLOAT current_time,
     const long long current_step,
     const FLUCS_FLOAT adaptive_rate,
-    const FLUCS_COMPLEX* previous_fields_global,
-    const FLUCS_COMPLEX* dft_bits,
-    FLUCS_COMPLEX* stage_fields_global,
-    FLUCS_COMPLEX* current_fields_global
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
+    FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ){
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
@@ -171,7 +171,7 @@ __global__ void finish_stage(
     // Load previous_fields from global memory
     #pragma unroll
     for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-        previous_fields[j] = previous_fields_global[index + j*HALFUNPADDEDSIZE];
+        previous_fields[j] = previous_fields_global[j][index];
     }
 
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS] = {0};
@@ -186,10 +186,10 @@ __global__ void finish_stage(
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
             if constexpr (stage < 4) {
-                propagator_half[i][j] = propagator_half_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
+                propagator_half[i][j] = propagator_half_precomp_global[i][j][index];
             }
             if constexpr (stage == 1 || stage == 3) {
-                propagator_full[i][j] = propagator_full_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
+                propagator_full[i][j] = propagator_full_precomp_global[i][j][index];
             }
         }
     }
@@ -211,7 +211,8 @@ __global__ void finish_stage(
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
     get_explicit_terms<stage>(
-        index, dt, current_time, current_step, dft_bits, previous_fields_global, stage_fields, current_fields, propagator_half, propagator_full
+        index, dt, current_time, current_step, dft_bits_global, previous_fields_global,
+        stage_fields, current_fields, propagator_half, propagator_full
     );
 #endif
 
@@ -258,7 +259,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            stage_fields_global[index + i*HALFUNPADDEDSIZE] = stage_fields[i];
+            stage_fields_global[i][index] = stage_fields[i];
         }
     }
 
@@ -266,7 +267,7 @@ __global__ void finish_stage(
     if constexpr (stage == 1) {
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_fields_global[index + i*HALFUNPADDEDSIZE] = current_fields[i];
+            current_fields_global[i][index] = current_fields[i];
         }
     }
 
@@ -274,7 +275,7 @@ __global__ void finish_stage(
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_fields_global[index + i*HALFUNPADDEDSIZE] += current_fields[i];
+            current_fields_global[i][index] += current_fields[i];
         }
 #endif
     }
@@ -285,9 +286,9 @@ __global__ void finish_stage(
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-            result[i] = current_fields_global[index + i*HALFUNPADDEDSIZE] + current_fields[i];
+            result[i] = current_fields_global[i][index] + current_fields[i];
 #else
-            result[i] = current_fields_global[index + i*HALFUNPADDEDSIZE];
+            result[i] = current_fields_global[i][index];
 #endif
         }
 
@@ -297,7 +298,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_fields_global[index + i*HALFUNPADDEDSIZE] = result[i];
+            current_fields_global[i][index] = result[i];
         }
 
         complete_finish_step(

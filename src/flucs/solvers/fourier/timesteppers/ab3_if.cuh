@@ -6,10 +6,10 @@
 
 extern "C" {
 // Multistep explicit terms stored in global memory
-__constant__ FLUCS_COMPLEX* multistep_explicit_terms;
+__device__ FLUCS_COMPLEX multistep_explicit_terms_global[3][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
 
 // Precomputed linear propagator stored in global memory
-__constant__ FLUCS_COMPLEX* propagator_precomp = NULL;
+__device__ FLUCS_COMPLEX propagator_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
 
 // Precomputes the rhs and inverse_lhs matrices.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
@@ -40,8 +40,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            propagator_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] =\
-                propagator[i][j];
+            propagator_precomp_global[i][j][index] = propagator[i][j];
         }
     }
 }
@@ -55,8 +54,8 @@ __device__ void add_explicit_terms(
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
-    const FLUCS_COMPLEX* dft_bits,
-    const FLUCS_COMPLEX* previous_fields,
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX result[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
 )
@@ -65,16 +64,16 @@ __device__ void add_explicit_terms(
     FLUCS_COMPLEX explicit_terms_0[NUMBER_OF_FIELDS] = {0};
 
 #ifdef NONLINEAR
-    add_nonlinear_terms(index, dt, current_time, current_step, dft_bits, explicit_terms_0);
+    add_nonlinear_terms(index, dt, current_time, current_step, dft_bits_global, explicit_terms_0);
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_forcing_explicit(index, dt, current_time, current_step, previous_fields, explicit_terms_0);
+    add_forcing_explicit(index, dt, current_time, current_step, previous_fields_global, explicit_terms_0);
 #endif
 
-    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3) * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
-    const size_t multistep_index_1 = ((current_step + 2) % 3)          * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
-    const size_t multistep_index_2 = ((current_step + 1) % 3)          * NUMBER_OF_FIELDS * HALFUNPADDEDSIZE + index;
+    const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3);
+    const size_t multistep_index_1 = ((current_step + 2) % 3);
+    const size_t multistep_index_2 = ((current_step + 1) % 3);
 
     FLUCS_COMPLEX propagator_explicit_0[NUMBER_OF_FIELDS];
     FLUCS_COMPLEX propagator_explicit_1[NUMBER_OF_FIELDS];
@@ -86,9 +85,8 @@ __device__ void add_explicit_terms(
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        const size_t offset = i * HALFUNPADDEDSIZE;
-        explicit_terms_1[i] = multistep_explicit_terms[multistep_index_1 + offset]; 
-        explicit_terms_2[i] = multistep_explicit_terms[multistep_index_2 + offset]; 
+        explicit_terms_1[i] = multistep_explicit_terms_global[multistep_index_1][i][index];
+        explicit_terms_2[i] = multistep_explicit_terms_global[multistep_index_2][i][index];
     }
 
     // First, multiply the explicit terms by the propagator
@@ -116,8 +114,6 @@ __device__ void add_explicit_terms(
     // Add contributions to the vector new fields
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
-        const size_t offset = i * HALFUNPADDEDSIZE;
-
         result[i] -= dt * (
             + AB0 * propagator_explicit_0[i]
             + AB1 * propagator_explicit_1[i]
@@ -125,8 +121,8 @@ __device__ void add_explicit_terms(
         );
 
         // Store the required terms in global memory
-        multistep_explicit_terms[multistep_index_0 + offset] = propagator_explicit_0[i];
-        multistep_explicit_terms[multistep_index_1 + offset] = propagator_explicit_1[i];
+        multistep_explicit_terms_global[multistep_index_0][i][index] = propagator_explicit_0[i];
+        multistep_explicit_terms_global[multistep_index_1][i][index] = propagator_explicit_1[i];
     }
 }
 
@@ -141,9 +137,9 @@ __global__ void finish_step(
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
-    const FLUCS_COMPLEX* previous_fields,
-    const FLUCS_COMPLEX* dft_bits,
-    FLUCS_COMPLEX* current_fields
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ){
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
@@ -153,11 +149,11 @@ __global__ void finish_step(
         return;
 
 
-    FLUCS_COMPLEX prev[NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX previous_fields[NUMBER_OF_FIELDS];
     // Load previous_fields from global memory
     #pragma unroll
     for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-        prev[j] = previous_fields[index + j*HALFUNPADDEDSIZE];
+        previous_fields[j] = previous_fields_global[j][index];
     }
 
     FLUCS_COMPLEX result[NUMBER_OF_FIELDS];
@@ -171,14 +167,14 @@ __global__ void finish_step(
 
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            propagator[i][j] = propagator_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)];
-            sum += propagator[i][j] * prev[j];
+            propagator[i][j] = propagator_precomp_global[i][j][index];
+            sum += propagator[i][j] * previous_fields[j];
         }
         result[i] = sum;
     }
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
+    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits_global, previous_fields_global, result, propagator);
 #endif
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
@@ -201,7 +197,7 @@ __global__ void finish_step(
 
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            sum += propagator[i][j] * prev[j];
+            sum += propagator[i][j] * previous_fields[j];
         }
 
         result[i] = sum;
@@ -209,7 +205,7 @@ __global__ void finish_step(
 
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits, previous_fields, result, propagator);
+    add_explicit_terms(index, dt, current_time, current_step, AB0, AB1, AB2, dft_bits_global, previous_fields_global, result, propagator);
 #endif
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
@@ -218,12 +214,12 @@ __global__ void finish_step(
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-        current_fields[index + i*HALFUNPADDEDSIZE] = result[i];
+        current_fields_global[i][index] = result[i];
     }
 
 
     complete_finish_step(
-        index, dt, current_time, current_step, adaptive_rate, current_fields
+        index, dt, current_time, current_step, adaptive_rate, current_fields_global
     );
 
 }
