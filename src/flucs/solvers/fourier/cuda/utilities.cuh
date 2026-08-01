@@ -26,7 +26,8 @@ __device__ __forceinline__ T* templated_shared_memory() {
     return reinterpret_cast<T*>(shared);
 }
 
-__device__ float atomicMaxFloat(float* addr, float value) {
+__device__ __forceinline__
+float atomicMaxFloat(float* addr, float value) {
     int* address_as_int = (int*) addr;
     int old = *address_as_int, assumed;
     do {
@@ -37,7 +38,18 @@ __device__ float atomicMaxFloat(float* addr, float value) {
     return __int_as_float(old);
 }
 
-__device__ double atomicMaxFloat(double* addr, double value)
+__device__ __forceinline__
+float atomicMaxNonnegativeFloat(float* addr, float value) {
+    const unsigned int old = atomicMax(
+        reinterpret_cast<unsigned int*>(addr),
+        __float_as_uint(value)
+    );
+
+    return __uint_as_float(old);
+}
+
+__device__ __forceinline__
+double atomicMaxFloat(double* addr, double value)
 {
     unsigned long long* address_as_ull =
         reinterpret_cast<unsigned long long*>(addr);
@@ -60,6 +72,48 @@ __device__ double atomicMaxFloat(double* addr, double value)
     } while (assumed != old);
 
     return __longlong_as_double(old);
+}
+
+__device__ __forceinline__
+double atomicMaxNonnegativeFloat(double* addr, double value) {
+    const unsigned long long old = atomicMax(
+        reinterpret_cast<unsigned long long*>(addr),
+        static_cast<unsigned long long>(__double_as_longlong(value))
+    );
+
+    return __longlong_as_double(static_cast<long long>(old));
+}
+
+
+// Updates the global cfl_rate with the max(cfl) across the entire block
+// This needs to be called by every thread in the block, thus any out-of-bounds
+// check must be done after calling this function.
+__device__ __forceinline__
+void update_cfl(FLUCS_FLOAT cfl, FLUCS_FLOAT* cfl_rate_global) {
+    extern __shared__ FLUCS_FLOAT cfl_shared[];
+
+    // Find max CFL using shared memory
+    cfl_shared[threadIdx.x] = cfl;
+    __syncthreads();
+
+    // Parallel reduction in shared memory
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            cfl_shared[threadIdx.x] = flucs_fmax(cfl_shared[threadIdx.x], cfl_shared[threadIdx.x + stride]);
+        }
+        __syncthreads();
+    }
+
+    // First thread in block writes to global max via atomic
+    if (threadIdx.x == 0) {
+        const float block_cfl = cfl_shared[0];
+
+        if (block_cfl > *cfl_rate_global) {
+            atomicMaxNonnegativeFloat(cfl_rate_global, block_cfl);
+        }
+
+    }
+
 }
 
 
