@@ -96,57 +96,73 @@ __device__ void get_explicit_terms(
 
     FLUCS_FLOAT stage_weight, current_weight;
 
+    // Stage 1
     if constexpr (stage == 1) {
         stage_weight   = (FLUCS_FLOAT)(-dt/2.0);
         current_weight = (FLUCS_FLOAT)(-dt/6.0);
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            FLUCS_COMPLEX stage_sum = 0;
+            FLUCS_COMPLEX current_sum = 0;
+
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+                stage_sum += propagator_half[i][j] * explicit_terms[j];
+                current_sum += propagator_full[i][j] * explicit_terms[j];
+            }
+
+            stage_fields[i] += stage_weight * stage_sum;
+            current_fields[i] += current_weight * current_sum;
+        }
     }
+
+    // Stage 2
     else if constexpr (stage == 2) {
         stage_weight   = (FLUCS_FLOAT)(-dt/2.0);
         current_weight = (FLUCS_FLOAT)(-dt/3.0);
-    }
-    else if constexpr (stage == 3) {
-        stage_weight   = (FLUCS_FLOAT)(-dt);
-        current_weight = (FLUCS_FLOAT)(-dt/3.0);
-    }
-    else if constexpr (stage == 4) {
-        current_weight = (FLUCS_FLOAT)(-dt/6.0);
-    }
-
-    // First, multiply the explicit terms by the propagator
-    #pragma unroll
-    for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-
-        FLUCS_COMPLEX stage_sum = 0;
-        FLUCS_COMPLEX current_sum = 0;
 
         #pragma unroll
-        for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            FLUCS_COMPLEX current_sum = 0;
 
-            // stage field update
-            if constexpr (stage == 1 || stage == 3) {
-                stage_sum += propagator_half[i][j] * explicit_terms[j];
-            }
-
-            // current field update
-            if constexpr (stage == 1) {
-                current_sum += propagator_full[i][j] * explicit_terms[j];
-            }
-            else if constexpr (stage < 4) {
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
                 current_sum += propagator_half[i][j] * explicit_terms[j];
             }
-        }
 
-        if constexpr (stage == 1 || stage == 3) {
-            stage_fields[i] += stage_weight * stage_sum;
-        }
-        else if constexpr (stage == 2) {
             stage_fields[i] += stage_weight * explicit_terms[i];
-        }
-
-        if constexpr (stage < 4) {
             current_fields[i] += current_weight * current_sum;
         }
-        else {
+    }
+
+    // Stage 3
+    else if constexpr (stage == 3) {
+        stage_weight   = (FLUCS_FLOAT)(-dt    );
+        current_weight = (FLUCS_FLOAT)(-dt/3.0);
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            FLUCS_COMPLEX stage_sum = 0;
+            FLUCS_COMPLEX current_sum = 0;
+
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+                stage_sum += propagator_half[i][j] * explicit_terms[j];
+                current_sum += propagator_half[i][j] * explicit_terms[j];
+            }
+
+            stage_fields[i] += stage_weight * stage_sum;
+            current_fields[i] += current_weight * current_sum;
+        }
+    }
+
+    // Stage 4
+    else if constexpr (stage == 4) {
+        current_weight = (FLUCS_FLOAT)(-dt/6.0);
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             current_fields[i] += current_weight * explicit_terms[i];
         }
     }
@@ -223,28 +239,20 @@ __global__ void finish_stage(
     );
 #endif
 
-    // Stage update
-    if constexpr (stage < 4) {
+    // Stage 1
+    if constexpr (stage == 1) {
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
 
             #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-                if constexpr (stage < 3) {
-                    sum += propagator_half[i][j] * previous_fields[j];
-                }
-                else {
-                    sum += propagator_full[i][j] * previous_fields[j];
-                }
+                sum += propagator_half[i][j] * previous_fields[j];
             }
 
             stage_fields[i] += sum;
         }
-    }
 
-    // Linear part for current_fields
-    if constexpr (stage == 1) {
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -256,10 +264,7 @@ __global__ void finish_stage(
 
             current_fields[i] += sum;
         }
-    }
 
-    // Store stage
-    if constexpr (stage < 4) {
         complete_timestep_stage(
             index, dt, current_time, current_step, stage_fields
         );
@@ -268,17 +273,36 @@ __global__ void finish_stage(
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             stage_fields_global[i][index] = stage_fields[i];
         }
-    }
 
-    // Store current fields
-    if constexpr (stage == 1) {
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             current_fields_global[i][index] = current_fields[i];
         }
     }
 
-    if constexpr (stage == 2 || stage == 3) {
+    // Stage 2
+    else if constexpr (stage == 2) {
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            FLUCS_COMPLEX sum = 0;
+
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+                sum += propagator_half[i][j] * previous_fields[j];
+            }
+
+            stage_fields[i] += sum;
+        }
+
+        complete_timestep_stage(
+            index, dt, current_time, current_step, stage_fields
+        );
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            stage_fields_global[i][index] = stage_fields[i];
+        }
+
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -287,7 +311,39 @@ __global__ void finish_stage(
 #endif
     }
 
-    if constexpr (stage == 4) {
+    // Stage 3
+    else if constexpr (stage == 3) {
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            FLUCS_COMPLEX sum = 0;
+
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++){
+                sum += propagator_full[i][j] * previous_fields[j];
+            }
+
+            stage_fields[i] += sum;
+        }
+
+        complete_timestep_stage(
+            index, dt, current_time, current_step, stage_fields
+        );
+
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            stage_fields_global[i][index] = stage_fields[i];
+        }
+
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            current_fields_global[i][index] += current_fields[i];
+        }
+#endif
+    }
+
+    // Stage 4
+    else if constexpr (stage == 4) {
         FLUCS_COMPLEX result[NUMBER_OF_FIELDS];
 
         #pragma unroll
