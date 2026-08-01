@@ -28,7 +28,7 @@ bool forcing_range_mask(const size_t index)
     );
 #else
     (void)index;
-    return true;
+    return false;
 #endif
 }
 
