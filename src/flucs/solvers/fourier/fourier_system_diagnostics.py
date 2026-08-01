@@ -376,9 +376,13 @@ class RealspaceDataDiag(FlucsDiagnostic):
     option_defaults: ClassVar[dict[str, object]] = {
         "locations": list(),
         "compute_on_gpu": True,
+        "exclude_forcing_range": False,
     }
 
     slice_calculators: list[Callable[[], None]]
+    realspace_fields: np.ndarray
+    forcing_range_mask: np.ndarray
+    forcing_range_mask_gpu: cp.ndarray
 
     def init_vars(self):
         self.slice_calculators = []
@@ -458,19 +462,59 @@ class RealspaceDataDiag(FlucsDiagnostic):
                 iy=iy,
             ):
                 self.vars[f"{loc_name}/data"].data_cache.append(
-                    self.system.realspace_fields[ifield, iz, ix, iy]
+                    self.realspace_fields[ifield, iz, ix, iy]
                 )
 
             self.slice_calculators.append(slice_calculator)
 
     def ready(self):
-        pass
+        # Nothing to do if not excluding forcing range
+        if not self.exclude_forcing_range:
+            return
+
+        # Validate inputs
+        if not self.system.input["forcing.method"]:
+            raise ValueError(
+                "RealspaceDataDiag option 'exclude_forcing_range' requires "
+                "an active forcing method."
+            )
+
+        # Get masks
+        self.forcing_range_mask = (
+            self.system.forcing_object.forcing_range_mask
+        )
+
+        if self.compute_on_gpu:
+            self.forcing_range_mask_gpu = cp.asarray(self.forcing_range_mask)
 
     def execute(self):
-        if self.compute_on_gpu:
-            self.system.get_realspace_fields_gpu()
+
+        # Excluding forcing range
+        if self.exclude_forcing_range:
+            if self.compute_on_gpu:
+                fields = self.system.get_fields().copy()
+                fields[:, self.forcing_range_mask_gpu] = 0
+                self.realspace_fields = cp.fft.irfftn(
+                    fields,
+                    norm="forward",
+                    axes=(1, 2, 3),
+                    s=self.system.full_unpadded_tuple,
+                ).get()
+            else:
+                fields = self.system.get_fields().get()
+                fields[:, self.forcing_range_mask] = 0
+                self.realspace_fields = np.fft.irfftn(
+                    fields,
+                    norm="forward",
+                    axes=(1, 2, 3),
+                    s=self.system.full_unpadded_tuple,
+                )
         else:
-            self.system.get_realspace_fields_cpu()
+            if self.compute_on_gpu:
+                self.system.get_realspace_fields_gpu()
+            else:
+                self.system.get_realspace_fields_cpu()
+            self.realspace_fields = self.system.realspace_fields
 
         for slice_calculator in self.slice_calculators:
             slice_calculator()

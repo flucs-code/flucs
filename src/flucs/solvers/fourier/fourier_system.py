@@ -737,6 +737,9 @@ class FourierSystem(FlucsSystem):
             np.reshape(self.fields_initial, self.fields[0].shape)
         )
 
+        # Reset realspace fields
+        self.realspace_fields = None
+
         super().ready()
 
         # Print starting message

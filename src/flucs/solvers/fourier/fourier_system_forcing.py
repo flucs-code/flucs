@@ -20,6 +20,7 @@ class FourierSystemForcing(ABC):
     linear: bool
     explicit: bool
     forced_mode_count: int
+    forcing_range_mask: np.ndarray
 
     def __init__(self, system: FourierSystem):
         self.system = system
@@ -28,7 +29,32 @@ class FourierSystemForcing(ABC):
     def setup_cuda_definitions(self) -> None:
         pass
 
-    def setup_forcing_range_kz_kperp(self):
+    def _calculate_forced_mode_count(self) -> None:
+        """
+        Calculates the number of modes that are being forced
+        """
+
+        # Get ky wavenumbers
+        ky = self.system.get_broadcast_wavenumbers()[1]
+
+        # Number of ky=0 modes
+        ky0_modes = ky < 0.5 * ky[0, 0, 1]
+
+        # Number of forced modes
+        forced_mode_count = 2 * np.sum(self.forcing_range_mask) - np.sum(
+            self.forcing_range_mask & ky0_modes
+        )
+
+        if forced_mode_count == 0:
+            raise InvalidFlucsInputFileError(
+                "No modes are being forced. Please check your forcing.range_kz "
+                "and/or forcing.range_kperp."
+            )
+
+        # Set number of forced modes
+        self.forced_mode_count = int(forced_mode_count)
+
+    def setup_forcing_range_kzkperp(self):
         """
         Determines the range of wavenumbers to be forced based on the input
         parameters, and calculates the number of modes in this range.
@@ -71,32 +97,20 @@ class FourierSystemForcing(ABC):
         system.module_options.define_float("FORCING_KZ_MIN", kz_min)
         system.module_options.define_float("FORCING_KZ_MAX", kz_max)
 
-        # Determine number of forced modes
+        # Determine forcing range
         system._precompute_wavenumbers()
         kx, ky, kz = system.get_broadcast_wavenumbers()
         kperp2 = kx**2 + ky**2
         kz_abs = np.abs(kz)
 
-        forced_modes_halfny = (
+        self.forcing_range_mask = (
             (kperp2 > kperp_min**2)
             & (kperp2 < kperp_max**2)
             & (kz_abs > kz_min)
             & (kz_abs < kz_max)
         )
-        ky0_modes = ky < 0.5 * ky[0, 0, 1]
 
-        forced_mode_count = 2 * np.sum(forced_modes_halfny) - np.sum(
-            forced_modes_halfny & ky0_modes
-        )
-
-        if forced_mode_count == 0:
-            raise InvalidFlucsInputFileError(
-                "No modes are being forced. Please check your forcing.range_kz "
-                "and/or forcing.range_kperp."
-            )
-
-        # Set number of forced modes
-        self.forced_mode_count = int(forced_mode_count)
+        self._calculate_forced_mode_count()
 
         flucsprint(
             f"Forcing applied on a total of {self.forced_mode_count} modes.",
