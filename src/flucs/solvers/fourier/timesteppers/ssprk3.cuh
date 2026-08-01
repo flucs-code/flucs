@@ -95,7 +95,14 @@ __device__ void get_explicit_terms(
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_forcing_explicit(index, dt, current_time, current_step, previous_fields_global, explicit_terms);
+    FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS];
+    get_forcing_fields(
+        index, previous_fields_global, previous_fields_forcing
+    );
+    add_forcing_explicit(
+        index, dt, current_time, current_step,
+        previous_fields_forcing, explicit_terms
+    );
 #endif
 }
 

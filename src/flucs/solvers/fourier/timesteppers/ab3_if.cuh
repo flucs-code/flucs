@@ -68,7 +68,14 @@ __device__ void add_explicit_terms(
 #endif
 
 #ifdef FORCING_EXPLICIT
-    add_forcing_explicit(index, dt, current_time, current_step, previous_fields_global, explicit_terms_0);
+    FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS];
+    get_forcing_fields(
+        index, previous_fields_global, previous_fields_forcing
+    );
+    add_forcing_explicit(
+        index, dt, current_time, current_step,
+        previous_fields_forcing, explicit_terms_0
+    );
 #endif
 
     const size_t multistep_index_0 = ((current_step      % 3 + 3) % 3);

@@ -30,6 +30,9 @@
 #include "flucs/solvers/fourier/cuda/reductions.cuh"
 #include "flucs/solvers/fourier/cuda/hyperdissipation.cuh"
 #include "flucs/solvers/fourier/cuda/linear_pade.cuh"
+#ifdef FORCING
+#include "flucs/solvers/fourier/cuda/forcing.cuh"
+#endif
 
 
 extern "C" {
@@ -55,9 +58,7 @@ __device__ void add_nonlinear_terms(
 // Forcing terms
 #ifdef FORCING
 
-#ifdef FORCING_FROM_SOLVER // Add forcing from shared methods
-#include "flucs/solvers/fourier/fourier_system_forcing.cuh"
-#else
+#ifndef FORCING_FROM_SOLVER
 
 #ifdef FORCING_EXPLICIT
 __device__ void add_forcing_explicit(
@@ -78,7 +79,7 @@ __device__ void add_forcing_linear(
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 #endif
 
-#endif // else FORCING_FROM_SOLVER
+#endif // not FORCING_FROM_SOLVER
 #endif // FORCING
 
 // Wrapper for get_linear_matrix that adds an overall scaling factor
