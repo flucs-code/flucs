@@ -22,19 +22,10 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     // This will first holds rhs then the propagator = lhs^-1 rhs
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
-    { // Help those registers
-        FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
-        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-
-        // Precomputing should not be used with time-dependent linear matrices
-        get_linear_matrix_wrapped(index, dt, (FLUCS_FLOAT)0, 0, dt, matrix);
-
-        pade_exponential(matrix, lhs, propagator);
-
-        // In-place gaussian elimination
-        gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
-    }
+    // Precomputing should not be used with time-dependent linear matrices.
+    compute_propagator(index, dt, 0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -140,7 +131,6 @@ __global__ void finish_step(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_FLOAT adaptive_rate,
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
@@ -186,17 +176,10 @@ __global__ void finish_step(
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
 
-    // Help the compiler a bit with the registers
-    {
-        FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-        FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
-        get_linear_matrix_wrapped(index, dt, current_time, current_step, dt, matrix);
-        pade_exponential(matrix, lhs, propagator);
-
-        // In-place gaussian elimination
-        gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
-    }
+    // Precomputing should not be used with time-dependent linear matrices.
+    compute_propagator(index, dt, 0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -226,7 +209,7 @@ __global__ void finish_step(
 
 
     complete_finish_step(
-        index, dt, current_time, current_step, adaptive_rate, current_fields_global
+        index, dt, current_time, current_step, current_fields_global
     );
 
 }

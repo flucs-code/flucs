@@ -4,21 +4,6 @@
  */
 #pragma once
 
-__device__ __forceinline__ void compute_propagator(
-    const size_t index,
-    const FLUCS_FLOAT propagator_dt,
-    const FLUCS_FLOAT current_time,
-    const long long current_step,
-    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
-){
-    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-
-    get_linear_matrix_wrapped(index, propagator_dt, current_time, current_step, propagator_dt, matrix);
-    pade_exponential(matrix, lhs, propagator);
-    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
-}
-
 // Precomputed linear propagator stored in global memory
 extern "C" {
 
@@ -34,9 +19,10 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         return;
 
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
     // Precomputing should not be used with time-dependent linear matrices.
-    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, propagator);
+    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -47,7 +33,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 
-    compute_propagator(index, dt, (FLUCS_FLOAT)0, 0, propagator);
+    compute_propagator(index, dt, (FLUCS_FLOAT)0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -176,7 +162,6 @@ __global__ void finish_stage(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_FLOAT adaptive_rate,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
     FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
@@ -208,7 +193,7 @@ __global__ void finish_stage(
     // Used only when dynamically computing the propagator at each time step
     // Otherwise, fall back to propagator_half
 #ifdef PRECOMPUTE_LINEAR_MATRIX
-    FLUCS_COMPLEX* propagator_half_half = propagator_half;
+    auto& propagator_half_half = propagator_half;
 #else
     FLUCS_COMPLEX propagator_half_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 #endif
@@ -230,24 +215,26 @@ __global__ void finish_stage(
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
     
+    const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
+    
     if constexpr (stage == 1) {
         // t_n -> t_n + dt/2
-        compute_propagator(index, half_dt, current_time, current_step, propagator_half);
+        compute_propagator(index, half_dt, current_time, current_step, adaptive_rate, propagator_half);
         // t_n -> t_n + dt
-        compute_propagator(index, dt, current_time, current_step, propagator_full);
+        compute_propagator(index, dt, current_time, current_step, adaptive_rate, propagator_full);
     }
 
     if constexpr (stage == 2) {
         // t_n -> t_n + dt/2
-        compute_propagator(index, half_dt, current_time, current_step, propagator_half);
+        compute_propagator(index, half_dt, current_time, current_step, adaptive_rate, propagator_half);
         // t_n + dt/2 -> t_n + dt
-        compute_propagator(index, half_dt, current_time + half_dt, current_step, propagator_half_half);
+        compute_propagator(index, half_dt, current_time + half_dt, current_step, adaptive_rate, propagator_half_half);
     }
     if constexpr (stage == 3) {
         // t_n + dt/2 -> t_n + dt
-        compute_propagator(index, half_dt, current_time + half_dt, current_step, propagator_half_half);
+        compute_propagator(index, half_dt, current_time + half_dt, current_step, adaptive_rate, propagator_half_half);
         // t_n -> t_n + dt
-        compute_propagator(index, dt, current_time, current_step, propagator_full);
+        compute_propagator(index, dt, current_time, current_step, adaptive_rate, propagator_full);
     }
 
     // // Half propagator needed if stage < 4
@@ -415,7 +402,7 @@ __global__ void finish_stage(
         }
 
         complete_finish_step(
-            index, dt, current_time + dt, current_step, adaptive_rate, current_fields_global
+            index, dt, current_time + dt, current_step, current_fields_global
         );
     }
 

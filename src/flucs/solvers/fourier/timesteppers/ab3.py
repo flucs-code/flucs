@@ -125,7 +125,6 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             system.float(system.current_dt),
             system.float(system.current_time),
             system.int(system.current_step),
-            system.float(system.adaptive_rate),
             self.ab3_coefficients[0],
             self.ab3_coefficients[1],
             self.ab3_coefficients[2],

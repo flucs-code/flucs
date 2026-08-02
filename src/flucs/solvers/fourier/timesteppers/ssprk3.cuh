@@ -4,21 +4,6 @@
  */
 #pragma once
 
-__device__ __forceinline__ void compute_propagator(
-    const size_t index,
-    const FLUCS_FLOAT propagator_dt,
-    const FLUCS_FLOAT current_time,
-    const long long current_step,
-    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
-){
-    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
-
-    get_linear_matrix_wrapped(index, propagator_dt, current_time, current_step, propagator_dt, matrix);
-    pade_exponential(matrix, lhs, propagator);
-    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
-}
-
 // Precomputed linear propagators stored in global memory
 extern "C" {
 
@@ -35,9 +20,10 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         return;
 
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
     // Precomputing should not be used with time-dependent linear matrices.
-    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, propagator);
+    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), 0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -48,7 +34,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 
-    compute_propagator(index, dt, (FLUCS_FLOAT)0, 0, propagator);
+    compute_propagator(index, dt, 0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -59,7 +45,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 
-    compute_propagator(index, (FLUCS_FLOAT)(-dt/2.0), (FLUCS_FLOAT)0, 0, propagator);
+    compute_propagator(index, (FLUCS_FLOAT)(-dt/2.0), 0, 0, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -113,7 +99,6 @@ __global__ void finish_stage(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_FLOAT adaptive_rate,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
     FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
@@ -166,24 +151,25 @@ __global__ void finish_stage(
     }
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
+    const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
     if constexpr (stage == 1) {
         // Full propagator t_n -> t_n + dt
-        compute_propagator(index, dt, current_time, current_step, propagator_full);
+        compute_propagator(index, dt, current_time, current_step, adaptive_rate, propagator_full);
     }
 
     if constexpr (stage == 2) {
         // Half propagator t_n -> t_n + dt/2
-        compute_propagator(index, half_dt, current_time, current_step, propagator_half);
+        compute_propagator(index, half_dt, current_time, current_step, adaptive_rate, propagator_half);
         // Negative half propagator t_n + dt -> t_n + dt/2 
-        compute_propagator(index, -half_dt, current_time + dt, current_step, propagator_minus_half);
+        compute_propagator(index, -half_dt, current_time + dt, current_step, adaptive_rate, propagator_minus_half);
     }
 
     if constexpr (stage == 3) {
         // Full propagator t_n -> t_n + dt
-        compute_propagator(index, dt, current_time, current_step, propagator_full);
+        compute_propagator(index, dt, current_time, current_step, adaptive_rate, propagator_full);
         // Half propagator t_n + dt/2 -> t_n + dt
-        compute_propagator(index, half_dt, current_time + half_dt, current_step, propagator_half);
+        compute_propagator(index, half_dt, current_time + half_dt, current_step, adaptive_rate, propagator_half);
     }
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
@@ -280,6 +266,6 @@ __global__ void finish_stage(
             current_fields_global[i][index] = result[i];
         }
 
-        complete_finish_step(index, dt, current_time + dt, current_step, adaptive_rate, current_fields_global);
+        complete_finish_step(index, dt, current_time + dt, current_step, current_fields_global);
     }
 }

@@ -137,9 +137,9 @@ __global__ void compute_linear_matrix(
 __device__ __forceinline__
 void add_hyperdissipation(
     const size_t index,
-    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT propagator_dt,
     const FLUCS_FLOAT adaptive_rate,
-    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
 ) {
     #if !(defined(HYPERDISSIPATION_KPERP) || defined(HYPERDISSIPATION_KX) || \
           defined(HYPERDISSIPATION_KY)    || defined(HYPERDISSIPATION_KZ))
@@ -149,11 +149,11 @@ void add_hyperdissipation(
     const FLUCS_FLOAT hyperdissipation = (
         get_hyperdissipation(index, adaptive_rate)
     );
-    const FLUCS_FLOAT factor = exp(-dt * hyperdissipation);
+    const FLUCS_FLOAT factor = exp(-propagator_dt * hyperdissipation);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
-        current_fields_global[i][index] *= factor;
+        propagator[i][i] *= factor;
     }
 }
 
@@ -183,13 +183,35 @@ void complete_finish_step(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_FLOAT adaptive_rate,
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ) {
-    add_hyperdissipation(index, dt, adaptive_rate, current_fields_global);
+    ;
 }
 
 } // extern "C"
+
+
+template<bool include_hyperdissipation = true>
+__device__ __forceinline__ void compute_propagator(
+    const size_t index,
+    const FLUCS_FLOAT propagator_dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    const FLUCS_FLOAT adaptive_rate,
+    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
+){
+    FLUCS_COMPLEX lhs[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+
+    get_linear_matrix_wrapped(index, propagator_dt, current_time, current_step, propagator_dt, matrix);
+    pade_exponential(matrix, lhs, propagator);
+    gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
+
+    if constexpr (include_hyperdissipation) {
+        add_hyperdissipation(index, propagator_dt, adaptive_rate, propagator);
+    }
+}
+
 
 #ifdef AB3
 #include "flucs/solvers/fourier/timesteppers/ab3.cuh"
