@@ -179,7 +179,7 @@ __global__ void finish_step(
     const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
     // Precomputing should not be used with time-dependent linear matrices.
-    compute_propagator(index, dt, 0, 0, adaptive_rate, propagator);
+    compute_propagator(index, dt, current_time, current_step, adaptive_rate, propagator);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
