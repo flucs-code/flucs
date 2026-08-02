@@ -74,14 +74,13 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 } // extern "C"
 
 // Gets the explicit terms for the stage rhs.
-template<int stage>
 __device__ void get_explicit_terms(
     const size_t index,
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX previous_stage_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]
 )
 {
@@ -95,13 +94,13 @@ __device__ void get_explicit_terms(
 #endif
 
 #ifdef FORCING_EXPLICIT
-    FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX forcing_fields[NUMBER_OF_FIELDS];
     get_forcing_fields(
-        index, previous_fields_global, previous_fields_forcing
+        index, previous_stage_global, forcing_fields
     );
     add_forcing_explicit(
         index, dt, current_time, current_step,
-        previous_fields_forcing, explicit_terms
+        forcing_fields, explicit_terms
     );
 #endif
 }
@@ -146,6 +145,8 @@ __global__ void finish_stage(
     FLUCS_COMPLEX propagator_full[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     FLUCS_COMPLEX propagator_minus_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
+    const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
+
 #ifdef PRECOMPUTE_LINEAR_MATRIX
 
     #pragma unroll
@@ -172,7 +173,6 @@ __global__ void finish_stage(
     }
 
     if constexpr (stage == 2) {
-        const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
         // Half propagator t_n -> t_n + dt/2
         compute_propagator(index, half_dt, current_time, current_step, propagator_half);
         // Negative half propagator t_n + dt -> t_n + dt/2 
@@ -180,7 +180,6 @@ __global__ void finish_stage(
     }
 
     if constexpr (stage == 3) {
-        const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
         // Full propagator t_n -> t_n + dt
         compute_propagator(index, dt, current_time, current_step, propagator_full);
         // Half propagator t_n + dt/2 -> t_n + dt
@@ -189,12 +188,13 @@ __global__ void finish_stage(
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
-    get_explicit_terms<stage>(
-        index, dt, current_time, current_step, dft_bits_global, previous_fields_global, explicit_terms
-    );
-
     // Stage 1
     if constexpr (stage == 1) {
+
+        get_explicit_terms(
+            index, dt, current_time, current_step, dft_bits_global, previous_fields_global, explicit_terms
+        );
+
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -208,7 +208,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, result
+            index, dt, current_time + dt, current_step, result
         );
 
         #pragma unroll
@@ -219,6 +219,11 @@ __global__ void finish_stage(
 
     // Stage 2
     else if constexpr (stage == 2) {
+
+        get_explicit_terms(
+            index, dt, current_time + dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
+        );
+
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -233,7 +238,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, result
+            index, dt, current_time + half_dt, current_step, result
         );
 
         #pragma unroll
@@ -244,6 +249,11 @@ __global__ void finish_stage(
 
     // Stage 3
     else if constexpr (stage == 3) {
+
+        get_explicit_terms(
+            index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
+        );
+
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -262,7 +272,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, result
+            index, dt, current_time + dt, current_step, result
         );
 
         #pragma unroll
@@ -270,6 +280,6 @@ __global__ void finish_stage(
             current_fields_global[i][index] = result[i];
         }
 
-        complete_finish_step(index, dt, current_time, current_step, adaptive_rate, current_fields_global);
+        complete_finish_step(index, dt, current_time + dt, current_step, adaptive_rate, current_fields_global);
     }
 }

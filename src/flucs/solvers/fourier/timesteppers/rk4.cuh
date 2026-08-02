@@ -69,7 +69,7 @@ __device__ void get_explicit_terms(
     const FLUCS_FLOAT current_time,
     const long long current_step,
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX previous_stage_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX current_fields[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX propagator_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS],
@@ -84,13 +84,13 @@ __device__ void get_explicit_terms(
 #endif
 
 #ifdef FORCING_EXPLICIT
-    FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS];
+    FLUCS_COMPLEX forcing_fields[NUMBER_OF_FIELDS];
     get_forcing_fields(
-        index, previous_fields_global, previous_fields_forcing
+        index, previous_stage_global, forcing_fields
     );
     add_forcing_explicit(
         index, dt, current_time, current_step,
-        previous_fields_forcing, explicit_terms
+        forcing_fields, explicit_terms
     );
 #endif
 
@@ -197,10 +197,21 @@ __global__ void finish_stage(
         previous_fields[j] = previous_fields_global[j][index];
     }
 
+    const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
+
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS] = {0};
     FLUCS_COMPLEX current_fields[NUMBER_OF_FIELDS] = {0};
     FLUCS_COMPLEX propagator_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     FLUCS_COMPLEX propagator_full[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+
+    // Propagator from t_n + dt/2 -> t_n + dt
+    // Used only when dynamically computing the propagator at each time step
+    // Otherwise, fall back to propagator_half
+#ifdef PRECOMPUTE_LINEAR_MATRIX
+    FLUCS_COMPLEX* propagator_half_half = propagator_half;
+#else
+    FLUCS_COMPLEX propagator_half_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+#endif
 
 #ifdef PRECOMPUTE_LINEAR_MATRIX
 
@@ -218,29 +229,50 @@ __global__ void finish_stage(
     }
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
-
-    // Half propagator needed if stage < 4
-    if constexpr (stage < 4) {
-        compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, propagator_half);
-    }
-
-    // Full propagator needed if stage == 1 or 3
-    if constexpr (stage == 1 || stage == 3) {
+    
+    if constexpr (stage == 1) {
+        // t_n -> t_n + dt/2
+        compute_propagator(index, half_dt, current_time, current_step, propagator_half);
+        // t_n -> t_n + dt
         compute_propagator(index, dt, current_time, current_step, propagator_full);
     }
+
+    if constexpr (stage == 2) {
+        // t_n -> t_n + dt/2
+        compute_propagator(index, half_dt, current_time, current_step, propagator_half);
+        // t_n + dt/2 -> t_n + dt
+        compute_propagator(index, half_dt, current_time + half_dt, current_step, propagator_half_half);
+    }
+    if constexpr (stage == 3) {
+        // t_n + dt/2 -> t_n + dt
+        compute_propagator(index, half_dt, current_time + half_dt, current_step, propagator_half_half);
+        // t_n -> t_n + dt
+        compute_propagator(index, dt, current_time, current_step, propagator_full);
+    }
+
+    // // Half propagator needed if stage < 4
+    // if constexpr (stage < 4) {
+    //     compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, propagator_half);
+    // }
+    //
+    // // Full propagator needed if stage == 1 or 3
+    // if constexpr (stage == 1 || stage == 3) {
+    //     compute_propagator(index, dt, current_time, current_step, propagator_full);
+    // }
 
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
-#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-    get_explicit_terms<stage>(
-        index, dt, current_time, current_step, dft_bits_global, previous_fields_global,
-        stage_fields, current_fields, propagator_half, propagator_full
-    );
-#endif
-
     // Stage 1
     if constexpr (stage == 1) {
+
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+        get_explicit_terms<stage>(
+            index, dt, current_time, current_step, dft_bits_global, previous_fields_global,
+            stage_fields, current_fields, propagator_half, propagator_full
+        );
+#endif
+
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -266,7 +298,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, stage_fields
+            index, dt, current_time + half_dt, current_step, stage_fields
         );
 
         #pragma unroll
@@ -282,6 +314,12 @@ __global__ void finish_stage(
 
     // Stage 2
     else if constexpr (stage == 2) {
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+        get_explicit_terms<stage>(
+            index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global,
+            stage_fields, current_fields, propagator_half_half, propagator_full
+        );
+#endif
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -295,7 +333,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, stage_fields
+            index, dt, current_time + half_dt, current_step, stage_fields
         );
 
         #pragma unroll
@@ -313,6 +351,12 @@ __global__ void finish_stage(
 
     // Stage 3
     else if constexpr (stage == 3) {
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+        get_explicit_terms<stage>(
+            index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global,
+            stage_fields, current_fields, propagator_half_half, propagator_full
+        );
+#endif
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
             FLUCS_COMPLEX sum = 0;
@@ -326,7 +370,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, stage_fields
+            index, dt, current_time + dt, current_step, stage_fields
         );
 
         #pragma unroll
@@ -344,6 +388,12 @@ __global__ void finish_stage(
 
     // Stage 4
     else if constexpr (stage == 4) {
+#if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
+        get_explicit_terms<stage>(
+            index, dt, current_time + dt, current_step, dft_bits_global, stage_fields_global,
+            stage_fields, current_fields, propagator_half, propagator_full
+        );
+#endif
         FLUCS_COMPLEX result[NUMBER_OF_FIELDS];
 
         #pragma unroll
@@ -356,7 +406,7 @@ __global__ void finish_stage(
         }
 
         complete_timestep_stage(
-            index, dt, current_time, current_step, result
+            index, dt, current_time + dt, current_step, result
         );
 
         #pragma unroll
@@ -365,7 +415,7 @@ __global__ void finish_stage(
         }
 
         complete_finish_step(
-            index, dt, current_time, current_step, adaptive_rate, current_fields_global
+            index, dt, current_time + dt, current_step, adaptive_rate, current_fields_global
         );
     }
 
