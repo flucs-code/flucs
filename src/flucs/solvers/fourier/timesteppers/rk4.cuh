@@ -15,7 +15,7 @@ __device__ __forceinline__ void compute_propagator(
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
     get_linear_matrix_wrapped(index, propagator_dt, current_time, current_step, propagator_dt, matrix);
-    pade_lhs_rhs(matrix, lhs, propagator);
+    pade_exponential(matrix, lhs, propagator);
     gaussian_elimination_inplace<NUMBER_OF_FIELDS, NUMBER_OF_FIELDS>(lhs, propagator, propagator);
 }
 

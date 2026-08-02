@@ -28,7 +28,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     // Precomputing should not be used with time-dependent linear matrices
     get_linear_matrix_wrapped(index, dt, (FLUCS_FLOAT)0, 0, dt, matrix);
 
-    pade_lhs_rhs(matrix, lhs, rhs);
+    pade_exponential(matrix, lhs, rhs);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -170,7 +170,7 @@ __global__ void finish_step(
         FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
         get_linear_matrix_wrapped(index, dt, current_time, current_step, dt, matrix);
-        pade_lhs_rhs(matrix, lhs, rhs);
+        pade_exponential(matrix, lhs, rhs);
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
