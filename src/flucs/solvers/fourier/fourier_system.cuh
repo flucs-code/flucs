@@ -153,7 +153,10 @@ void add_hyperdissipation(
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
-        propagator[i][i] *= factor;
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+            propagator[i][j] *= factor;
+        }
     }
 }
 
