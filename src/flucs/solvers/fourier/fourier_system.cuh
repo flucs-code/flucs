@@ -216,6 +216,44 @@ __device__ __forceinline__ void compute_propagator(
 }
 
 
+extern "C" {
+
+// Returns the full linear propagator without hyperdissipation.
+__global__ void compute_propagator_global(
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    FLUCS_COMPLEX propagator_global
+        [NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+) {
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (!(index < HALFUNPADDEDSIZE))
+        return;
+
+    FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
+
+    compute_propagator<false>(
+        index,
+        dt,
+        current_time,
+        current_step,
+        FLOAT_ONE,
+        propagator
+    );
+
+    #pragma unroll
+    for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+        #pragma unroll
+        for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+            propagator_global[i][j][index] = propagator[i][j];
+        }
+    }
+}
+
+} // extern "C"
+
+
 #ifdef AB3
 #include "flucs/solvers/fourier/timesteppers/ab3.cuh"
 #endif

@@ -64,6 +64,7 @@ class FourierSystem(FlucsSystem):
     # Linear quantities (used for linear postprocessing)
     linear_matrix: np.ndarray | None = None
     linear_eigensystem: dict[str, np.ndarray] | None = None
+    linear_propagator: np.ndarray | None = None
 
     # Iteration matrices (used for precomputing)
     rhs: cp.ndarray
@@ -89,6 +90,7 @@ class FourierSystem(FlucsSystem):
 
     # CUDA kernels
     compute_linear_matrix_kernel: KernelWrapper
+    compute_propagator_global_kernel: KernelWrapper
     cuda_block_size: int = 512
 
     # CUDA grids
@@ -663,8 +665,11 @@ class FourierSystem(FlucsSystem):
         """
         Basic consistency/health checks before running.
         Alerts the user if anything needs their attention.
-
         """
+
+        self._check_linear_matrix()
+
+    def _check_linear_matrix(self) -> None:
 
         if not self.input["setup.check_linear_matrix"]:
             flucsprint(
@@ -686,8 +691,9 @@ class FourierSystem(FlucsSystem):
                     "with provided reference matrix."
                 )
 
-        # Compare relevant linear frequencies to dt_max
+        # Calculate eigenvalues of linear matrix
         eigvals = self.compute_linear_eigensystem()["eigvals"]
+        eigvals = np.sort(eigvals, axis=0)
         max_growth = np.max(eigvals.imag)
         max_damping = np.max(-eigvals.imag)
         max_real_frequency = np.max(np.abs(eigvals.real))
@@ -708,16 +714,36 @@ class FourierSystem(FlucsSystem):
             f"{self.dt_max * max_real_frequency:.3e})"
         )
 
-        # Check whether dt_max is appropriate given the linear properties
-        tol = 2.0
-        if self.dt_max * max_growth > tol:
-            raise InvalidFlucsInputFileError(
-                "(dt_max * max growth rate) is too large."
-            )
+        # Evaluate accuracy of Pade approximations for exponential
+        propagator = self.compute_linear_propagator(dt=self.dt_max)
+        propagator = np.moveaxis(propagator, (0, 1), (-2, -1))
 
-        if self.dt_max * max_real_frequency > tol:
-            raise InvalidFlucsInputFileError(
-                "(dt_max * max frequency) is too large."
+        pade_eigvals = (
+            1j * np.log(np.linalg.eigvals(propagator)) / self.dt_max
+        ).transpose(3, 0, 1, 2)
+        pade_eigvals = np.sort(pade_eigvals, axis=0)
+
+        abs_errors = np.abs(pade_eigvals - eigvals)
+        rel_errors = np.divide(
+            abs_errors,
+            np.abs(eigvals),
+            out=np.zeros_like(abs_errors),
+            where=np.abs(eigvals) > self.tolerance,
+        )
+
+        flucsprint(
+            "Linear error (max.):          "
+            f"(absolute, relative)         = "
+            f"({np.max(abs_errors):.3e}, "
+            f"{np.max(rel_errors):.3e})"
+        )
+
+        if np.max(rel_errors) > 1e-2:
+            flucsprint(
+                "significant linear propogator errors, consider using a smaller"
+                " dt_max.",
+                source=self,
+                message_type="warning",
             )
 
     def ready(self) -> None:
@@ -884,6 +910,13 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
+        self.compute_propagator_global_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_propagator_global",
+            grid=(self.half_unpadded_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
     def compute_linear_matrix(self, dt=None, time=None, step=None) -> np.ndarray:
         """
         Computes the linear matrix used by the solver and stores it in
@@ -992,6 +1025,47 @@ class FourierSystem(FlucsSystem):
         }
 
         return self.linear_eigensystem
+
+    def compute_linear_propagator(
+        self, dt=None, time=None, step=None
+    ) -> np.ndarray:
+        """
+        Computes the linear propagator used by the solver and stores it in
+        self.linear_propagator. Note that this is not used directly in the
+        solver loop, and so is used entirely for diagnostic purposes.
+        """
+
+        # Set to current values
+        if dt is None:
+            dt = self.dt_max
+        if time is None:
+            time = getattr(self, "current_time", self.init_time)
+        if step is None:
+            step = getattr(self, "current_step", self.int(0))
+
+        # Linear matrix in GPU memory
+        propagator_cupy = cp.zeros(
+            (
+                self.number_of_fields,
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            ),
+            dtype=self.complex,
+        )
+
+        # Compute
+        self.compute_propagator_global_kernel(
+            self.float(dt),
+            self.float(time),
+            self.int(step),
+            propagator_cupy,
+        )
+
+        self.linear_propagator = cp.asnumpy(propagator_cupy)
+
+        return self.linear_propagator
 
     def _set_initial_conditions(self) -> None:
         """Generic setup for the first time step."""

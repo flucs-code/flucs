@@ -14,7 +14,7 @@ timing = false
 timing_steps = 1000
 
 [timestepping]
-method = "ab3_if"
+method = "ab3"
 
 [init]
 rand_seed = 113  # seed for random-number generation
