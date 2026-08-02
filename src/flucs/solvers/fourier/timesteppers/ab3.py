@@ -8,7 +8,6 @@ from flucs.utilities.messages import flucsprint
 
 
 class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
-    lawson_integrating_factors: bool
     is_nonlinear: bool
 
     dt_array: np.ndarray
@@ -75,10 +74,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         )
 
     def setup_cuda_definitions(self):
-        if self.lawson_integrating_factors:
-            self.system.module_options.define_flag("AB3_IF")
-        else:
-            self.system.module_options.define_flag("AB3")
+        self.system.module_options.define_flag("AB3")
 
         self.system.module_options.define_flag(
             "LINEAR_PADE_DEGREE", str(
@@ -135,17 +131,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
 
     def __init__(self, solver: FlucsSolver[FourierSystem]):
         super().__init__(solver)
-        self.lawson_integrating_factors = (
-            self.input["timestepping.lawson_integrating_factors"]
-        )
-
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
-        if self.lawson_integrating_factors:
-            return (
-                "Adams-Bashforth 3 with "
-                "Lawson integrating factors (Pade approx.)"
-            )
-
         return "Adams-Bashforth 3"

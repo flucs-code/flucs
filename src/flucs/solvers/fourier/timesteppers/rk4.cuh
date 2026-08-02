@@ -12,8 +12,7 @@ __device__ FLUCS_COMPLEX propagator_full_precomp_global[NUMBER_OF_FIELDS][NUMBER
 
 // Precomputes the half-step and full-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
-    constexpr FLUCS_FLOAT one_over_two =
-        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+    constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -90,10 +89,8 @@ __device__ void get_explicit_terms(
 
     // Stage 1
     if constexpr (stage == 1) {
-        constexpr FLUCS_FLOAT one_over_two =
-            static_cast<FLUCS_FLOAT>(1.0 / 2.0);
-        constexpr FLUCS_FLOAT one_over_six =
-            static_cast<FLUCS_FLOAT>(1.0 / 6.0);
+        constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
+        constexpr FLUCS_FLOAT one_over_six = (FLUCS_FLOAT)(1.0 / 6.0);
 
         stage_weight   = -one_over_two * dt;
         current_weight = -one_over_six * dt;
@@ -116,10 +113,8 @@ __device__ void get_explicit_terms(
 
     // Stage 2
     else if constexpr (stage == 2) {
-        constexpr FLUCS_FLOAT one_over_two =
-            static_cast<FLUCS_FLOAT>(1.0 / 2.0);
-        constexpr FLUCS_FLOAT one_over_three =
-            static_cast<FLUCS_FLOAT>(1.0 / 3.0);
+        constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
+        constexpr FLUCS_FLOAT one_over_three = (FLUCS_FLOAT)(1.0 / 3.0);
 
         stage_weight   = -one_over_two * dt;
         current_weight = -one_over_three * dt;
@@ -140,8 +135,7 @@ __device__ void get_explicit_terms(
 
     // Stage 3
     else if constexpr (stage == 3) {
-        constexpr FLUCS_FLOAT one_over_three =
-            static_cast<FLUCS_FLOAT>(1.0 / 3.0);
+        constexpr FLUCS_FLOAT one_over_three = (FLUCS_FLOAT)(1.0 / 3.0);
 
         stage_weight   = (FLUCS_FLOAT)(-dt    );
         current_weight = -one_over_three * dt;
@@ -164,8 +158,7 @@ __device__ void get_explicit_terms(
 
     // Stage 4
     else if constexpr (stage == 4) {
-        constexpr FLUCS_FLOAT one_over_six =
-            static_cast<FLUCS_FLOAT>(1.0 / 6.0);
+        constexpr FLUCS_FLOAT one_over_six = (FLUCS_FLOAT)(1.0 / 6.0);
 
         current_weight = -one_over_six * dt;
 
@@ -189,8 +182,7 @@ __global__ void finish_stage(
     FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ){
-    constexpr FLUCS_FLOAT one_over_two =
-        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+    constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 

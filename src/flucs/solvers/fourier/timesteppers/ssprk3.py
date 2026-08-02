@@ -136,4 +136,4 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
-        return "Shu–Osher Runge-Kutta 3 with Lawson integrating factors"
+        return "Shu–Osher Runge-Kutta 3"

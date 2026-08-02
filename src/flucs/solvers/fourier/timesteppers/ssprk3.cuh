@@ -13,8 +13,7 @@ __device__ FLUCS_COMPLEX propagator_minus_half_precomp_global[NUMBER_OF_FIELDS][
 
 // Precomputes the half-step, full-step, and negative half-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
-    constexpr FLUCS_FLOAT one_over_two =
-        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+    constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -111,8 +110,7 @@ __global__ void finish_stage(
     FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ){
-    constexpr FLUCS_FLOAT one_over_two =
-        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+    constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -214,10 +212,8 @@ __global__ void finish_stage(
 
     // Stage 2
     else if constexpr (stage == 2) {
-        constexpr FLUCS_FLOAT one_over_four =
-            static_cast<FLUCS_FLOAT>(1.0 / 4.0);
-        constexpr FLUCS_FLOAT three_over_four =
-            static_cast<FLUCS_FLOAT>(3.0 / 4.0);
+        constexpr FLUCS_FLOAT one_over_four = (FLUCS_FLOAT)(1.0 / 4.0);
+        constexpr FLUCS_FLOAT three_over_four = (FLUCS_FLOAT)(3.0 / 4.0);
 
         get_explicit_terms(
             index, dt, current_time + dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
@@ -249,10 +245,8 @@ __global__ void finish_stage(
 
     // Stage 3
     else if constexpr (stage == 3) {
-        constexpr FLUCS_FLOAT one_over_three =
-            static_cast<FLUCS_FLOAT>(1.0 / 3.0);
-        constexpr FLUCS_FLOAT two_over_three =
-            static_cast<FLUCS_FLOAT>(2.0 / 3.0);
+        constexpr FLUCS_FLOAT one_over_three = (FLUCS_FLOAT)(1.0 / 3.0);
+        constexpr FLUCS_FLOAT two_over_three = (FLUCS_FLOAT)(2.0 / 3.0);
 
         get_explicit_terms(
             index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global, explicit_terms

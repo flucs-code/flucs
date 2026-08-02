@@ -51,8 +51,6 @@ check_linear_matrix = true
 # Currently supported are ab3, rk4, and ssprk3
 method = "ab3"
 
-lawson_integrating_factors = true
-
 # Degree N of the [N,N] Pade approximant for the linear propagator
 linear_pade_degree = 2  # [1,1] is Crank-Nicolson
 

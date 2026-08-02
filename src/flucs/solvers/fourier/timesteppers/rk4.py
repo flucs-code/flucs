@@ -167,4 +167,4 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
-        return "classic Runge-Kutta 4 with Lawson integrating factors"
+        return "classic Runge-Kutta 4"
