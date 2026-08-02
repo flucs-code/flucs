@@ -12,6 +12,9 @@ __device__ FLUCS_COMPLEX propagator_full_precomp_global[NUMBER_OF_FIELDS][NUMBER
 
 // Precomputes the half-step and full-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
+    constexpr FLUCS_FLOAT one_over_two =
+        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -22,7 +25,10 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
     // Precomputing should not be used with time-dependent linear matrices.
-    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), (FLUCS_FLOAT)0, 0, adaptive_rate, propagator);
+    compute_propagator(
+        index, one_over_two * dt, (FLUCS_FLOAT)0, 0,
+        adaptive_rate, propagator
+    );
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -84,8 +90,13 @@ __device__ void get_explicit_terms(
 
     // Stage 1
     if constexpr (stage == 1) {
-        stage_weight   = (FLUCS_FLOAT)(-dt/2.0);
-        current_weight = (FLUCS_FLOAT)(-dt/6.0);
+        constexpr FLUCS_FLOAT one_over_two =
+            static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+        constexpr FLUCS_FLOAT one_over_six =
+            static_cast<FLUCS_FLOAT>(1.0 / 6.0);
+
+        stage_weight   = -one_over_two * dt;
+        current_weight = -one_over_six * dt;
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -105,8 +116,13 @@ __device__ void get_explicit_terms(
 
     // Stage 2
     else if constexpr (stage == 2) {
-        stage_weight   = (FLUCS_FLOAT)(-dt/2.0);
-        current_weight = (FLUCS_FLOAT)(-dt/3.0);
+        constexpr FLUCS_FLOAT one_over_two =
+            static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+        constexpr FLUCS_FLOAT one_over_three =
+            static_cast<FLUCS_FLOAT>(1.0 / 3.0);
+
+        stage_weight   = -one_over_two * dt;
+        current_weight = -one_over_three * dt;
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -124,8 +140,11 @@ __device__ void get_explicit_terms(
 
     // Stage 3
     else if constexpr (stage == 3) {
+        constexpr FLUCS_FLOAT one_over_three =
+            static_cast<FLUCS_FLOAT>(1.0 / 3.0);
+
         stage_weight   = (FLUCS_FLOAT)(-dt    );
-        current_weight = (FLUCS_FLOAT)(-dt/3.0);
+        current_weight = -one_over_three * dt;
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -145,7 +164,10 @@ __device__ void get_explicit_terms(
 
     // Stage 4
     else if constexpr (stage == 4) {
-        current_weight = (FLUCS_FLOAT)(-dt/6.0);
+        constexpr FLUCS_FLOAT one_over_six =
+            static_cast<FLUCS_FLOAT>(1.0 / 6.0);
+
+        current_weight = -one_over_six * dt;
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -167,6 +189,8 @@ __global__ void finish_stage(
     FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ){
+    constexpr FLUCS_FLOAT one_over_two =
+        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -182,7 +206,7 @@ __global__ void finish_stage(
         previous_fields[j] = previous_fields_global[j][index];
     }
 
-    const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
+    const FLUCS_FLOAT half_dt = one_over_two * dt;
 
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS] = {0};
     FLUCS_COMPLEX current_fields[NUMBER_OF_FIELDS] = {0};

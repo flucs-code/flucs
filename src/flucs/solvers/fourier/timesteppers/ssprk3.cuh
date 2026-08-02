@@ -13,6 +13,9 @@ __device__ FLUCS_COMPLEX propagator_minus_half_precomp_global[NUMBER_OF_FIELDS][
 
 // Precomputes the half-step, full-step, and negative half-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
+    constexpr FLUCS_FLOAT one_over_two =
+        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
+
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -23,7 +26,9 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     const FLUCS_FLOAT adaptive_rate = FLOAT_ONE / dt;
 
     // Precomputing should not be used with time-dependent linear matrices.
-    compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), 0, 0, adaptive_rate, propagator);
+    compute_propagator(
+        index, one_over_two * dt, 0, 0, adaptive_rate, propagator
+    );
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -45,7 +50,9 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 
-    compute_propagator(index, (FLUCS_FLOAT)(-dt/2.0), 0, 0, adaptive_rate, propagator);
+    compute_propagator(
+        index, -one_over_two * dt, 0, 0, adaptive_rate, propagator
+    );
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
@@ -104,6 +111,8 @@ __global__ void finish_stage(
     FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
 ){
+    constexpr FLUCS_FLOAT one_over_two =
+        static_cast<FLUCS_FLOAT>(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -130,7 +139,7 @@ __global__ void finish_stage(
     FLUCS_COMPLEX propagator_full[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     FLUCS_COMPLEX propagator_minus_half[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 
-    const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
+    const FLUCS_FLOAT half_dt = one_over_two * dt;
 
 #ifdef PRECOMPUTE_LINEAR_MATRIX
 
@@ -205,6 +214,10 @@ __global__ void finish_stage(
 
     // Stage 2
     else if constexpr (stage == 2) {
+        constexpr FLUCS_FLOAT one_over_four =
+            static_cast<FLUCS_FLOAT>(1.0 / 4.0);
+        constexpr FLUCS_FLOAT three_over_four =
+            static_cast<FLUCS_FLOAT>(3.0 / 4.0);
 
         get_explicit_terms(
             index, dt, current_time + dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
@@ -216,8 +229,9 @@ __global__ void finish_stage(
 
             #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-                sum += ((FLUCS_FLOAT)(3.0/4.0)) * propagator_half[i][j]       * previous_fields[j] \
-                      +((FLUCS_FLOAT)(1.0/4.0)) * propagator_minus_half[i][j] * (stage_fields[j] - dt*explicit_terms[j]);
+                sum += three_over_four * propagator_half[i][j] * previous_fields[j] \
+                      + one_over_four * propagator_minus_half[i][j] \
+                        * (stage_fields[j] - dt*explicit_terms[j]);
             }
 
             result[i] = sum;
@@ -235,6 +249,10 @@ __global__ void finish_stage(
 
     // Stage 3
     else if constexpr (stage == 3) {
+        constexpr FLUCS_FLOAT one_over_three =
+            static_cast<FLUCS_FLOAT>(1.0 / 3.0);
+        constexpr FLUCS_FLOAT two_over_three =
+            static_cast<FLUCS_FLOAT>(2.0 / 3.0);
 
         get_explicit_terms(
             index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
@@ -247,8 +265,9 @@ __global__ void finish_stage(
             #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++){
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
-                sum += ((FLUCS_FLOAT)(1.0/3.0)) * propagator_full[i][j] * previous_fields[j] \
-                      +((FLUCS_FLOAT)(2.0/3.0)) * propagator_half[i][j] * (stage_fields[j] - dt*explicit_terms[j]);
+                sum += one_over_three * propagator_full[i][j] * previous_fields[j] \
+                      + two_over_three * propagator_half[i][j] \
+                        * (stage_fields[j] - dt*explicit_terms[j]);
 #else
                 sum += propagator_full[i][j]*previous_fields[j];
 #endif
