@@ -166,19 +166,25 @@ __global__ void finish_stage(
 
 #else // not PRECOMPUTE_LINEAR_MATRIX
 
-    // Half propagator needed if stage == 2 or 3
-    if constexpr (stage == 2 || stage == 3) {
-        compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, propagator_half);
-    }
-
-    // Full propagator needed if stage == 1 or 3
-    if constexpr (stage == 1 || stage == 3) {
+    if constexpr (stage == 1) {
+        // Full propagator t_n -> t_n + dt
         compute_propagator(index, dt, current_time, current_step, propagator_full);
     }
 
-    // Negative half propagator needed if stage == 2
     if constexpr (stage == 2) {
-        compute_propagator(index, (FLUCS_FLOAT)(-dt/2.0), current_time, current_step, propagator_minus_half);
+        const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
+        // Half propagator t_n -> t_n + dt/2
+        compute_propagator(index, half_dt, current_time, current_step, propagator_half);
+        // Negative half propagator t_n + dt -> t_n + dt/2 
+        compute_propagator(index, -half_dt, current_time + dt, current_step, propagator_minus_half);
+    }
+
+    if constexpr (stage == 3) {
+        const FLUCS_FLOAT half_dt = dt / (FLUCS_FLOAT)2.0;
+        // Full propagator t_n -> t_n + dt
+        compute_propagator(index, dt, current_time, current_step, propagator_full);
+        // Half propagator t_n + dt/2 -> t_n + dt
+        compute_propagator(index, half_dt, current_time + half_dt, current_step, propagator_half);
     }
 
 #endif // PRECOMPUTE_LINEAR_MATRIX
