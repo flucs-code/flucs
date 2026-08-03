@@ -24,15 +24,26 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
     def _allocate_memory(self):
         system = self.system
 
-        self.stage_fields = cp.zeros(
-            (
-                system.number_of_fields,
-                system.nz,
-                system.nx,
-                system.half_ny,
+        self.stage_fields = [
+            cp.zeros(
+                (
+                    system.number_of_fields,
+                    system.nz,
+                    system.nx,
+                    system.half_ny,
+                ),
+                dtype=system.complex,
             ),
-            dtype=system.complex,
-        )
+            cp.zeros(
+                (
+                    system.number_of_fields,
+                    system.nz,
+                    system.nx,
+                    system.half_ny,
+                ),
+                dtype=system.complex,
+            ),
+        ]
 
     def precompute_iteration_matrices(self):
         self.precompute_iteration_matrices_kernel(
@@ -98,13 +109,14 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            previous_fields,
+            self.stage_fields[1],
             current_fields,
         )
 
         # Stage 2
         if self.is_nonlinear:
-            system.compute_nonlinear_terms(self.stage_fields)
+            system.compute_nonlinear_terms(self.stage_fields[1])
 
         self.finish_stage2_kernel(
             system.float(system.current_dt),
@@ -112,13 +124,14 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            self.stage_fields[1],
+            self.stage_fields[0],
             current_fields,
         )
 
         # Stage 3
         if self.is_nonlinear:
-            system.compute_nonlinear_terms(self.stage_fields)
+            system.compute_nonlinear_terms(self.stage_fields[0])
 
         self.finish_stage3_kernel(
             system.float(system.current_dt),
@@ -126,7 +139,8 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            self.stage_fields[0],
+            self.stage_fields[1],
             current_fields,
         )
 

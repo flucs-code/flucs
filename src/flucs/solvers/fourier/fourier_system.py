@@ -740,7 +740,7 @@ class FourierSystem(FlucsSystem):
 
         if np.max(rel_errors) > 1e-2:
             flucsprint(
-                "significant linear propogator errors, consider using a smaller"
+                "significant linear propagator errors, consider using a smaller"
                 " dt_max.",
                 source=self,
                 message_type="warning",
