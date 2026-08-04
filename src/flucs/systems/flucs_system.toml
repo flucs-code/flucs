@@ -13,6 +13,9 @@ precision = "double"  # floating-point precision
 timing = false
 timing_steps = 1000
 
+[timestepping]
+method = "ab3"
+
 [init]
 rand_seed = 113  # seed for random-number generation
 method = "white_noise"

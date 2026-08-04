@@ -7,10 +7,15 @@ pseudospectral Fourier methods.
 """
 
 import time
+from typing import ClassVar
 
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.messages import flucsprint
+
+from .timesteppers.ab3 import FourierAB3Timestepper
+from .timesteppers.rk4 import FourierRK4Timestepper
+from .timesteppers.ssprk3 import FourierSSPRK3Timestepper
 
 
 class FourierSolver(FlucsSolver[FourierSystem]):
@@ -20,6 +25,19 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
     """
 
+    # Supported time steppers
+    _supported_timesteppers: ClassVar = {
+        "ab3": FourierAB3Timestepper,
+        "rk4": FourierRK4Timestepper,
+        "ssprk3": FourierSSPRK3Timestepper,
+    }
+
+    def setup_cuda_definitions(self) -> None:
+        self.timestepper.setup_cuda_definitions()
+
+    def register_kernels(self) -> None:
+        self.timestepper.register_kernels()
+
     def run(self):
         """Run the main solver loop."""
 
@@ -28,6 +46,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         # Get the system ready
         self.system.setup()
+        self.timestepper.setup()
+
         self.system.setup_output()
         self.system.compile_cupy_module()
         self.system.check_health()
@@ -35,6 +55,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         # Timing
         self.system.ready()
+        self.timestepper.ready()
 
         time_taken = self._solver_loop()
         flucsprint(
@@ -49,6 +70,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
+        self.timestepper.ready()
 
         time_taken = self._solver_loop()
 
@@ -74,7 +96,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         if self.interrupted:
             return 0.0
 
-        is_nonlinear = not self.system.input["setup.linear"]
         # Diagnostics for the first time step
         self.system.execute_diagnostics()
 
@@ -84,12 +105,27 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         ]
 
         while self._not_done():
+            # Advance step counter
+            # After this, current_step indexes the step to be solved for
+            # while current_time still points at the previously known
+            # solution for the fields. We cannot advance current_time
+            # because we do not yet know dt.
+            self.system.current_step += 1
+
+            # System-specific start-of-step hook
             self.system.begin_time_step()
 
-            if is_nonlinear:
-                self.system.prepare_nonlinear_terms()
+            # Perform a step
+            self.timestepper.execute_timestep()
 
+            # Update current_time to reflect the time
+            # of current_step
+            self.system.current_time += self.system.current_dt
+
+            # System-specific end-of-step hook
             self.system.finish_time_step()
+
+            # Diagnostics, output, etc
             self.system.execute_diagnostics()
             self.system.write_output()
             self.system.restart_manager.write_restart()

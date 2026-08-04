@@ -17,6 +17,22 @@ FLUCS_FLOAT kz_from_ikz(size_t ikz) {
     return  (ikz < HALF_NZ) ? TWOPI_OVER_LZ * ikz : -TWOPI_OVER_LZ * (NZ - ikz);
 }
 
+// Fourier-space derivatives from indices
+__device__ __forceinline__
+FLUCS_COMPLEX dx_from_ikx(size_t ikx) {
+    return FLUCS_COMPLEX(0, kx_from_ikx(ikx));
+}
+
+__device__ __forceinline__
+FLUCS_COMPLEX dy_from_iky(size_t iky) {
+    return FLUCS_COMPLEX(0, ky_from_iky(iky));
+}
+
+__device__ __forceinline__
+FLUCS_COMPLEX dz_from_ikz(size_t ikz) {
+    return FLUCS_COMPLEX(0, kz_from_ikz(ikz));
+}
+
 // Convering between padded and unpadded
 // Care must be taken not to overflow size_t!!!
 __device__ __forceinline__
