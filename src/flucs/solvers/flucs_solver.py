@@ -68,7 +68,8 @@ class FlucsSolver(Generic[T_System], ABC):
                 f"choices are {', '.join(self._supported_timesteppers)}."
             )
 
-        self.timestepper = self._supported_timesteppers[timestepping_method](self)
+        timestepper = self._supported_timesteppers[timestepping_method]
+        self.timestepper = timestepper(self)
 
         flucsprint(f"Using timestepping method: {self.timestepper!s}")
 

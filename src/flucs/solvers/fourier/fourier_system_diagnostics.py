@@ -480,15 +480,12 @@ class RealspaceDataDiag(FlucsDiagnostic):
             )
 
         # Get masks
-        self.forcing_range_mask = (
-            self.system.forcing_object.forcing_range_mask
-        )
+        self.forcing_range_mask = self.system.forcing_object.forcing_range_mask
 
         if self.compute_on_gpu:
             self.forcing_range_mask_gpu = cp.asarray(self.forcing_range_mask)
 
     def execute(self):
-
         # Excluding forcing range
         if self.exclude_forcing_range:
             if self.compute_on_gpu:

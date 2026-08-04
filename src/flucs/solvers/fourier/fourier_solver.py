@@ -9,13 +9,13 @@ pseudospectral Fourier methods.
 import time
 from typing import ClassVar
 
-from .timesteppers.ab3    import FourierAB3Timestepper
-from .timesteppers.rk4    import FourierRK4Timestepper
-from .timesteppers.ssprk3 import FourierSSPRK3Timestepper
-
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.messages import flucsprint
+
+from .timesteppers.ab3 import FourierAB3Timestepper
+from .timesteppers.rk4 import FourierRK4Timestepper
+from .timesteppers.ssprk3 import FourierSSPRK3Timestepper
 
 
 class FourierSolver(FlucsSolver[FourierSystem]):
@@ -29,7 +29,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
     _supported_timesteppers: ClassVar = {
         "ab3": FourierAB3Timestepper,
         "rk4": FourierRK4Timestepper,
-        "ssprk3": FourierSSPRK3Timestepper
+        "ssprk3": FourierSSPRK3Timestepper,
     }
 
     def setup_cuda_definitions(self) -> None:

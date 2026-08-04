@@ -670,7 +670,6 @@ class FourierSystem(FlucsSystem):
         self._check_linear_matrix()
 
     def _check_linear_matrix(self) -> None:
-
         if not self.input["setup.check_linear_matrix"]:
             flucsprint(
                 "Skipping linear matrix check.",
@@ -790,8 +789,7 @@ class FourierSystem(FlucsSystem):
         )
         self.module_options.define_int(
             "NUMBER_OF_DFT_COMBINED",
-            max(self.number_of_dft_bits,
-                self.number_of_dft_derivatives)
+            max(self.number_of_dft_bits, self.number_of_dft_derivatives),
         )
 
         self.module_options.define_dimension(
@@ -917,7 +915,9 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
-    def compute_linear_matrix(self, dt=None, time=None, step=None) -> np.ndarray:
+    def compute_linear_matrix(
+        self, dt=None, time=None, step=None
+    ) -> np.ndarray:
         """
         Computes the linear matrix used by the solver and stores it in
         self.linear_matrix. Note that this is not used directly in the
@@ -1362,8 +1362,9 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        #TODO: Add call to function to go from shearing-frame to lab-frame
-        # fourier data when adding flowshear. Though be careful with global vs copy
+        # TODO: Add call to function to go from shearing-frame to lab-frame
+        # fourier data when adding flowshear.
+        # Though be careful with global vs copy
 
         index = (
             self.current_step - int(steps_before_current)

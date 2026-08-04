@@ -1,4 +1,3 @@
-import cupy as cp
 import numpy as np
 
 from flucs.solvers import FlucsSolver, FlucsTimestepper
@@ -58,7 +57,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
                     system.number_of_fields,
                     system.nz,
                     system.nx,
-                    system.half_ny
+                    system.half_ny,
                 ),
                 dtype=system.complex,
             )
@@ -77,9 +76,8 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         self.system.module_options.define_flag("AB3")
 
         self.system.module_options.define_flag(
-            "LINEAR_PADE_DEGREE", str(
-                self.input["timestepping.linear_pade_degree"]
-            )
+            "LINEAR_PADE_DEGREE",
+            str(self.input["timestepping.linear_pade_degree"]),
         )
 
         if self.input["timestepping.precompute_linear_matrix"]:

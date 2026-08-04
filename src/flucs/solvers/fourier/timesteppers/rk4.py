@@ -1,9 +1,8 @@
 import cupy as cp
-import numpy as np
 
 from flucs.solvers import FlucsSolver, FlucsTimestepper
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.cupy import KernelWrapper, cupy_set_device_pointer
+from flucs.utilities.cupy import KernelWrapper
 from flucs.utilities.messages import flucsprint
 
 
@@ -58,9 +57,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         self.system.module_options.define_flag("RK4")
 
         self.system.module_options.define_flag(
-            "LINEAR_PADE_DEGREE", str(
-                self.input["timestepping.linear_pade_degree"]
-            )
+            "LINEAR_PADE_DEGREE",
+            str(self.input["timestepping.linear_pade_degree"]),
         )
 
         if self.input["timestepping.precompute_linear_matrix"]:

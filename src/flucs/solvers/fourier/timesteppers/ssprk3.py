@@ -2,7 +2,7 @@ import cupy as cp
 
 from flucs.solvers import FlucsSolver, FlucsTimestepper
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.cupy import KernelWrapper, cupy_set_device_pointer
+from flucs.utilities.cupy import KernelWrapper
 from flucs.utilities.messages import flucsprint
 
 
@@ -150,4 +150,4 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
-        return "Shu–Osher Runge-Kutta 3"
+        return "Shu-Osher Runge-Kutta 3"
