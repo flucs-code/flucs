@@ -34,6 +34,23 @@
 #include "flucs/solvers/fourier/cuda/forcing.cuh"
 #endif
 
+__device__ __forceinline__
+bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
+    return (   (ikx >= HALF_NX_UNPADDED && ikx < (HALF_NX_UNPADDED + NX) - NX_UNPADDED)
+            || (ikz >= HALF_NZ_UNPADDED && ikz < (HALF_NZ_UNPADDED + NZ) - NZ_UNPADDED)
+            || iky >= HALF_NY_UNPADDED);
+}
+
+__device__ __forceinline__
+bool is_mode_padded(const size_t index) {
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    return is_mode_padded(ikz, ikx, iky);
+}
+
 
 extern "C" {
 
@@ -109,8 +126,9 @@ void get_linear_matrix_wrapped(
     }
 }
 
-// Returns the full (for all modes) linear matrix.
-// Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
+// Returns the linear matrix in canonical-grid storage, with padded modes zero.
+// Matrix is assumed to be contiguous with shape
+// (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index).
 __global__ void compute_linear_matrix(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
@@ -119,9 +137,17 @@ __global__ void compute_linear_matrix(
 {
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
-    // Check if we are within bounds
     if (!(index < HALFSIZE))
         return;
+
+    if (is_mode_padded(index)) {
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+                linear_matrix_global[i][j][index] = FLUCS_COMPLEX(0, 0);
+            }
+        }
+        return;
+    }
 
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     get_linear_matrix_wrapped(index, dt, current_time, current_step, FLOAT_ONE, matrix);
@@ -193,24 +219,6 @@ void complete_finish_step(
 
 } // extern "C"
 
-__device__ __forceinline__
-bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
-    return (   (ikx >= HALF_NX_UNPADDED && ikx < (HALF_NX_UNPADDED + NX) - NX_UNPADDED)
-            || (ikz >= HALF_NZ_UNPADDED && ikz < (HALF_NZ_UNPADDED + NZ) - NZ_UNPADDED)
-            || iky >= HALF_NY_UNPADDED);
-}
-
-__device__ __forceinline__
-bool is_mode_padded(const size_t index) {
-    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
-    const size_t ikx = indices.ikx;
-    const size_t iky = indices.iky;
-    const size_t ikz = indices.ikz;
-    
-    return is_mode_padded(ikz, ikx, iky);
-}
-
-
 template<bool include_hyperdissipation = true>
 __device__ __forceinline__ void compute_propagator(
     const size_t index,
@@ -235,7 +243,22 @@ __device__ __forceinline__ void compute_propagator(
 
 extern "C" {
 
-// Returns the full linear propagator without hyperdissipation.
+// Returns one for solved modes and zero for dealiasing-only modes.
+__global__ void compute_solved_grid_mask(
+    FLUCS_FLOAT solved_grid_mask_global[HALFSIZE]
+) {
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (!(index < HALFSIZE))
+        return;
+
+    solved_grid_mask_global[index] = (
+        is_mode_padded(index) ? (FLUCS_FLOAT)0.0 : FLOAT_ONE
+    );
+}
+
+// Returns the full-grid linear propagator without hyperdissipation, with
+// padded modes zero.
 __global__ void compute_propagator_global(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
@@ -247,6 +270,17 @@ __global__ void compute_propagator_global(
 
     if (!(index < HALFSIZE))
         return;
+
+    if (is_mode_padded(index)) {
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+                propagator_global[i][j][index] = FLUCS_COMPLEX(0, 0);
+            }
+        }
+        return;
+    }
 
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 

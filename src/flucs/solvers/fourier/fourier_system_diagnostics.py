@@ -140,11 +140,12 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         self.eigvecs_inverse = cp.asarray(eigensystem["eigvecs_inverse"])
 
         self.save_data("eigvals_solver", eigensystem["eigvals"])
+
         if self.save_eigvecs:
             self.save_data("eigvecs_solver", eigensystem["eigvecs"])
 
         # Initialise fill values
-        shape = (self.system.number_of_fields, *self.system.half_unpadded_tuple)
+        shape = (self.system.number_of_fields, *self.system.half_tuple)
         fill_value = cp.nan
 
         self.eigvals_fill = cp.full(
@@ -153,6 +154,12 @@ class LinearEigensystemDiag(FlucsDiagnostic):
         self.eigvals_tolerance_fill = cp.full(
             shape, fill_value, dtype=self.system.float
         )
+
+        self.padded_grid_mask = ~cp.asarray(
+            self.system.get_solved_grid_mask().astype(bool)
+        )
+        self.eigvals_fill[:, self.padded_grid_mask] = 0
+        self.eigvals_tolerance_fill[:, self.padded_grid_mask] = 0
 
         # Runtime diagnostic variables
         self.previous_eigvals = None
@@ -171,6 +178,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
             self.eigvecs_inverse,
             current_fields,
         )
+        current_amplitude[:, self.padded_grid_mask] = 0
 
         abs_current_amplitude = cp.abs(current_amplitude)
 
@@ -186,6 +194,7 @@ class LinearEigensystemDiag(FlucsDiagnostic):
                 previous_fields,
             )
         )
+        previous_amplitude[:, self.padded_grid_mask] = 0
         previous_eigvals = (
             self.eigvals_fill if initial_execution else self.previous_eigvals
         )
@@ -495,7 +504,7 @@ class RealspaceDataDiag(FlucsDiagnostic):
                     fields,
                     norm="forward",
                     axes=(1, 2, 3),
-                    s=self.system.full_unpadded_tuple,
+                    s=self.system.full_tuple,
                 ).get()
             else:
                 fields = self.system.get_fields().get()
@@ -504,7 +513,7 @@ class RealspaceDataDiag(FlucsDiagnostic):
                     fields,
                     norm="forward",
                     axes=(1, 2, 3),
-                    s=self.system.full_unpadded_tuple,
+                    s=self.system.full_tuple,
                 )
         else:
             if self.compute_on_gpu:
