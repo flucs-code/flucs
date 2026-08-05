@@ -33,28 +33,7 @@ FLUCS_COMPLEX dz_from_ikz(size_t ikz) {
     return FLUCS_COMPLEX(0, kz_from_ikz(ikz));
 }
 
-// Convering between padded and unpadded
-// Care must be taken not to overflow size_t!!!
-// __device__ __forceinline__
-// size_t ikx_from_padded_ikx(const size_t padded_ikx) {
-//     return  (padded_ikx < HALF_NX) ? padded_ikx : (NX + padded_ikx) - PADDED_NX ;
-// }
-//
-// __device__ __forceinline__
-// size_t ikz_from_padded_ikz(const size_t padded_ikz) {
-//     return  (padded_ikz < HALF_NZ) ? padded_ikz : (NZ + padded_ikz) - PADDED_NZ ;
-// }
-//
-// // We have implicity assumed that PADDED_N_ > N_
-// __device__ __forceinline__
-// size_t padded_ikx_from_ikx(const size_t ikx) {
-//     return  (ikx < HALF_NX) ? ikx : (PADDED_NX - NX) + ikx;
-// }
-//
-// __device__ __forceinline__
-// size_t padded_ikz_from_ikz(const size_t ikz) {
-//     return  (ikz < HALF_NZ) ? ikz : (PADDED_NZ - NZ) + ikz;
-// }
+
 
 // Converting between 3D and linear indexing
 // nz is not used but I like it there for consistency
@@ -89,4 +68,23 @@ indices3d_t get_indices3d(const size_t index) {
     result.iz = intermediate / nx;
     result.ix = intermediate - result.iz * nx;
     return result;
+}
+
+// Check whether a mode is padded given specific indices
+__device__ __forceinline__
+bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
+    return (   (ikx >= HALF_NX_UNPADDED && ikx < (HALF_NX_UNPADDED + NX) - NX_UNPADDED)
+            || (ikz >= HALF_NZ_UNPADDED && ikz < (HALF_NZ_UNPADDED + NZ) - NZ_UNPADDED)
+            || iky >= HALF_NY_UNPADDED);
+}
+
+// Check whether a mode is padded given a linear index
+__device__ __forceinline__
+bool is_mode_padded(const size_t index) {
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    return is_mode_padded(ikz, ikx, iky);
 }

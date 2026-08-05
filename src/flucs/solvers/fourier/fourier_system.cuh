@@ -34,24 +34,6 @@
 #include "flucs/solvers/fourier/cuda/forcing.cuh"
 #endif
 
-__device__ __forceinline__
-bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
-    return (   (ikx >= HALF_NX_UNPADDED && ikx < (HALF_NX_UNPADDED + NX) - NX_UNPADDED)
-            || (ikz >= HALF_NZ_UNPADDED && ikz < (HALF_NZ_UNPADDED + NZ) - NZ_UNPADDED)
-            || iky >= HALF_NY_UNPADDED);
-}
-
-__device__ __forceinline__
-bool is_mode_padded(const size_t index) {
-    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
-    const size_t ikx = indices.ikx;
-    const size_t iky = indices.iky;
-    const size_t ikz = indices.ikz;
-
-    return is_mode_padded(ikz, ikx, iky);
-}
-
-
 extern "C" {
 
 // Gets the linear matrix for a single mode.
@@ -141,9 +123,11 @@ __global__ void compute_linear_matrix(
         return;
 
     if (is_mode_padded(index)) {
+        #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+            #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
-                linear_matrix_global[i][j][index] = FLUCS_COMPLEX(0, 0);
+                linear_matrix_global[i][j][index] = 0;
             }
         }
         return;
@@ -152,9 +136,10 @@ __global__ void compute_linear_matrix(
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     get_linear_matrix_wrapped(index, dt, current_time, current_step, FLOAT_ONE, matrix);
 
+    #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // linear_matrix[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = matrix[i][j];
             linear_matrix_global[i][j][index] = matrix[i][j];
         }
     }
@@ -276,7 +261,7 @@ __global__ void compute_propagator_global(
         for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
             #pragma unroll
             for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
-                propagator_global[i][j][index] = FLUCS_COMPLEX(0, 0);
+                propagator_global[i][j][index] = 0;
             }
         }
         return;
