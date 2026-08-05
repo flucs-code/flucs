@@ -35,26 +35,26 @@ FLUCS_COMPLEX dz_from_ikz(size_t ikz) {
 
 // Convering between padded and unpadded
 // Care must be taken not to overflow size_t!!!
-__device__ __forceinline__
-size_t ikx_from_padded_ikx(const size_t padded_ikx) {
-    return  (padded_ikx < HALF_NX) ? padded_ikx : (NX + padded_ikx) - PADDED_NX ;
-}
-
-__device__ __forceinline__
-size_t ikz_from_padded_ikz(const size_t padded_ikz) {
-    return  (padded_ikz < HALF_NZ) ? padded_ikz : (NZ + padded_ikz) - PADDED_NZ ;
-}
-
-// We have implicity assumed that PADDED_N_ > N_
-__device__ __forceinline__
-size_t padded_ikx_from_ikx(const size_t ikx) {
-    return  (ikx < HALF_NX) ? ikx : (PADDED_NX - NX) + ikx;
-}
-
-__device__ __forceinline__
-size_t padded_ikz_from_ikz(const size_t ikz) {
-    return  (ikz < HALF_NZ) ? ikz : (PADDED_NZ - NZ) + ikz;
-}
+// __device__ __forceinline__
+// size_t ikx_from_padded_ikx(const size_t padded_ikx) {
+//     return  (padded_ikx < HALF_NX) ? padded_ikx : (NX + padded_ikx) - PADDED_NX ;
+// }
+//
+// __device__ __forceinline__
+// size_t ikz_from_padded_ikz(const size_t padded_ikz) {
+//     return  (padded_ikz < HALF_NZ) ? padded_ikz : (NZ + padded_ikz) - PADDED_NZ ;
+// }
+//
+// // We have implicity assumed that PADDED_N_ > N_
+// __device__ __forceinline__
+// size_t padded_ikx_from_ikx(const size_t ikx) {
+//     return  (ikx < HALF_NX) ? ikx : (PADDED_NX - NX) + ikx;
+// }
+//
+// __device__ __forceinline__
+// size_t padded_ikz_from_ikz(const size_t ikz) {
+//     return  (ikz < HALF_NZ) ? ikz : (PADDED_NZ - NZ) + ikz;
+// }
 
 // Converting between 3D and linear indexing
 // nz is not used but I like it there for consistency
@@ -70,9 +70,9 @@ size_t index_from_3d(const size_t ikz, const size_t ikx, const size_t iky) {
 // }
 
 struct indices3d_t {
-    union {size_t ikx, padded_ikx, ix;};
-    union {size_t iky, padded_iky, iy;};
-    union {size_t ikz, padded_ikz, iz;};
+    union {size_t ikx, ix;};
+    union {size_t iky, iy;};
+    union {size_t ikz, iz;};
 };
 
 // Given a linear index in a 3D array of shape (nz, nx, ny)

@@ -94,9 +94,8 @@ class FourierSystem(FlucsSystem):
     cuda_block_size: int = 512
 
     # CUDA grids
-    half_unpadded_cuda_grid_size: int
-    half_padded_cuda_grid_size: int
-    full_padded_cuda_grid_size: int
+    half_cuda_grid_size: int
+    full_cuda_grid_size: int
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -109,21 +108,17 @@ class FourierSystem(FlucsSystem):
     half_ny: int
     half_nz: int
 
-    padded_nx: int
-    padded_ny: int
-    padded_nz: int
-    half_padded_nx: int
-    half_padded_ny: int
-    half_padded_nz: int
+    nx_unpadded: int
+    ny_unpadded: int
+    nz_unpadded: int
+    half_nx_unpadded: int
+    half_ny_unpadded: int
+    half_nz_unpadded: int
 
-    half_unpadded_size: int
-    half_unpadded_tuple: tuple
-    half_padded_size: int
-    half_padded_tuple: tuple
-    full_unpadded_size: int
-    full_unpadded_tuple: tuple
-    full_padded_size: int
-    full_padded_tuple: tuple
+    half_size: int
+    half_tuple: tuple
+    full_size: int
+    full_tuple: tuple
 
     # Fourier wavenumbers
     kx: np.ndarray
@@ -182,67 +177,67 @@ class FourierSystem(FlucsSystem):
 
         # Set resolutions appropriately
         for dim in ["x", "y", "z"]:
+            n_unpadded = self.input[f"dimensions.n{dim}_unpadded"]
             n = self.input[f"dimensions.n{dim}"]
-            padded_n = self.input[f"dimensions.padded_n{dim}"]
 
-            match (n > 0, padded_n > 0):
+            match (n_unpadded > 0, n > 0):
                 case (True, True):
                     # Check if n is odd
-                    if n % 2 == 0:
+                    if n_unpadded % 2 == 0:
                         raise ValueError(
                             "Unpadded resolutions must be odd! "
                             f"Please change n{dim} = {n} to an odd number!"
                         )
 
+                    half_n_unpadded = n_unpadded // 2 + 1
                     half_n = n // 2 + 1
-                    half_padded_n = padded_n // 2 + 1
                     # TODO: add some check that warns the user if their choice
                     # is dumb
 
                 case (True, False):
                     # Check if n is odd
-                    if n % 2 == 0:
+                    if n_unpadded % 2 == 0:
                         raise ValueError(
                             "Unpadded resolutions must be odd! "
                             f"Please change n{dim} = {n} to an odd number!"
                         )
 
-                    half_n = n // 2 + 1
+                    half_n_unpadded = n_unpadded // 2 + 1
 
                     # Find minimum padded that works
-                    padded_n = next_smooth_number(
-                        (self.input["dimensions.nonlinear_order"] + 1) * half_n,
+                    n = next_smooth_number(
+                        (self.input["dimensions.nonlinear_order"] + 1) * half_n_unpadded,
                         primes=self.input["dimensions.padded_primes"],
                     )
 
-                    half_padded_n = padded_n // 2 + 1
+                    half_n = n // 2 + 1
 
                     flucsprint(
-                        f"Found padded_n{dim} = {padded_n} for n{dim} = {n}"
+                        f"Found n{dim} = {n} for n{dim}_unpadded = {n_unpadded}"
                     )
 
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
 
                     factor = self.input["dimensions.nonlinear_order"] + 1
-                    _x = padded_n // factor
-                    half_padded_n = padded_n // 2 + 1
+                    _x = n // factor
+                    half_n = n // 2 + 1
 
                     # Handle an annoying edge case
-                    if padded_n % factor == 0:
+                    if n % factor == 0:
                         _x -= 1
 
-                    half_n = _x + 1
-                    n = 2 * _x + 1
+                    half_n_unpadded = _x + 1
+                    n_unpadded = 2 * _x + 1
 
                     flucsprint(
-                        f"Found n{dim} = {n} for padded_n{dim} = {padded_n}"
+                        f"Found n{dim}_unpadded = {n_unpadded} for n{dim} = {n}"
                     )
 
                 case (False, False):
                     raise ValueError(
-                        f"At least one of n{dim} and "
-                        f"padded_n{dim} must be positive!"
+                        f"At least one of n{dim}_unpadded and "
+                        f"n{dim} must be positive!"
                     )
 
                 # This is added only to make pyright happy.
@@ -251,32 +246,18 @@ class FourierSystem(FlucsSystem):
 
             # It's useful to have the resolutions as part of the system
             # rather than to access the input dictionary every time
+            setattr(self, f"n{dim}_unpadded", n_unpadded)
             setattr(self, f"n{dim}", n)
-            setattr(self, f"padded_n{dim}", padded_n)
+            setattr(self, f"half_n{dim}_unpadded", half_n_unpadded)
             setattr(self, f"half_n{dim}", half_n)
-            setattr(self, f"half_padded_n{dim}", half_padded_n)
 
         # Set padded and unpadded array sizes
-        self.half_unpadded_size = self.nz * self.nx * self.half_ny
-        self.half_unpadded_tuple = (self.nz, self.nx, self.half_ny)
 
-        self.half_padded_size = (
-            self.padded_nz * self.padded_nx * self.half_padded_ny
-        )
-        self.half_padded_tuple = (
-            self.padded_nz,
-            self.padded_nx,
-            self.half_padded_ny,
-        )
+        self.half_size = self.nz * self.nx * self.half_ny
+        self.half_tuple = (self.nz, self.nx, self.half_ny)
 
-        self.full_unpadded_size = self.nz * self.nx * self.ny
-        self.full_unpadded_tuple = (self.nz, self.nx, self.ny)
-        self.full_padded_size = self.padded_nz * self.padded_nx * self.padded_ny
-        self.full_padded_tuple = (
-            self.padded_nz,
-            self.padded_nx,
-            self.padded_ny,
-        )
+        self.full_size = self.nz * self.nx * self.ny
+        self.full_tuple = (self.nz, self.nx, self.ny)
 
         # Precompute wavenumbers (useful for many things)
         self._precompute_wavenumbers()
@@ -371,7 +352,7 @@ class FourierSystem(FlucsSystem):
         # Fields at the current and previous steps as required
         self.fields = [
             cp.zeros(
-                (self.number_of_fields, self.nz, self.nx, self.half_ny),
+                (self.number_of_fields, *self.half_tuple),
                 dtype=self.complex,
             )
             for i in range(self.fields_history_size)
@@ -403,16 +384,11 @@ class FourierSystem(FlucsSystem):
             )
 
             self.dft_derivatives = cp.zeros(
-                (
-                    combined_size,
-                    self.padded_nz,
-                    self.padded_nx,
-                    self.half_padded_ny,
-                ),
+                (combined_size, *self.half_tuple),
                 dtype=self.complex,
             )
             self.real_derivatives = cp.zeros(
-                (combined_size, self.padded_nz, self.padded_nx, self.padded_ny),
+                (combined_size, *self.full_tuple),
                 dtype=self.float,
             )
 
@@ -421,57 +397,35 @@ class FourierSystem(FlucsSystem):
 
         else:
             self.dft_derivatives = cp.zeros(
-                (
-                    self.number_of_dft_derivatives,
-                    self.padded_nz,
-                    self.padded_nx,
-                    self.half_padded_ny,
-                ),
+                (self.number_of_dft_derivatives, *self.half_tuple),
                 dtype=self.complex,
             )
             self.real_derivatives = cp.zeros(
-                (
-                    self.number_of_dft_derivatives,
-                    self.padded_nz,
-                    self.padded_nx,
-                    self.padded_ny,
-                ),
+                (self.number_of_dft_derivatives, *self.full_tuple),
                 dtype=self.float,
             )
 
             self.dft_bits = cp.zeros(
-                (
-                    self.number_of_dft_bits,
-                    self.padded_nz,
-                    self.padded_nx,
-                    self.half_padded_ny,
-                ),
+                (self.number_of_dft_bits, *self.half_tuple),
                 dtype=self.complex,
             )
             self.real_bits = cp.zeros(
-                (
-                    self.number_of_dft_bits,
-                    self.padded_nz,
-                    self.padded_nx,
-                    self.padded_ny,
-                ),
+                (self.number_of_dft_bits, *self.full_tuple),
                 dtype=self.float,
             )
 
         self.plan_derivatives_c2r = self.create_standard_real_cufft_plan(
             fft_type="c2r",
-            padded=True,
             batch_size=self.number_of_dft_derivatives,
         )
 
         self.plan_bits_r2c = self.create_standard_real_cufft_plan(
             fft_type="r2c",
-            padded=True,
             batch_size=self.number_of_dft_bits,
         )
 
     def create_standard_real_cufft_plan(
-        self, fft_type: str, padded: bool, batch_size: int
+        self, fft_type: str, batch_size: int
     ):
         """
         Returns a CuFFT plan for real-to-complex ("r2c") or
@@ -482,25 +436,14 @@ class FourierSystem(FlucsSystem):
         ----------
         type : str
             Type of the FFT. Can be "c2r" or "r2c".
-        padded : bool
-            If true, switch to complex arrays of shape
-                (batch, padded_nz, padded_nx, half_padded_ny)
-            that are transformed to real arrays of shape
-                (batch, padded_nz, padded_nx, padded_ny)
         batch_size : int
             Numbers of FFTs in the batch.
         """
 
-        if padded:
-            nz = self.padded_nz
-            nx = self.padded_nx
-            ny = self.padded_ny
-            half_ny = self.half_padded_ny
-        else:
-            nz = self.nz
-            nx = self.nx
-            ny = self.ny
-            half_ny = self.half_ny
+        nz = self.nz
+        nx = self.nx
+        ny = self.ny
+        half_ny = self.half_ny
 
         shape = (nz, nx, ny)
         istride = 1
@@ -793,17 +736,14 @@ class FourierSystem(FlucsSystem):
         )
 
         self.module_options.define_dimension(
-            "HALFUNPADDEDSIZE", self.half_unpadded_size
+            "HALFSIZE", self.half_size
         )
         self.module_options.define_dimension(
-            "HALFPADDEDSIZE", self.half_padded_size
-        )
-        self.module_options.define_dimension(
-            "PADDEDSIZE", self.full_padded_size
+            "FULLSIZE", self.full_size
         )
 
         self.module_options.define_float(
-            "DFT_PADDEDSIZE_FACTOR", self.float(1.0 / self.full_padded_size)
+            "DFT_FULLSIZE_FACTOR", self.float(1.0 / self.full_size)
         )
 
         # Dimensions
@@ -822,11 +762,11 @@ class FourierSystem(FlucsSystem):
                 f"HALF_N{dim.upper()}", getattr(self, f"half_n{dim}")
             )
             self.module_options.define_dimension(
-                f"PADDED_N{dim.upper()}", getattr(self, f"padded_n{dim}")
+                f"N{dim.upper()}_UNPADDED", getattr(self, f"n{dim}_unpadded")
             )
             self.module_options.define_dimension(
-                f"HALF_PADDED_N{dim.upper()}",
-                getattr(self, f"half_padded_n{dim}"),
+                f"HALF_N{dim.upper()}_UNPADDED",
+                getattr(self, f"half_n{dim}_unpadded"),
             )
 
         # Hyperdissipation
@@ -889,29 +829,25 @@ class FourierSystem(FlucsSystem):
         """Registers the CUDA kernels."""
 
         # Setup kernel parameters (grid, block, shared memory)
-        self.half_unpadded_cuda_grid_size = (
-            self.half_unpadded_size + self.cuda_block_size - 1
+        self.half_cuda_grid_size = (
+            self.half_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
 
-        self.half_padded_cuda_grid_size = (
-            self.half_padded_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        self.full_padded_cuda_grid_size = (
-            self.full_padded_size + self.cuda_block_size - 1
+        self.full_cuda_grid_size = (
+            self.full_size + self.cuda_block_size - 1
         ) // self.cuda_block_size
 
         self.compute_linear_matrix_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="compute_linear_matrix",
-            grid=(self.half_unpadded_cuda_grid_size,),
+            grid=(self.half_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
 
         self.compute_propagator_global_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="compute_propagator_global",
-            grid=(self.half_unpadded_cuda_grid_size,),
+            grid=(self.half_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
 
@@ -1108,7 +1044,7 @@ class FourierSystem(FlucsSystem):
                 self.fields_initial = self.input[
                     "init.amplitude"
                 ] * np.random.random(
-                    (self.number_of_fields, *self.half_unpadded_tuple)
+                    (self.number_of_fields, *self.half_tuple)
                 )
 
             case "gaussian":
@@ -1138,7 +1074,7 @@ class FourierSystem(FlucsSystem):
                     angle = random.uniform(
                         0.0,
                         2.0 * np.pi,
-                        size=(self.number_of_fields, *self.half_unpadded_tuple),
+                        size=(self.number_of_fields, *self.half_tuple),
                     )
                 else:
                     angle = self.float(phase) / (2.0 * np.pi)
@@ -1390,7 +1326,7 @@ class FourierSystem(FlucsSystem):
             self.get_fields(),
             norm="forward",
             axes=(1, 2, 3),
-            s=self.full_unpadded_tuple,
+            s=self.full_tuple,
         ).get()
 
     def get_realspace_fields_cpu(self):
@@ -1414,7 +1350,7 @@ class FourierSystem(FlucsSystem):
             fields_cpu_memory,
             norm="forward",
             axes=(1, 2, 3),
-            s=self.full_unpadded_tuple,
+            s=self.full_tuple,
         )
 
     def begin_time_step(self) -> None:

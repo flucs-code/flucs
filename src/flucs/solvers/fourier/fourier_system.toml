@@ -23,9 +23,9 @@ nx = -1
 ny = -1
 nz = -1
 
-padded_nx = -1
-padded_ny = -1
-padded_nz = -1
+nx_unpadded = -1
+ny_unpadded = -1
+nz_unpadded = -1
 
 # Box dimensions must be specified
 Lx = -1.0

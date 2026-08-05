@@ -7,9 +7,9 @@
 // Precomputed linear propagators stored in global memory
 extern "C" {
 
-__device__ FLUCS_COMPLEX propagator_half_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
-__device__ FLUCS_COMPLEX propagator_full_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
-__device__ FLUCS_COMPLEX propagator_minus_half_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
+__device__ FLUCS_COMPLEX propagator_half_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
+__device__ FLUCS_COMPLEX propagator_full_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
+__device__ FLUCS_COMPLEX propagator_minus_half_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
 
 // Precomputes the half-step, full-step, and negative half-step linear propagators.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
@@ -18,7 +18,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
-    if (!(index < HALFUNPADDEDSIZE))
+    if (!(index < HALFSIZE))
         return;
 
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
@@ -33,7 +33,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // propagator_half_precomp_global[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
+            // propagator_half_precomp_global[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
             propagator_half_precomp_global[i][j][index] = propagator[i][j];
         }
     }
@@ -44,7 +44,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // propagator_full_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
+            // propagator_full_precomp[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
             propagator_full_precomp_global[i][j][index] = propagator[i][j];
         }
     }
@@ -57,7 +57,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // propagator_minus_half_precomp[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
+            // propagator_minus_half_precomp[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
             propagator_minus_half_precomp_global[i][j][index] = propagator[i][j];
         }
     }
@@ -71,8 +71,8 @@ __device__ void get_explicit_terms(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
-    const FLUCS_COMPLEX previous_stage_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
+    const FLUCS_COMPLEX previous_stage_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]
 )
 {
@@ -105,19 +105,30 @@ __global__ void finish_stage(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
-    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
-    const FLUCS_COMPLEX previous_stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
-    FLUCS_COMPLEX current_stage_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
-    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
+    const FLUCS_COMPLEX previous_stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    FLUCS_COMPLEX current_stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
 ){
     constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
-    if (!(index < HALFUNPADDEDSIZE))
+    if  (!(index < HALFSIZE))
         return;
+
+    if  (is_mode_padded(index)) {
+
+        if constexpr (stage == 3) {
+            #pragma unroll
+            for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+                current_fields_global[i][index] = 0;
+            }
+        }
+        return;
+    }
 
     FLUCS_COMPLEX previous_fields[NUMBER_OF_FIELDS];
     FLUCS_COMPLEX stage_fields[NUMBER_OF_FIELDS] = {0};

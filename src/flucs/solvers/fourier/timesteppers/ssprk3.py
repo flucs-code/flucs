@@ -66,26 +66,26 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
         self.precompute_iteration_matrices_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="precompute_iteration_matrices",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
 
         self.finish_stage1_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="finish_stage<1>",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
         self.finish_stage2_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="finish_stage<2>",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
         self.finish_stage3_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="finish_stage<3>",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
 

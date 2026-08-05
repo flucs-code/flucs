@@ -31,55 +31,55 @@ class FourierReductions:
         """
         match reduction_output:
             case "scalar":
-                return self._reduce_unpadded_to_scalar(
+                return self._reduce_to_scalar(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kx":
-                return self._reduce_unpadded_to_kx(
+                return self._reduce_to_kx(
                     functor, input_args, complex_output, **kwargs
                 )
             case "ky":
-                return self._reduce_unpadded_to_ky(
+                return self._reduce_to_ky(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kz":
-                return self._reduce_unpadded_to_kz(
+                return self._reduce_to_kz(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kperp":
-                return self._reduce_unpadded_to_kperp(
+                return self._reduce_to_kperp(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kzkx":
-                return self._reduce_unpadded_to_kzkx(
+                return self._reduce_to_kzkx(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kzky":
-                return self._reduce_unpadded_to_kzky(
+                return self._reduce_to_kzky(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kxky":
-                return self._reduce_unpadded_to_kxky(
+                return self._reduce_to_kxky(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kzkperp":
-                return self._reduce_unpadded_to_kzkperp(
+                return self._reduce_to_kzkperp(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kx_cumulative":
-                return self._reduce_unpadded_to_kx_cumulative(
+                return self._reduce_to_kx_cumulative(
                     functor, input_args, complex_output, **kwargs
                 )
             case "ky_cumulative":
-                return self._reduce_unpadded_to_ky_cumulative(
+                return self._reduce_to_ky_cumulative(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kz_cumulative":
-                return self._reduce_unpadded_to_kz_cumulative(
+                return self._reduce_to_kz_cumulative(
                     functor, input_args, complex_output, **kwargs
                 )
             case "kperp_cumulative":
-                return self._reduce_unpadded_to_kperp_cumulative(
+                return self._reduce_to_kperp_cumulative(
                     functor, input_args, complex_output, **kwargs
                 )
             case _:
@@ -526,7 +526,7 @@ class FourierReductions:
 
         return reduction
 
-    def _reduce_unpadded_to_scalar(
+    def _reduce_to_scalar(
         self,
         functor: str,
         input_args: str,
@@ -534,7 +534,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -543,7 +543,7 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-    def _reduce_unpadded_to_kz(
+    def _reduce_to_kz(
         self,
         functor: str,
         input_args: str,
@@ -551,7 +551,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -560,7 +560,7 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-    def _reduce_unpadded_to_kx(
+    def _reduce_to_kx(
         self,
         functor: str,
         input_args: str,
@@ -568,7 +568,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -577,7 +577,7 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-    def _reduce_unpadded_to_ky(
+    def _reduce_to_ky(
         self,
         functor: str,
         input_args: str,
@@ -585,7 +585,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -594,7 +594,7 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-    def _reduce_unpadded_to_kzkx(
+    def _reduce_to_kzkx(
         self,
         functor: str,
         input_args: str,
@@ -602,7 +602,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -611,7 +611,7 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-    def _reduce_unpadded_to_kzky(
+    def _reduce_to_kzky(
         self,
         functor: str,
         input_args: str,
@@ -619,7 +619,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -628,7 +628,7 @@ class FourierReductions:
             shared_mem=shared_mem,
         )
 
-    def _reduce_unpadded_to_kxky(
+    def _reduce_to_kxky(
         self,
         functor: str,
         input_args: str,
@@ -636,7 +636,7 @@ class FourierReductions:
         shared_mem: int = 0,
     ):
         return self._create_reduction(
-            shape=self.system.half_unpadded_tuple,
+            shape=self.system.half_tuple,
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
@@ -657,14 +657,14 @@ class FourierReductions:
     ) -> Callable[..., cp.ndarray]:
         """
         Creates a kperp shell-reduction function, typically used for diagnostics
-        that constructs an implicit unpadded Fourier-space array using
+        that constructs an implicit Fourier-space array using
         a functor with arbitrary parameters.
 
         The shell reduction itself is a function that can be called as
         reduction(*args), where *args are passed onto the functor constructor,
         and returns the shell sum as a CuPy array.
 
-        The CUDA shell-sum kernel bins the unpadded Fourier grid in kperp,
+        The CUDA shell-sum kernel bins the Fourier grid in kperp,
         where kperp = sqrt(kx**2 + ky**2). It uses uniform half-open bins,
 
             [kperp_min, kperp_max),
@@ -792,7 +792,7 @@ class FourierReductions:
 
         return reduction
 
-    def _reduce_unpadded_to_kzkperp(
+    def _reduce_to_kzkperp(
         self,
         functor: str,
         input_args: str,
@@ -807,7 +807,7 @@ class FourierReductions:
             **shell_kwargs,
         )
 
-    def _reduce_unpadded_to_kperp(
+    def _reduce_to_kperp(
         self,
         functor: str,
         input_args: str,
@@ -893,14 +893,14 @@ class FourierReductions:
 
         return reduction
 
-    def _reduce_unpadded_to_kx_cumulative(
+    def _reduce_to_kx_cumulative(
         self,
         functor: str,
         input_args: str,
         complex_output: bool,
         shared_mem: int = 0,
     ):
-        base_reduction = self._reduce_unpadded_to_kx(
+        base_reduction = self._reduce_to_kx(
             functor,
             input_args,
             complex_output,
@@ -914,14 +914,14 @@ class FourierReductions:
             complex_output=complex_output,
         )
 
-    def _reduce_unpadded_to_ky_cumulative(
+    def _reduce_to_ky_cumulative(
         self,
         functor: str,
         input_args: str,
         complex_output: bool,
         shared_mem: int = 0,
     ):
-        base_reduction = self._reduce_unpadded_to_ky(
+        base_reduction = self._reduce_to_ky(
             functor,
             input_args,
             complex_output,
@@ -935,14 +935,14 @@ class FourierReductions:
             complex_output=complex_output,
         )
 
-    def _reduce_unpadded_to_kz_cumulative(
+    def _reduce_to_kz_cumulative(
         self,
         functor: str,
         input_args: str,
         complex_output: bool,
         shared_mem: int = 0,
     ):
-        base_reduction = self._reduce_unpadded_to_kz(
+        base_reduction = self._reduce_to_kz(
             functor,
             input_args,
             complex_output,
@@ -956,14 +956,14 @@ class FourierReductions:
             complex_output=complex_output,
         )
 
-    def _reduce_unpadded_to_kperp_cumulative(
+    def _reduce_to_kperp_cumulative(
         self,
         functor: str,
         input_args: str,
         complex_output: bool,
         **shell_kwargs,
     ):
-        base_reduction = self._reduce_unpadded_to_kperp(
+        base_reduction = self._reduce_to_kperp(
             functor,
             input_args,
             complex_output,
