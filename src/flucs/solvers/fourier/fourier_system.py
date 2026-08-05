@@ -132,9 +132,8 @@ class FourierSystem(FlucsSystem):
     shell_nkperp: int
     shell_kperp: np.ndarray
 
-    # Sizes of solved grid
+    # Solved-grid mask
     solved_grid_mask: np.ndarray
-    solved_grid_tuple: tuple
 
     # Diagnostics available to all FourierSystems
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
@@ -641,10 +640,7 @@ class FourierSystem(FlucsSystem):
 
         # Calculate eigenvalues of linear matrix
         eigvals = self.compute_linear_eigensystem()["eigvals"]
-        eigvals = eigvals[:, solved_grid_mask].reshape(
-            self.number_of_fields,
-            *self.get_solved_grid_tuple(),
-        )
+        eigvals = eigvals[:, solved_grid_mask]
         eigvals = np.sort(eigvals, axis=0)
         max_growth = np.max(eigvals.imag)
         max_damping = np.max(-eigvals.imag)
@@ -668,16 +664,12 @@ class FourierSystem(FlucsSystem):
 
         # Evaluate accuracy of Pade approximations for exponential
         propagator = self.compute_linear_propagator(dt=self.dt_max)
-        propagator = propagator[..., solved_grid_mask].reshape(
-            self.number_of_fields,
-            self.number_of_fields,
-            *self.get_solved_grid_tuple(),
-        )
+        propagator = propagator[..., solved_grid_mask]
         propagator = np.moveaxis(propagator, (0, 1), (-2, -1))
 
         pade_eigvals = (
             1j * np.log(np.linalg.eigvals(propagator)) / self.dt_max
-        ).transpose(3, 0, 1, 2)
+        ).T
         pade_eigvals = np.sort(pade_eigvals, axis=0)
 
         abs_errors = np.abs(pade_eigvals - eigvals)
@@ -952,21 +944,16 @@ class FourierSystem(FlucsSystem):
         # Handle matrix from solver
         solved_grid_mask = self.get_solved_grid_mask().astype(bool)
         linear_matrix = self.compute_linear_matrix()
-        linear_matrix = linear_matrix[..., solved_grid_mask].reshape(
-            self.number_of_fields,
-            self.number_of_fields,
-            *self.get_solved_grid_tuple(),
-        )
+        linear_matrix = linear_matrix[..., solved_grid_mask]
         linear_matrix = np.moveaxis(linear_matrix, (0, 1), (-2, -1))
-        # (nfields, nfields, nz_solved, nx_solved, half_ny_solved)
-        # -> (..., nfields, nfields)
+        # (nfields, nfields, n_solved) -> (n_solved, nfields, nfields)
 
         eigvals, eigvecs = np.linalg.eig(linear_matrix)
 
-        eigvals = (-1j * eigvals).transpose(3, 0, 1, 2)
-        eigvecs = eigvecs.transpose(4, 3, 0, 1, 2)
-        # (nz, nx, half_ny,          mode) -> (mode,          ...)
-        # (nz, nx, half_ny, nfields, mode) -> (mode, nfields, ...)
+        eigvals = (-1j * eigvals).T
+        eigvecs = eigvecs.transpose(2, 1, 0)
+        # (n_solved,          mode) -> (mode,          n_solved)
+        # (n_solved, nfields, mode) -> (mode, nfields, n_solved)
 
         # Normalise to unit norm
         eigvecs /= np.linalg.norm(eigvecs, axis=1, keepdims=True)
@@ -983,8 +970,8 @@ class FourierSystem(FlucsSystem):
 
         # Compute inverse of solver eigenvectors for projection
         eigvecs_inverse = np.linalg.inv(
-            eigvecs.transpose(2, 3, 4, 1, 0)
-        ).transpose(3, 4, 0, 1, 2)
+            eigvecs.transpose(2, 1, 0)
+        ).transpose(2, 1, 0)
 
         # Embed the solved eigensystem in the full Fourier grid
         eigvals_full = np.zeros(
@@ -1001,22 +988,9 @@ class FourierSystem(FlucsSystem):
         )
         eigvecs_inverse_full = np.zeros_like(eigvecs_full)
 
-        eigvals_full[:, solved_grid_mask] = eigvals.reshape(
-            self.number_of_fields,
-            -1,
-        )
-        eigvecs_full[..., solved_grid_mask] = eigvecs.reshape(
-            self.number_of_fields,
-            self.number_of_fields,
-            -1,
-        )
-        eigvecs_inverse_full[..., solved_grid_mask] = (
-            eigvecs_inverse.reshape(
-                self.number_of_fields,
-                self.number_of_fields,
-                -1,
-            )
-        )
+        eigvals_full[:, solved_grid_mask] = eigvals
+        eigvecs_full[..., solved_grid_mask] = eigvecs
+        eigvecs_inverse_full[..., solved_grid_mask] = eigvecs_inverse
 
         # Assign class variable
         self.linear_eigensystem = {
@@ -1083,63 +1057,35 @@ class FourierSystem(FlucsSystem):
 
         return self.solved_grid_mask
 
-    def get_solved_grid_tuple(self) -> tuple[int, int, int]:
-        """
-        Returns a tuple with shape of the solved grid.
-        """
-
-        if not hasattr(self, "solved_grid_tuple"):
-            self.solved_grid_tuple = (
-                self.nz_unpadded,
-                self.nx_unpadded,
-                self.half_ny_unpadded,
-            )
-
-        return self.solved_grid_tuple
-
     def get_solved_wavenumbers(
         self,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns the wavenumbers on the solved grid.
+        Returns flattened wavenumbers for the solved modes.
 
         Returns
         -------
         kz, kx, ky
-            Wavenumber arrays of shape ``get_solved_grid_tuple()``.
+            One-dimensional wavenumber arrays containing only solved modes.
         """
 
-        negative_nz = self.nz_unpadded - self.half_nz_unpadded
-        negative_nx = self.nx_unpadded - self.half_nx_unpadded
-
-        kz = np.concatenate(
-            (
-                self.kz[: self.half_nz_unpadded],
-                self.kz[self.nz - negative_nz :],
-            )
-        )
-        kx = np.concatenate(
-            (
-                self.kx[: self.half_nx_unpadded],
-                self.kx[self.nx - negative_nx :],
-            )
-        )
-        ky = self.ky[: self.half_ny_unpadded]
+        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
+        kz, kx, ky = self.get_broadcast_wavenumbers()
 
         return (
-            np.broadcast_to(kz[:, None, None], self.get_solved_grid_tuple()),
-            np.broadcast_to(kx[None, :, None], self.get_solved_grid_tuple()),
-            np.broadcast_to(ky[None, None, :], self.get_solved_grid_tuple()),
+            kz[solved_grid_mask],
+            kx[solved_grid_mask],
+            ky[solved_grid_mask],
         )
 
     def setup_initial_conditions(self) -> None:
         """
-        Construct initial conditions on the solved Fourier grid.
+        Construct initial conditions on the solved Fourier modes.
         """
 
         solved_grid_mask = self.get_solved_grid_mask().astype(bool)
 
-        # Set the initial conditions on solved grid
+        # Set the initial conditions on solved modes
         self._set_initial_conditions()
 
         # Fill remainder with zeros
@@ -1184,7 +1130,7 @@ class FourierSystem(FlucsSystem):
             return
 
         solved_grid_mask = self.get_solved_grid_mask().astype(bool)
-        solved_grid_tuple = self.get_solved_grid_tuple()
+        number_of_solved_modes = np.count_nonzero(solved_grid_mask)
 
         # Handle known initialisation methods
         match self.input["init.method"]:
@@ -1192,15 +1138,15 @@ class FourierSystem(FlucsSystem):
                 # Set random seed
                 np.random.seed(self.input["init.rand_seed"])
 
-                # Construct fields on the solved grid
+                # Construct fields on the solved modes
                 solved_fields = self.input[
                     "init.amplitude"
                 ] * np.random.random(
-                    (self.number_of_fields, *solved_grid_tuple)
+                    (self.number_of_fields, number_of_solved_modes)
                 )
 
             case "gaussian":
-                # Construct wavenumbers on the solved grid
+                # Construct wavenumbers for the solved modes
                 kz, kx, ky = self.get_solved_wavenumbers()
 
                 try:
@@ -1226,14 +1172,14 @@ class FourierSystem(FlucsSystem):
                     angle = random.uniform(
                         0.0,
                         2.0 * np.pi,
-                        size=(self.number_of_fields, *solved_grid_tuple),
+                        size=(self.number_of_fields, number_of_solved_modes),
                     )
                 else:
                     angle = self.float(phase) / (2.0 * np.pi)
 
                 # Normalise fields to the requested amplitude
                 solved_fields = (
-                    envelope[None, ...] * np.exp(1j * angle)
+                    envelope[None, :] * np.exp(1j * angle)
                 ).astype(self.complex)
 
                 norm = np.sqrt(np.sum(np.abs(solved_fields) ** 2))
@@ -1251,9 +1197,7 @@ class FourierSystem(FlucsSystem):
             (self.number_of_fields, *self.half_tuple),
             dtype=self.complex,
         )
-        self.fields_initial[:, solved_grid_mask] = (
-            solved_fields.reshape(self.number_of_fields, -1)
-        )
+        self.fields_initial[:, solved_grid_mask] = solved_fields
 
     def _check_initial_conditions(self) -> None:
         """
@@ -1262,45 +1206,49 @@ class FourierSystem(FlucsSystem):
         """
 
         solved_grid_mask = self.get_solved_grid_mask().astype(bool)
-        solved_grid_tuple = self.get_solved_grid_tuple()
 
         fields_initial = self.fields_initial.reshape(
             (self.number_of_fields, *self.half_tuple)
         )
-        solved_fields_initial = fields_initial[:, solved_grid_mask].reshape(
-            (self.number_of_fields, *solved_grid_tuple)
-        )
 
         # The ky=0 modes are the ones that need to be checked
-        fields_initial_ky0 = solved_fields_initial[:, :, :, 0]
+        fields_initial_ky0 = fields_initial[:, :, :, 0]
+        solved_grid_mask_ky0 = solved_grid_mask[:, :, 0]
 
-        # To make this easier, shift the frequencies so that they are ordered
-        # ..., -2, -1, 0, 1, 2, ...
-        fields_initial_ky0 = np.fft.fftshift(fields_initial_ky0, axes=(1, 2))
+        conjugate_ikz = (-np.arange(self.nz)) % self.nz
+        conjugate_ikx = (-np.arange(self.nx)) % self.nx
+        conjugate_mask_ky0 = solved_grid_mask_ky0[
+            conjugate_ikz[:, None], conjugate_ikx[None, :]
+        ]
 
         # If not restarting, enforce the reality condition
         if self.restart_manager.data is None:
             # Enforce conjugate symmetry
+            conjugate_fields = np.conj(
+                fields_initial_ky0[
+                    :,
+                    conjugate_ikz[:, None],
+                    conjugate_ikx[None, :],
+                ]
+            )
             fields_initial_ky0[:] = 0.5 * (
-                fields_initial_ky0 + np.conj(fields_initial_ky0[:, ::-1, ::-1])
+                fields_initial_ky0 + conjugate_fields
             )
-
-            # Shift back to original frequency ordering
-            solved_fields_initial[:, :, :, 0] = np.fft.ifftshift(
-                fields_initial_ky0, axes=(1, 2)
-            )
-
-            # Update the stored initial conditions
-            fields_initial[:, solved_grid_mask] = solved_fields_initial.reshape(
-                self.number_of_fields, -1
-            )
+            fields_initial_ky0[:, ~solved_grid_mask_ky0] = 0
             self.fields_initial = fields_initial
 
         # Calculate and report error
+        conjugate_fields = np.conj(
+            fields_initial_ky0[
+                :,
+                conjugate_ikz[:, None],
+                conjugate_ikx[None, :],
+            ]
+        )
         error = np.nanmax(
-            np.abs(
-                fields_initial_ky0 - np.conj(fields_initial_ky0[:, ::-1, ::-1])
-            )
+            np.abs(fields_initial_ky0 - conjugate_fields)[
+                :, solved_grid_mask_ky0
+            ]
         )
         flucsprint(f"Init. condition reality error: {error:.3e}")
 
