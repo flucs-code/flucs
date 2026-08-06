@@ -210,6 +210,108 @@ bool is_mode_padded(const size_t index) {
     return is_mode_padded(ikz, ikx, iky);
 }
 
+template<
+    int N_IN,
+    int N_OUT,
+    void (*F)(
+        const size_t index,
+        const FLUCS_FLOAT dt,
+        const FLUCS_FLOAT current_time,
+        const long long current_step,
+        FLUCS_COMPLEX [N_IN],
+        FLUCS_COMPLEX [N_OUT]
+    )
+>
+__global__ void dealiased_fourier_operation(
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    const FLUCS_COMPLEX input_global[N_IN][HALFSIZE],
+    FLUCS_COMPLEX output_global[N_OUT][HALFSIZE]
+){
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(index < HALFSIZE))
+        return;
+
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    // Check if mode should be zeroed
+    if (is_mode_padded(ikz, ikx, iky)){
+
+        #pragma unroll 
+        for (int i = 0; i < N_OUT; i++) {
+            output_global[i][index] = 0;
+        }
+        return;
+    }
+
+    FLUCS_COMPLEX input[N_IN], output[N_OUT];
+    #pragma unroll 
+    for (int i = 0; i < N_IN; i++) {
+        input[i] = input_global[i][index];
+    }
+    
+    F(index, dt, current_time, current_step, input, output);
+
+    #pragma unroll 
+    for (int i = 0; i < N_OUT; i++) {
+        output_global[i][index] = output[i];
+    }
+}
+
+template<
+    int N_IN,
+    int N_OUT,
+    void (*F)(
+        const size_t index,
+        const FLUCS_FLOAT dt,
+        const FLUCS_FLOAT current_time,
+        const long long current_step,
+        FLUCS_FLOAT input[N_IN],
+        FLUCS_FLOAT output[N_OUT],
+        const bool calculate_cfl,
+        FLUCS_FLOAT* cfl_rate
+    )
+>
+__global__ void real_operation(
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    const FLUCS_FLOAT input_global[N_IN][FULLSIZE],
+    FLUCS_FLOAT output_global[N_OUT][FULLSIZE],
+    const bool calculate_cfl,
+    FLUCS_FLOAT* cfl_rate_global
+) {
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    FLUCS_FLOAT cfl_rate = 0;
+
+    // Check if we are within bounds
+    if (index < FULLSIZE) {
+
+        FLUCS_FLOAT input[N_IN], output[N_OUT];
+
+        #pragma unroll 
+        for (int i = 0; i < N_IN; i++) {
+            input[i] = input_global[i][index];
+        }
+        
+        F(index, dt, current_time, current_step, input, output, calculate_cfl, &cfl_rate);
+
+        #pragma unroll 
+        for (int i = 0; i < N_OUT; i++) {
+            output_global[i][index] = output[i];
+        }
+    }
+
+    if (calculate_cfl)
+        update_cfl(cfl_rate, cfl_rate_global);
+}
+
 
 template<bool include_hyperdissipation = true>
 __device__ __forceinline__ void compute_propagator(

@@ -5,6 +5,7 @@ Abstract base class for a system that can be solved by FourierSolver.
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Callable
 from typing import ClassVar
 
 import cupy as cp
@@ -423,6 +424,112 @@ class FourierSystem(FlucsSystem):
             fft_type="r2c",
             batch_size=self.number_of_dft_bits,
         )
+
+    def create_dealiased_fourier_to_real(
+        self,
+        cuda_device_function: str,
+        n_in: int | None = None,
+        n_out: int | None = None,
+        output_fourier_array: cp.ndarray = None,
+        shared_mem: int = 0,
+    ) -> Callable[..., cp.ndarray]:
+
+        if output_fourier_array is None:
+            output_fourier_array = self.dft_derivatives
+
+        if n_in is None:
+            n_in = self.number_of_fields
+
+        # Create fft operation
+        if n_out is None:
+            fft_plan = self.plan_derivatives_c2r
+            n_out = self.number_of_dft_derivatives
+        else:
+            fft_plan = self.create_standard_real_cufft_plan(
+                fft_type="c2r",
+                batch_size=n_out,
+            )
+
+        # Create data kernel
+        data_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name=f"dealiased_fourier_operation<{n_in}, {n_out}, {cuda_device_function}>",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+            shared_mem=shared_mem,
+        )
+
+        def dealiased_fourier_to_real_operation(current_dt, current_time, current_step, input_array, output_real_array):
+            data_kernel(
+                current_dt,
+                current_time,
+                current_step,
+                input_array,
+                output_fourier_array
+            )
+            fft_plan.fft(
+                output_fourier_array,
+                output_real_array,
+                cufft.CUFFT_INVERSE,
+            )
+
+        return dealiased_fourier_to_real_operation
+
+    def create_dealiased_real_to_fourier(
+        self,
+        cuda_device_function: str,
+        n_in: int | None = None,
+        n_out: int | None = None,
+        output_real_array: cp.ndarray = None,
+        shared_mem: int = 0,
+    ) -> Callable[..., cp.ndarray]:
+
+        if output_real_array is None:
+            output_real_array = self.real_bits
+
+        if n_in is None:
+            n_in = self.number_of_dft_derivatives
+
+        # Create fft operation
+        if n_out is None:
+            fft_plan = self.plan_bits_r2c
+            n_out = self.number_of_dft_bits
+        else:
+            fft_plan = self.create_standard_real_cufft_plan(
+                fft_type="r2c",
+                batch_size=n_out,
+            )
+
+        # Create data kernel
+        data_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name=f"real_operation<{n_in}, {n_out}, {cuda_device_function}>",
+            grid=(self.full_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+            shared_mem=shared_mem,
+        )
+
+        def dealiased_real_to_fourier_operation(current_dt, current_time, current_step, input_real_array, output_array, calculate_cfl):
+
+            if calculate_cfl:
+                self.cfl_rate[0] = 0
+
+            data_kernel(
+                current_dt,
+                current_time,
+                current_step,
+                input_real_array,
+                output_real_array,
+                calculate_cfl,
+                self.cfl_rate
+            )
+            fft_plan.fft(
+                output_real_array,
+                output_array,
+                cufft.CUFFT_FORWARD,
+            )
+
+        return dealiased_real_to_fourier_operation
 
     def create_standard_real_cufft_plan(
         self, fft_type: str, batch_size: int
