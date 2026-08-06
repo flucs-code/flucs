@@ -35,7 +35,7 @@ class FourierSystemForcing(ABC):
         """
 
         # Get ky wavenumbers
-        ky = self.system.get_broadcast_wavenumbers()[1]
+        _, _, ky = self.system.get_broadcast_wavenumbers()
 
         # Number of ky=0 modes
         ky0_modes = ky < 0.5 * ky[0, 0, 1]
@@ -99,7 +99,7 @@ class FourierSystemForcing(ABC):
 
         # Determine forcing range
         system._precompute_wavenumbers()
-        kx, ky, kz = system.get_broadcast_wavenumbers()
+        kz, kx, ky = system.get_broadcast_wavenumbers()
         kperp2 = kx**2 + ky**2
         kz_abs = np.abs(kz)
 
