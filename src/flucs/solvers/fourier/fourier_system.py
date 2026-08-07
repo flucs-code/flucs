@@ -1104,10 +1104,30 @@ class FourierSystem(FlucsSystem):
                 # Set random seed
                 np.random.seed(self.input["init.rand_seed"])
 
+                # Decide what amplitudes to use
+                noise_amplitude = self.input["init.amplitude"]
+                n_amplitudes = len(self.input["init.amplitude_list"])
+                if n_amplitudes > 0 :
+                    # Non-empty amplitude list was supplied
+                    if (n_amplitudes == self.number_of_fields):
+                        # Broadcast to larger dimensions
+                        noise_amplitude = np.array(
+                                self.input["init.amplitude_list"]
+                            ).reshape(
+                                self.number_of_fields,
+                                *([1] * len(self.half_unpadded_tuple))
+                            )
+                    else:
+                        flucsprint(
+                                    "Ignoring init.amplitude_list:"+
+                                    " Length does not match number of fields."+
+                                    " Using {noise_amplitude} instead.",
+                                    source=self,
+                                    message_type="warning",
+                                )
+
                 # Set initial fields
-                self.fields_initial = self.input[
-                    "init.amplitude"
-                ] * np.random.random(
+                self.fields_initial = noise_amplitude * np.random.random(
                     (self.number_of_fields, *self.half_unpadded_tuple)
                 )
 
