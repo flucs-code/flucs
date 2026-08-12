@@ -23,22 +23,47 @@ nx = -1
 ny = -1
 nz = -1
 
-nx_unpadded = -1
-ny_unpadded = -1
-nz_unpadded = -1
-
 # Box dimensions must be specified
 Lx = -1.0
 Ly = -1.0
 Lz = -1.0
 
 
-# Finding optimal padded resolutions
+[dealiasing]
+# Currently supported methods are
+# 1. "2/3" for standard zero padding in all dimensions
+# 2. "phase-shift" for isotropic phase-shifts
+method = "2/3"
 
-# Prime numbers
-padded_primes = [2, 3]
-# Order of the nonlinear term
+# Order of the nonlinear terms that need dealiasing
 nonlinear_order = 2
+
+# These can be used to override the unpadded grid
+# for 2/3 dealiasing for a smaller/larger padding
+# Ignored for the phase-shift method
+nx_unpadded = -1
+ny_unpadded = -1
+nz_unpadded = -1
+
+# Prime numbers for determining padded grids
+# for 2/3 dealiasing from their unpadded values
+padded_primes = [2, 3]
+
+# Phase-shift dealiasing needs a truncation in q_i space, where the
+# q \in (-1/2, 1/2) is the DFT wavenumber, with 1/2 the Nyquist frequency
+#
+# There are two options:
+# 1. "spherical" for a truncation at |q|^2 < radius_squared
+# 2. "optimal" for a truncation at |q_i| + |q_j| < 2/3,
+#    valid only for nonlinear_order = 2
+phase_shift_truncation = "optimal"
+
+# Dealiasing radius^2 for the phase-shift method.
+# The optimal value is 2/9 ~ 0.222
+radius_squared = -1
+
+# Check errors
+check_errors = false
 
 [setup]
 # If true, run a linear-only simulation
@@ -52,7 +77,7 @@ check_linear_matrix = true
 method = "ab3"
 
 # Degree N of the [N,N] Pade approximant for the linear propagator
-linear_pade_degree = 2  # [1,1] is Crank-Nicolson
+linear_pade_degree = 4  # [1,1] is Crank-Nicolson
 
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false

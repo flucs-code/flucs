@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cupy/complex.cuh>
+#include <math_constants.h>
 
 // Deal with float types
 #ifdef DOUBLE_PRECISION
@@ -8,15 +9,21 @@
     #define flucs_fabs(x) fabs(x)
     #define flucs_sqrt(x) sqrt(x)
     #define flucs_fmax(x, y) fmax(x, y)
+    #define flucs_sin(x) sin(x)
+    #define flucs_cos(x) cos(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
+    #define FLUCS_PI CUDART_PI
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
     #define flucs_sqrt(x) sqrtf(x)
     #define flucs_fmax(x, y) fmaxf(x, y)
+    #define flucs_sin(x) sinf(x)
+    #define flucs_cos(x) cosf(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
+    #define FLUCS_PI CUDART_PI_F
 #endif
 
 #define FLUCS_COMPLEX complex<FLUCS_FLOAT>
@@ -204,25 +211,11 @@ void complete_finish_step(
 
 } // extern "C"
 
-template<
-    int N_IN,
-    int N_OUT,
-    void (*F)(
-        const size_t index,
-        const FLUCS_FLOAT dt,
-        const FLUCS_FLOAT current_time,
-        const long long current_step,
-        FLUCS_COMPLEX [N_IN],
-        FLUCS_COMPLEX [N_OUT]
-    )
->
-__global__ void dealiased_fourier_operation(
-    const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
-    const long long current_step,
-    const FLUCS_COMPLEX input_global[N_IN][HALFSIZE],
-    FLUCS_COMPLEX output_global[N_OUT][HALFSIZE]
-){
+template<int N>
+__global__ void add_phase_factors(
+    const FLUCS_COMPLEX array_global[N][HALFSIZE],
+    FLUCS_COMPLEX array_shifted_global[N][HALFSIZE]
+) {
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
@@ -238,74 +231,58 @@ __global__ void dealiased_fourier_operation(
     if (is_mode_padded(ikz, ikx, iky)){
 
         #pragma unroll 
-        for (int i = 0; i < N_OUT; i++) {
-            output_global[i][index] = 0;
+        for (int i = 0; i < N; i++) {
+            array_shifted_global[i][index] = 0;
         }
         return;
     }
 
-    FLUCS_COMPLEX input[N_IN], output[N_OUT];
-    #pragma unroll 
-    for (int i = 0; i < N_IN; i++) {
-        input[i] = input_global[i][index];
-    }
-    
-    F(index, dt, current_time, current_step, input, output);
+    const FLUCS_COMPLEX phase_shift_factor = 
+        get_phase_shift_factor(ikz, ikx, iky);
+
 
     #pragma unroll 
-    for (int i = 0; i < N_OUT; i++) {
-        output_global[i][index] = output[i];
+    for (int i = 0; i < N; i++) {
+        array_shifted_global[i][index] = array_global[i][index] * phase_shift_factor;
     }
 }
 
-template<
-    int N_IN,
-    int N_OUT,
-    void (*F)(
-        const size_t index,
-        const FLUCS_FLOAT dt,
-        const FLUCS_FLOAT current_time,
-        const long long current_step,
-        FLUCS_FLOAT input[N_IN],
-        FLUCS_FLOAT output[N_OUT],
-        const bool calculate_cfl,
-        FLUCS_FLOAT* cfl_rate
-    )
->
-__global__ void real_operation(
-    const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
-    const long long current_step,
-    const FLUCS_FLOAT input_global[N_IN][FULLSIZE],
-    FLUCS_FLOAT output_global[N_OUT][FULLSIZE],
-    const bool calculate_cfl,
-    FLUCS_FLOAT* cfl_rate_global
+template<int N>
+__global__ void undo_phase_factors(
+    FLUCS_COMPLEX array_global[N][HALFSIZE],
+    FLUCS_COMPLEX array_shifted_global[N][HALFSIZE]
 ) {
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
-    FLUCS_FLOAT cfl_rate = 0;
 
     // Check if we are within bounds
-    if (index < FULLSIZE) {
+    if (!(index < HALFSIZE))
+        return;
 
-        FLUCS_FLOAT input[N_IN], output[N_OUT];
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    // Check if mode should be zeroed
+    if (is_mode_padded(ikz, ikx, iky)){
 
         #pragma unroll 
-        for (int i = 0; i < N_IN; i++) {
-            input[i] = input_global[i][index];
+        for (int i = 0; i < N; i++) {
+            array_shifted_global[i][index] = 0;
         }
-        
-        F(index, dt, current_time, current_step, input, output, calculate_cfl, &cfl_rate);
-
-        #pragma unroll 
-        for (int i = 0; i < N_OUT; i++) {
-            output_global[i][index] = output[i];
-        }
+        return;
     }
 
-    if (calculate_cfl)
-        update_cfl(cfl_rate, cfl_rate_global);
-}
+    const FLUCS_COMPLEX phase_shift_factor = 
+        conj(get_phase_shift_factor(ikz, ikx, iky));
 
+    #pragma unroll 
+    for (int i = 0; i < N; i++) {
+        array_global[i][index] = (FLUCS_FLOAT)0.5 * (
+            array_global[i][index] + array_shifted_global[i][index] * phase_shift_factor
+        );
+    }
+}
 
 template<bool include_hyperdissipation = true>
 __device__ __forceinline__ void compute_propagator(

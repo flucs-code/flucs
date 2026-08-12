@@ -482,5 +482,5 @@ class FlucsSystem(ABC):
         self.kernels = KernelCollection(self)
         self.module_options = ModuleOptions()
         self._add_include_dirs()
-        self._interpret_input()
         self._set_precision()
+        self._interpret_input()
