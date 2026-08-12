@@ -27,24 +27,34 @@ from .fourier_system_diagnostics import (
 )
 from .fourier_system_forcing import FourierSystemForcing
 
-
+#TODO: move this somewhere sensible
 def dealiased_multiplication_rfft(*args, **kwargs):
     """
-    Returns the real DFT (see rfft docs of numpy/scipy) of the product in real space
-    of any number of 3D fields with appropriate dealiasing, as required by pseudo-spectral
-    numerical methods.
+    Compute the RFFT of a real-space product using Fourier-space padding.
 
-    Parameters:
+    Each input is a 3D CuPy RFFT array with shape 
+
+        (nz, nx, half_ny)
+
+    The input Fourier arrays are padded, inverse Fourier transformed, multiplied
+    pointwise in real space, and transformed back to Fourier space. The fields 
+    are then cropped to the original grid.
+
+    Parameters
     ----------
-    *args : Real DFTs of fields to be multiplied. Assumed to be NumPy arrays of
-            shape (nz, nx, half_ny), where half_ny = ny // 2 + 1.
-    **kwargs : Can be used to specify nx, ny, and nz, as well as the padded dimensions
-               padded_nx, padded_ny, and padded_nz. If not specified, sensible (hopefully)
-               values will be chosen automatically.
+    *args
+        Fourier-space fields to multiply. All fields must have the same shape
+        and dtype.
+    **kwargs
+        Optional nx, ny, and nz real-space dimensions and their corresponding 
+        padded_nx, padded_ny, and padded_nz values. If omitted, dimensions and 
+        sufficiently large padding are inferred from the array input shape
     """
-    n = len(args)  # number of arrays to multiply
 
-    # Get dimensions
+    # Number of fields in the real-space product
+    n = len(args)
+
+    # Get the original real-space dimensions
     try:
         nx = kwargs["nx"]
     except KeyError:
@@ -64,50 +74,88 @@ def dealiased_multiplication_rfft(*args, **kwargs):
     half_ny = ny // 2 + 1
     half_nz = nz // 2 + 1
 
+    # Choose padded dimensions large enough for the n-field convolution
     try:
         padded_nx = kwargs["padded_nx"]
     except KeyError:
-        padded_nx = int(np.ceil((1.1 + n) * nx / 2))  # default to something that should be large enough
+        padded_nx = int(np.ceil((1.1 + n) * nx / 2)) 
 
     try:
         padded_ny = kwargs["padded_ny"]
     except KeyError:
-        padded_ny = int(np.ceil((1.1 + n) * ny / 2))  # default to something that should be large enough
+        padded_ny = int(np.ceil((1.1 + n) * ny / 2))
 
     try:
         padded_nz = kwargs["padded_nz"]
     except KeyError:
-        padded_nz = int(np.ceil((1.1 + n) * nz / 2))  # default to something that should be large enough
+        padded_nz = int(np.ceil((1.1 + n) * nz / 2))
 
-    # Extract appropriate data type (assume all the arrays are the same dtype)
+    # All Fourier arrays are assumed to use the same complex dtype
     complex_type = args[0].dtype
-
-    # padded_half_nx = padded_nx // 2 + 1
     padded_half_ny = padded_ny // 2 + 1
-    # padded_half_nz = padded_nz // 2 + 1
 
-    product = 1  # holds the product in padded real space
-    # print("Shape of args[0]",args[0].shape)
+    # Accumulate the product on the padded real-space grid
+    product = 1
     for i in range(n):
-        padded_array = cp.zeros((padded_nz, padded_nx, padded_half_ny), dtype=complex_type)
+        padded_array = cp.zeros(
+            (padded_nz, padded_nx, padded_half_ny), dtype=complex_type
+        )
 
-        padded_array[:half_nz, :half_nx, :half_ny] = args[i][:half_nz, :half_nx, :half_ny]
-        padded_array[-half_nz+1:, :half_nx, :half_ny] = args[i][-half_nz+1:, :half_nx, :half_ny]
-        padded_array[:half_nz, -half_nx+1:, :half_ny] = args[i][:half_nz, -half_nx+1:, :half_ny]
-        padded_array[-half_nz+1:, -half_nx+1:, :half_ny] = args[i][-half_nz+1:, -half_nx+1:, :half_ny]
+        # Handle corners as RFFT returns only nonnegative ky modes.
+        padded_array[
+            :half_nz, :half_nx, :half_ny
+        ] = args[i][
+            :half_nz, :half_nx, :half_ny
+        ]
+        padded_array[
+            -half_nz+1:, :half_nx, :half_ny
+        ] = args[i][
+            -half_nz+1:, :half_nx, :half_ny
+        ]
+        padded_array[
+            :half_nz, -half_nx+1:, :half_ny
+        ] = args[i][
+            :half_nz, -half_nx+1:, :half_ny
+        ]
+        padded_array[
+            -half_nz+1:, -half_nx+1:, :half_ny
+        ] = args[i][
+            -half_nz+1:, -half_nx+1:, :half_ny
+        ]
 
-        product *= cp.fft.irfftn(padded_array, s=(padded_nz, padded_nx, padded_ny), norm="forward")
+        # Transform each padded field and multiply it into the real-space product
+        product *= cp.fft.irfftn(
+            padded_array, s=(padded_nz, padded_nx, padded_ny), norm="forward"
+        )
 
-    # DFT to padded Fourier space
-    product_rfft_padded = cp.fft.rfftn(product, norm="forward", s=(padded_nz, padded_nx, padded_ny))
+    # Transform the product back to the padded Fourier grid
+    product_rfft_padded = cp.fft.rfftn(
+        product, norm="forward", s=(padded_nz, padded_nx, padded_ny)
+    )
 
-    # Finally, remove the padding
+    # Crop the same four Fourier-space corners back to the original grid
     product_rfft = cp.zeros((nz, nx, half_ny), dtype=complex_type)
 
-    product_rfft[:half_nz, :half_nx, :half_ny] = product_rfft_padded[:half_nz, :half_nx, :half_ny]
-    product_rfft[-half_nz+1:, :half_nx, :half_ny] = product_rfft_padded[-half_nz+1:, :half_nx, :half_ny]
-    product_rfft[:half_nz, -half_nx+1:, :half_ny] = product_rfft_padded[:half_nz, -half_nx+1:, :half_ny]
-    product_rfft[-half_nz+1:, -half_nx+1:, :half_ny] = product_rfft_padded[-half_nz+1:, -half_nx+1:, :half_ny]
+    product_rfft[
+        :half_nz, :half_nx, :half_ny
+    ] = product_rfft_padded[
+        :half_nz, :half_nx, :half_ny
+    ]
+    product_rfft[
+        -half_nz+1:, :half_nx, :half_ny
+    ] = product_rfft_padded[
+        -half_nz+1:, :half_nx, :half_ny
+    ]
+    product_rfft[
+        :half_nz, -half_nx+1:, :half_ny
+    ] = product_rfft_padded[
+        :half_nz, -half_nx+1:, :half_ny
+    ]
+    product_rfft[
+        -half_nz+1:, -half_nx+1:, :half_ny
+    ] = product_rfft_padded[
+        -half_nz+1:, -half_nx+1:, :half_ny
+    ]
 
     return product_rfft
 
@@ -234,6 +282,10 @@ class FourierSystem(FlucsSystem):
     solver_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
     system_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
 
+    ###########################################################################
+    # Input and configuration
+    ###########################################################################
+
     def _interpret_input(self):
         """Validates inputs and sets up the number of lattice points."""
 
@@ -303,6 +355,10 @@ class FourierSystem(FlucsSystem):
 
         # Setup forcing
         self._setup_forcing()
+
+    # -------------------------------------------------------------------------
+    # Dealiasing setup
+    # -------------------------------------------------------------------------
 
     def _setup_two_thirds_dealiasing(self):
         self.module_options.define_flag("TWO_THIRDS_DEALIASING")
@@ -436,8 +492,114 @@ class FourierSystem(FlucsSystem):
                 setattr(self, f"n{dim}_unpadded", n)
                 setattr(self, f"half_n{dim}_unpadded", half_n)
 
+    # -------------------------------------------------------------------------
+    # Wavenumber grids
+    # -------------------------------------------------------------------------
+
+    def _precompute_wavenumbers(self):
+        # Check if we have already done this
+        if hasattr(self, "ky"):
+            return
+
+        self.kx = (
+            2
+            * np.pi
+            * self.nx
+            * np.fft.fftfreq(self.nx)
+            / self.input["dimensions.Lx"]
+        )
+
+        self.kz = (
+            2
+            * np.pi
+            * self.nz
+            * np.fft.fftfreq(self.nz)
+            / self.input["dimensions.Lz"]
+        )
+
+        # ny is special
+        self.ky = (
+            2
+            * np.pi
+            * self.ny
+            * np.fft.rfftfreq(self.ny)
+            / self.input["dimensions.Ly"]
+        )
+
+    def _compute_kperp_shells(self):
+        """
+        Sets the default kperp shell grid used.
+
+        The CUDA shell-sum kernels use uniform half-open bins,
+
+            [kperp_min, kperp_max),
+
+        with bin index
+
+            floor((kperp - kperp_min) * nkperp / (kperp_max - kperp_min)).
+
+        The default kperp_max is padded above the largest resolved diagonal mode
+        so that summing all bins includes all resolved modes.
+        """
+
+        # TODO: if adding NS/isotropic systems, either add to this or add a
+        # separate method for isotropic systems (_precompute_shells_isotropic)
+        # alongside the appropriate kernels to do the isotropic shell calcs, as
+        # well as create_shell_reduction_isotropic
+
+        # Check if we have already done this
+        if hasattr(self, "shell_kperp"):
+            return
+
+        # kperp grid spacing
+        dkperp = min(
+            (k[1] for k in (self.kx, self.ky) if k.size > 1),
+            default=self.float(1.0),
+        )
+
+        # Minimum kperp
+        kperp_min = self.float(0.0)
+
+        # Maximum kperp
+        kx_max = abs(self.kx[self.half_nx - 1])
+        ky_max = abs(self.ky[self.half_ny - 1])
+
+        kperp_max = np.sqrt(kx_max**2 + ky_max**2)
+        kperp_max += dkperp  # Adding padding for diagonal
+
+        # Number of kperp shells
+        nkperp_from_dkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
+        nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
+
+        # Maximum kperp from bin width
+        bin_width = (
+            dkperp
+            if nkperp_from_dkperp <= self.cuda_block_size
+            else (kperp_max - kperp_min) / nkperp
+        )
+
+        kperp_max = self.float(kperp_min + nkperp * bin_width)
+
+        # kperp grid
+        kperp = kperp_min + bin_width * np.arange(nkperp, dtype=self.float)
+
+        # Assign attributes
+        self.shell_kperp_min = kperp_min
+        self.shell_kperp_max = kperp_max
+        self.shell_nkperp = nkperp
+        self.shell_kperp = kperp
+        self.shell_last_complete_bin = int(
+            (min(kx_max, ky_max) - kperp_min) * nkperp / (kperp_max - kperp_min)
+        )
+
+    # -------------------------------------------------------------------------
+    # Forcing setup
+    # -------------------------------------------------------------------------
+
     def _setup_forcing(self):
-        """Sets up the forcing method."""
+        """
+        Sets up the forcing method.
+        """
         forcing_method = self.input["forcing.method"]
         if not forcing_method:
             return
@@ -452,6 +614,14 @@ class FourierSystem(FlucsSystem):
         self.forcing_object = (
             self.solver_forcing_methods | self.system_forcing_methods
         )[forcing_method](self)
+
+    ###########################################################################
+    # Setup
+    ###########################################################################
+
+    # -------------------------------------------------------------------------
+    # General
+    # -------------------------------------------------------------------------
 
     def setup(self) -> None:
         """
@@ -581,6 +751,171 @@ class FourierSystem(FlucsSystem):
                 (self.number_of_dft_bits, *self.full_tuple),
                 dtype=self.float,
             )
+
+    # -------------------------------------------------------------------------
+    # CUDA setup
+    # -------------------------------------------------------------------------
+
+    def setup_cuda_definitions(self) -> None:
+        # FourierSystem specific constants
+        self.module_options.define_int(
+            "NUMBER_OF_FIELDS", self.number_of_fields
+        )
+
+        self.module_options.define_int(
+            "NUMBER_OF_DFT_DERIVATIVES",
+            self.number_of_dft_derivatives,
+        )
+        self.module_options.define_int(
+            "NUMBER_OF_DFT_BITS",
+            self.number_of_dft_bits,
+        )
+        self.module_options.define_int(
+            "NUMBER_OF_DFT_COMBINED",
+            max(self.number_of_dft_bits, self.number_of_dft_derivatives),
+        )
+
+        self.module_options.define_dimension(
+            "HALFSIZE", self.half_size
+        )
+        self.module_options.define_dimension(
+            "FULLSIZE", self.full_size
+        )
+
+        self.module_options.define_float(
+            "DFT_FULLSIZE_FACTOR", self.float(1.0 / self.full_size)
+        )
+
+        # Dimensions
+        for dim in ["x", "y", "z"]:
+            box_size = self.float(self.input[f"dimensions.L{dim}"])
+
+            self.module_options.define_float(
+                f"TWOPI_OVER_L{dim.upper()}", 2 * np.pi / box_size
+            )
+
+            self.module_options.define_dimension(
+                f"N{dim.upper()}", getattr(self, f"n{dim}")
+            )
+            self.module_options.define_float(f"L{dim.upper()}", box_size)
+            self.module_options.define_dimension(
+                f"HALF_N{dim.upper()}", getattr(self, f"half_n{dim}")
+            )
+            self.module_options.define_dimension(
+                f"N{dim.upper()}_UNPADDED", getattr(self, f"n{dim}_unpadded")
+            )
+            self.module_options.define_dimension(
+                f"HALF_N{dim.upper()}_UNPADDED",
+                getattr(self, f"half_n{dim}_unpadded"),
+            )
+
+        # Hyperdissipation
+        for index, component in enumerate(self.hyperdissipation_components):
+            self.module_options.define_int(
+                f"HYPERDISSIPATION_{component.upper()}_INT", index
+            )
+
+            if self.input[f"hyperdissipation.{component}"] > 0.0:
+                message = f"Using hyperdissipation in {component:<5}"
+
+                self.module_options.define_float(
+                    f"HYPERDISSIPATION_{component.upper()}",
+                    self.input[f"hyperdissipation.{component}"],
+                )
+                self.module_options.define_float(
+                    f"HYPERDISSIPATION_{component.upper()}_POWER",
+                    self.input[f"hyperdissipation.{component}_power"],
+                )
+
+                if self.input[f"hyperdissipation.{component}_adaptive"]:
+                    self.module_options.define_flag(
+                        f"HYPERDISSIPATION_{component.upper()}_ADAPTIVE"
+                    )
+                    message += " (adaptive)"
+
+                if self.input[f"hyperdissipation.{component}_normalised"]:
+                    self.module_options.define_flag(
+                        f"HYPERDISSIPATION_{component.upper()}_NORMALISED"
+                    )
+                    message += " (normalised)"
+
+                flucsprint(message)
+
+        # Forcing
+        if self.input["forcing.method"]:
+            flucsprint(f"Using forcing method: {self.input['forcing.method']}")
+
+            self.module_options.define_flag("FORCING")
+            self.module_options.define_flag(
+                f"FORCING_METHOD_{self.input['forcing.method'].upper()}"
+            )
+
+            if self.input["forcing.method"] in self.solver_forcing_methods:
+                self.module_options.define_flag("FORCING_FROM_SOLVER")
+
+            if self.forcing_object.linear:
+                self.module_options.define_flag("FORCING_LINEAR")
+
+            if self.forcing_object.explicit:
+                self.module_options.define_flag("FORCING_EXPLICIT")
+
+            self.forcing_object.setup_cuda_definitions()
+
+        # Setup
+        if not self.input["setup.linear"]:
+            self.module_options.define_flag("NONLINEAR")
+
+    def register_kernels(self) -> None:
+        """Registers the CUDA kernels."""
+
+        # Setup kernel parameters (grid, block, shared memory)
+        self.half_cuda_grid_size = (
+            self.half_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
+        self.full_cuda_grid_size = (
+            self.full_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
+        self.compute_linear_matrix_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_linear_matrix",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.compute_solved_grid_mask_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_solved_grid_mask",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        self.compute_propagator_global_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_propagator_global",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        if self.input["dealiasing.method"] != "2/3":
+            # Phase-shifting kernels
+            self.add_phase_factors_health_check_kernel = KernelWrapper(
+                system=self,
+                cuda_kernel_name=f"add_phase_factors<1>",
+                grid=(self.half_cuda_grid_size,),
+                block=(self.cuda_block_size,),
+            )
+            self.undo_phase_factors_health_check_kernel = KernelWrapper(
+                system=self,
+                cuda_kernel_name=f"undo_phase_factors<1>",
+                grid=(self.half_cuda_grid_size,),
+                block=(self.cuda_block_size,),
+            )
+
+    # -------------------------------------------------------------------------
+    # Dealiased operations
+    # -------------------------------------------------------------------------
 
     def create_dft_derivatives_operation(
         self,
@@ -891,124 +1226,187 @@ class FourierSystem(FlucsSystem):
             last_size=last_size,
         )
 
-    def _precompute_wavenumbers(self):
-        # Check if we have already done this
-        if hasattr(self, "ky"):
+    # -------------------------------------------------------------------------
+    # Initial conditions
+    # -------------------------------------------------------------------------
+
+    def setup_initial_conditions(self) -> None:
+        """
+        Construct initial conditions on the solved Fourier modes.
+        """
+
+        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
+
+        # Set the initial conditions on solved modes
+        self._set_initial_conditions()
+
+        # Fill remainder with zeros
+        self.fields_initial = np.reshape(
+            self.fields_initial,
+            (self.number_of_fields, *self.half_tuple),
+        )
+        self.fields_initial[:, ~solved_grid_mask] = 0
+
+        # Check reality condition
+        self._check_initial_conditions()
+
+    def _set_initial_conditions(self) -> None:
+        """Generic setup for the first time step."""
+
+        # Use restart data if it was read
+        if self.restart_manager.data is not None:
+            restart_data = self.restart_manager.data
+
+            if "fields" not in restart_data:
+                raise ValueError("Restart data does not contain 'fields'.")
+
+            field_data = restart_data["fields"]["data"]
+
+            # TODO: remove when allowing for changing of sizes
+            expected_shape = (
+                self.number_of_fields,
+                self.nz,
+                self.nx,
+                self.half_ny,
+            )
+            if field_data.shape != expected_shape:
+                raise ValueError(
+                    f"Restart data has incorrect shape: "
+                    f"{field_data.shape}, "
+                    f"expected: {expected_shape}"
+                )
+
+            # Set initial field data
+            self.fields_initial = np.asarray(field_data)
+
             return
 
-        self.kx = (
-            2
-            * np.pi
-            * self.nx
-            * np.fft.fftfreq(self.nx)
-            / self.input["dimensions.Lx"]
-        )
+        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
+        number_of_solved_modes = np.count_nonzero(solved_grid_mask)
 
-        self.kz = (
-            2
-            * np.pi
-            * self.nz
-            * np.fft.fftfreq(self.nz)
-            / self.input["dimensions.Lz"]
-        )
+        # Handle known initialisation methods
+        match self.input["init.method"]:
+            case "white_noise":
+                # Set random seed
+                np.random.seed(self.input["init.rand_seed"])
 
-        # ny is special
-        self.ky = (
-            2
-            * np.pi
-            * self.ny
-            * np.fft.rfftfreq(self.ny)
-            / self.input["dimensions.Ly"]
-        )
+                # Construct fields on the solved modes
+                solved_fields = self.input[
+                    "init.amplitude"
+                ] * np.random.random(
+                    (self.number_of_fields, number_of_solved_modes)
+                )
 
-    def _compute_kperp_shells(self):
+            case "gaussian":
+                # Construct wavenumbers for the solved modes
+                kz, kx, ky = self.get_solved_wavenumbers()
+
+                try:
+                    k2 = sum(
+                        {"kx": kx**2, "ky": ky**2, "kz": kz**2}[component]
+                        for component in self.input["init.components"]
+                    )
+                except KeyError:
+                    raise InvalidFlucsInputFileError(
+                        "init.components entries must be one of kx, ky, or kz."
+                    )
+
+                # Envelope
+                envelope = (k2 ** self.input["init.power"]) * np.exp(
+                    -2.0 * (k2 / self.input["init.width"] ** 2)
+                )
+                envelope[k2 == 0] = 0.0
+
+                # Phase
+                phase = self.input["init.phase"]
+                if phase == "random":
+                    random = np.random.default_rng(self.input["init.rand_seed"])
+                    angle = random.uniform(
+                        0.0,
+                        2.0 * np.pi,
+                        size=(self.number_of_fields, number_of_solved_modes),
+                    )
+                else:
+                    angle = self.float(phase) / (2.0 * np.pi)
+
+                # Normalise fields to the requested amplitude
+                solved_fields = (
+                    envelope[None, :] * np.exp(1j * angle)
+                ).astype(self.complex)
+
+                norm = np.sqrt(np.sum(np.abs(solved_fields) ** 2))
+
+                solved_fields *= self.input["init.amplitude"] / norm
+
+            case _:
+                raise InvalidFlucsInputFileError(
+                    f"Invalid init.method: {self.input['init.method']}."
+                )
+                pass
+
+        # Embed the solved modes in the full Fourier grid
+        self.fields_initial = np.zeros(
+            (self.number_of_fields, *self.half_tuple),
+            dtype=self.complex,
+        )
+        self.fields_initial[:, solved_grid_mask] = solved_fields
+
+    def _check_initial_conditions(self) -> None:
         """
-        Sets the default kperp shell grid used.
-
-        The CUDA shell-sum kernels use uniform half-open bins,
-
-            [kperp_min, kperp_max),
-
-        with bin index
-
-            floor((kperp - kperp_min) * nkperp / (kperp_max - kperp_min)).
-
-        The default kperp_max is padded above the largest resolved diagonal mode
-        so that summing all bins includes all resolved modes.
+        Ensures that the initial conditions satisfy the reality condition
+        field[-ikz, -ikx, 0] = conj(field[ikz, ikx, 0]) for all ikx and ikz.
         """
 
-        # TODO: if adding NS/isotropic systems, either add to this or add a
-        # separate method for isotropic systems (_precompute_shells_isotropic)
-        # alongside the appropriate kernels to do the isotropic shell calcs, as
-        # well as create_shell_reduction_isotropic
+        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
 
-        # Check if we have already done this
-        if hasattr(self, "shell_kperp"):
-            return
-
-        # kperp grid spacing
-        dkperp = min(
-            (k[1] for k in (self.kx, self.ky) if k.size > 1),
-            default=self.float(1.0),
+        fields_initial = self.fields_initial.reshape(
+            (self.number_of_fields, *self.half_tuple)
         )
 
-        # Minimum kperp
-        kperp_min = self.float(0.0)
+        # The ky=0 modes are the ones that need to be checked
+        fields_initial_ky0 = fields_initial[:, :, :, 0]
+        solved_grid_mask_ky0 = solved_grid_mask[:, :, 0]
 
-        # Maximum kperp
-        kx_max = abs(self.kx[self.half_nx - 1])
-        ky_max = abs(self.ky[self.half_ny - 1])
+        conjugate_ikz = (-np.arange(self.nz)) % self.nz
+        conjugate_ikx = (-np.arange(self.nx)) % self.nx
+        conjugate_mask_ky0 = solved_grid_mask_ky0[
+            conjugate_ikz[:, None], conjugate_ikx[None, :]
+        ]
 
-        kperp_max = np.sqrt(kx_max**2 + ky_max**2)
-        kperp_max += dkperp  # Adding padding for diagonal
+        # If not restarting, enforce the reality condition
+        if self.restart_manager.data is None:
+            # Enforce conjugate symmetry
+            conjugate_fields = np.conj(
+                fields_initial_ky0[
+                    :,
+                    conjugate_ikz[:, None],
+                    conjugate_ikx[None, :],
+                ]
+            )
+            fields_initial_ky0[:] = 0.5 * (
+                fields_initial_ky0 + conjugate_fields
+            )
+            fields_initial_ky0[:, ~solved_grid_mask_ky0] = 0
+            self.fields_initial = fields_initial
 
-        # Number of kperp shells
-        nkperp_from_dkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
-        nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
-
-        # Maximum kperp from bin width
-        bin_width = (
-            dkperp
-            if nkperp_from_dkperp <= self.cuda_block_size
-            else (kperp_max - kperp_min) / nkperp
+        # Calculate and report error
+        conjugate_fields = np.conj(
+            fields_initial_ky0[
+                :,
+                conjugate_ikz[:, None],
+                conjugate_ikx[None, :],
+            ]
         )
-
-        kperp_max = self.float(kperp_min + nkperp * bin_width)
-
-        # kperp grid
-        kperp = kperp_min + bin_width * np.arange(nkperp, dtype=self.float)
-
-        # Assign attributes
-        self.shell_kperp_min = kperp_min
-        self.shell_kperp_max = kperp_max
-        self.shell_nkperp = nkperp
-        self.shell_kperp = kperp
-        self.shell_last_complete_bin = int(
-            (min(kx_max, ky_max) - kperp_min) * nkperp / (kperp_max - kperp_min)
+        error = np.nanmax(
+            np.abs(fields_initial_ky0 - conjugate_fields)[
+                :, solved_grid_mask_ky0
+            ]
         )
+        flucsprint(f"Init. condition reality error: {error:.3e}")
 
-    def get_broadcast_wavenumbers(self):
-        """Returns wavenumber arrays broadcast to (nz, nx, half_ny)
-
-        Returns
-        -------
-        kz_broadcast, kx_broadcast, ky_broadcast
-            Wavenumber arrays of shape (nz, nx, half_ny)
-
-        """
-        kx_broadcast = np.broadcast_to(
-            self.kx, (self.nz, self.half_ny, self.nx)
-        ).transpose(0, 2, 1)
-
-        ky_broadcast = np.broadcast_to(
-            self.ky, (self.nz, self.nx, self.half_ny)
-        )
-
-        kz_broadcast = np.broadcast_to(
-            self.kz, (self.half_ny, self.nx, self.nz)
-        ).transpose(2, 1, 0)
-
-        return kz_broadcast, kx_broadcast, ky_broadcast
+    # -------------------------------------------------------------------------
+    # Health checks
+    # -------------------------------------------------------------------------
 
     def check_health(self) -> None:
         """
@@ -1085,7 +1483,6 @@ class FourierSystem(FlucsSystem):
         product_rfft[solved_modes_mask < 0.5] = 0
 
         print("Max abs error is ", cp.max(cp.abs(product_rfft - product_dealiased_rfft)))
-
 
     def _check_linear_matrix(self) -> None:
         if not self.input["setup.check_linear_matrix"]:
@@ -1169,6 +1566,10 @@ class FourierSystem(FlucsSystem):
                 message_type="warning",
             )
 
+    ###########################################################################
+    # Solver execution
+    ###########################################################################
+
     def ready(self) -> None:
         # Reset time counters
         self.current_step = self.int(0)
@@ -1197,162 +1598,355 @@ class FourierSystem(FlucsSystem):
             f"dt {float(self.init_dt):.3e}"
         )
 
-    def setup_cuda_definitions(self) -> None:
-        # FourierSystem specific constants
-        self.module_options.define_int(
-            "NUMBER_OF_FIELDS", self.number_of_fields
-        )
+    # -------------------------------------------------------------------------
+    # Loop functions
+    # -------------------------------------------------------------------------
 
-        self.module_options.define_int(
-            "NUMBER_OF_DFT_DERIVATIVES",
-            self.number_of_dft_derivatives,
-        )
-        self.module_options.define_int(
-            "NUMBER_OF_DFT_BITS",
-            self.number_of_dft_bits,
-        )
-        self.module_options.define_int(
-            "NUMBER_OF_DFT_COMBINED",
-            max(self.number_of_dft_bits, self.number_of_dft_derivatives),
-        )
+    def begin_time_step(self) -> None:
+        """
+        Executed in the beginning of the time step.
+        Can be overriden to advance any system-specific counters.
 
-        self.module_options.define_dimension(
-            "HALFSIZE", self.half_size
-        )
-        self.module_options.define_dimension(
-            "FULLSIZE", self.full_size
-        )
+        """
+        # Set this to None so that get_realspace_fields_*() knows
+        # whether it has already been called. Saves some time.
+        self.realspace_fields = None
 
-        self.module_options.define_float(
-            "DFT_FULLSIZE_FACTOR", self.float(1.0 / self.full_size)
-        )
+    @abstractmethod
+    def compute_nonlinear_terms(self, fields: cp.ndarray) -> None:
+        """
+        Computes the nonlinear terms for the supplied fields.
 
-        # Dimensions
-        for dim in ["x", "y", "z"]:
-            box_size = self.float(self.input[f"dimensions.L{dim}"])
+        """
 
-            self.module_options.define_float(
-                f"TWOPI_OVER_L{dim.upper()}", 2 * np.pi / box_size
+    def finish_time_step(self) -> None:
+        """
+        Executed at the end of the time step.
+
+        """
+        pass
+
+    # -------------------------------------------------------------------------
+    # Time step control
+    # -------------------------------------------------------------------------
+
+    def _update_dt(self) -> bool:
+        """
+        Updates the time step based on the CFL condition.
+
+        Returns
+        -------
+        dt_changed : bool
+            True if dt was changed, False if it stayed the same.
+
+        """
+
+        self.cfl_rate_float = self.float(cp.asnumpy(self.cfl_rate[0]))
+
+        dt_changed = self._compute_current_dt()
+        if self.current_dt < self.dt_min:
+            flucsprint(
+                f"({self.current_step}) Required time step "
+                f"{self.current_dt:.3e} is below dt_min. Exiting."
             )
+            self.solver.interrupted = True
 
-            self.module_options.define_dimension(
-                f"N{dim.upper()}", getattr(self, f"n{dim}")
-            )
-            self.module_options.define_float(f"L{dim.upper()}", box_size)
-            self.module_options.define_dimension(
-                f"HALF_N{dim.upper()}", getattr(self, f"half_n{dim}")
-            )
-            self.module_options.define_dimension(
-                f"N{dim.upper()}_UNPADDED", getattr(self, f"n{dim}_unpadded")
-            )
-            self.module_options.define_dimension(
-                f"HALF_N{dim.upper()}_UNPADDED",
-                getattr(self, f"half_n{dim}_unpadded"),
-            )
+        self.current_cfl = self.cfl_rate_float * self.current_dt
+        self.adaptive_rate = self.float(1.0) / self.current_dt
 
-        # Hyperdissipation
-        for index, component in enumerate(self.hyperdissipation_components):
-            self.module_options.define_int(
-                f"HYPERDISSIPATION_{component.upper()}_INT", index
-            )
+        return dt_changed
 
-            if self.input[f"hyperdissipation.{component}"] > 0.0:
-                message = f"Using hyperdissipation in {component:<5}"
+    def _compute_current_dt(self) -> bool:
+        """
+        Computes the current time step based on the CFL condition.
+        Will be set to either 'compute_current_dt_discrete' or
+        'compute_current_dt_continuous' at runtime depending on the
+        value of 'time.dt_method'.
 
-                self.module_options.define_float(
-                    f"HYPERDISSIPATION_{component.upper()}",
-                    self.input[f"hyperdissipation.{component}"],
+        Returns
+        -------
+        bool
+            True if dt was changed, False if it stayed the same.
+        """
+
+    def _compute_current_dt_continuous(self) -> bool:
+        """
+        Computes the current time step based on the CFL condition.
+        'dt_multiplier' should be used to limit the increase in the
+        time step at each iteration.
+
+        Used if 'time.dt_method' is "continuous".
+
+        Returns
+        -------
+        bool
+            True (time step always changes)
+
+        """
+
+        # Compute new dt
+        new_dt = self.float(
+            min(
+                (
+                    self.max_cfl / self.cfl_rate_float,
+                    self.dt_max,
+                    self.current_dt * self.dt_mult_increase,
                 )
-                self.module_options.define_float(
-                    f"HYPERDISSIPATION_{component.upper()}_POWER",
-                    self.input[f"hyperdissipation.{component}_power"],
+            ),
+        )
+
+        # Assign value
+        self.current_dt = new_dt
+
+        # Continuously varying time step always changes
+        return True
+
+    def _compute_current_dt_discrete(self) -> bool:
+        """
+        Computes the current time step based on the CFL condition.
+        'dt_multiplier' should be used to limit the increase in the
+        time step at each iteration.
+
+        Used if 'time.dt_method' is "discrete".
+
+        Returns
+        -------
+        bool
+            True if dt was changed, False if it stayed the same.
+        """
+
+        # If CFL condition is violated
+        if self.cfl_rate_float * self.current_dt > self.max_cfl:
+            new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
+            flucsprint(
+                f"dt: {self.current_dt:.3e} -> "
+                f"{new_dt:.3e} (-, {self.current_step:.3e})"
+            )
+
+            self.current_dt = new_dt
+            self.sub_cfl_steps = self.int(0)
+
+            return True
+
+        # Check to see whether we can increase dt
+        elif self.sub_cfl_steps >= self.dt_mult_steps:
+            new_dt = self.float(
+                min(
+                    self.current_dt * self.dt_mult_increase,
+                    self.dt_max,
+                    self.max_cfl / self.cfl_rate_float,
+                )
+            )
+
+            if new_dt > self.current_dt:
+                flucsprint(
+                    f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
+                    f"(+, {self.current_step:.3e})"
                 )
 
-                if self.input[f"hyperdissipation.{component}_adaptive"]:
-                    self.module_options.define_flag(
-                        f"HYPERDISSIPATION_{component.upper()}_ADAPTIVE"
-                    )
-                    message += " (adaptive)"
+                self.current_dt = new_dt
+                self.sub_cfl_steps = self.int(0)
 
-                if self.input[f"hyperdissipation.{component}_normalised"]:
-                    self.module_options.define_flag(
-                        f"HYPERDISSIPATION_{component.upper()}_NORMALISED"
-                    )
-                    message += " (normalised)"
+                return True
 
-                flucsprint(message)
+        # Otherwise just continue iterating with same current_dt
+        else:
+            self.sub_cfl_steps += 1
 
-        # Forcing
-        if self.input["forcing.method"]:
-            flucsprint(f"Using forcing method: {self.input['forcing.method']}")
+        return False
 
-            self.module_options.define_flag("FORCING")
-            self.module_options.define_flag(
-                f"FORCING_METHOD_{self.input['forcing.method'].upper()}"
-            )
+    ###########################################################################
+    # Helper functions
+    ###########################################################################
 
-            if self.input["forcing.method"] in self.solver_forcing_methods:
-                self.module_options.define_flag("FORCING_FROM_SOLVER")
+    # -------------------------------------------------------------------------
+    # Wavenumbers
+    # -------------------------------------------------------------------------
 
-            if self.forcing_object.linear:
-                self.module_options.define_flag("FORCING_LINEAR")
+    def get_broadcast_wavenumbers(self):
+        """Returns wavenumber arrays broadcast to (nz, nx, half_ny)
 
-            if self.forcing_object.explicit:
-                self.module_options.define_flag("FORCING_EXPLICIT")
+        Returns
+        -------
+        kz_broadcast, kx_broadcast, ky_broadcast
+            Wavenumber arrays of shape (nz, nx, half_ny)
 
-            self.forcing_object.setup_cuda_definitions()
+        """
+        kx_broadcast = np.broadcast_to(
+            self.kx, (self.nz, self.half_ny, self.nx)
+        ).transpose(0, 2, 1)
 
-        # Setup
-        if not self.input["setup.linear"]:
-            self.module_options.define_flag("NONLINEAR")
-
-    def register_kernels(self) -> None:
-        """Registers the CUDA kernels."""
-
-        # Setup kernel parameters (grid, block, shared memory)
-        self.half_cuda_grid_size = (
-            self.half_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        self.full_cuda_grid_size = (
-            self.full_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        self.compute_linear_matrix_kernel = KernelWrapper(
-            system=self,
-            cuda_kernel_name="compute_linear_matrix",
-            grid=(self.half_cuda_grid_size,),
-            block=(self.cuda_block_size,),
+        ky_broadcast = np.broadcast_to(
+            self.ky, (self.nz, self.nx, self.half_ny)
         )
 
-        self.compute_solved_grid_mask_kernel = KernelWrapper(
-            system=self,
-            cuda_kernel_name="compute_solved_grid_mask",
-            grid=(self.half_cuda_grid_size,),
-            block=(self.cuda_block_size,),
+        kz_broadcast = np.broadcast_to(
+            self.kz, (self.half_ny, self.nx, self.nz)
+        ).transpose(2, 1, 0)
+
+        return kz_broadcast, kx_broadcast, ky_broadcast
+
+    def get_solved_grid_mask(self) -> np.ndarray:
+        """
+        Returns a mask for the solved grid.
+        """
+
+        if not hasattr(self, "solved_grid_mask"):
+            solved_grid_mask_gpu = cp.empty(
+                self.half_tuple,
+                dtype=self.float,
+            )
+            self.compute_solved_grid_mask_kernel(solved_grid_mask_gpu)
+            self.solved_grid_mask = solved_grid_mask_gpu.get()
+
+        return self.solved_grid_mask
+
+    def get_number_of_solved_modes(self, only_nonnegative_ky: bool = True) -> int:
+        """
+        Finds the number of all solved Fourier modes.
+
+        Parameters
+        ----------
+        only_nonnegative_ky : bool
+            If true, takes into account only the modes with nonnegative ky,
+            i.e., those that are directly solved for in the Fourier arrays.
+
+        Returns
+        -------
+        number_of_solved_modes: int
+            The number of solved modes
+        """
+
+        solved_grid_mask = self.get_solved_grid_mask()
+        number_of_nonnegative_ky = np.count_nonzero(solved_grid_mask > 0.5)
+
+        if only_nonnegative_ky:
+            return number_of_nonnegative_ky
+
+        number_of_zero_ky = np.count_nonzero(solved_grid_mask[:, :, 0] > 0.5)
+
+        return 2*number_of_nonnegative_ky - number_of_zero_ky
+
+    def get_solved_wavenumbers(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Returns flattened wavenumbers for the solved modes.
+
+        Returns
+        -------
+        kz, kx, ky
+            One-dimensional wavenumber arrays containing only solved modes.
+        """
+
+        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
+        kz, kx, ky = self.get_broadcast_wavenumbers()
+
+        return (
+            kz[solved_grid_mask],
+            kx[solved_grid_mask],
+            ky[solved_grid_mask],
         )
 
-        self.compute_propagator_global_kernel = KernelWrapper(
-            system=self,
-            cuda_kernel_name="compute_propagator_global",
-            grid=(self.half_cuda_grid_size,),
-            block=(self.cuda_block_size,),
+    # -------------------------------------------------------------------------
+    # Fields
+    # -------------------------------------------------------------------------
+
+    def get_fields(self, steps_before_current=0) -> cp.ndarray:
+        """
+        Returns the fields at the specified time step.
+
+        Parameters
+        ----------
+        steps_before_current : int
+            Number of steps before the current step to return.
+            0 returns the current step, 1 returns the previous step, etc.
+
+        Returns
+        -------
+        fields : cp.ndarray
+            The fields at the specified time step.
+
+        """
+
+        # TODO: Add call to function to go from shearing-frame to lab-frame
+        # fourier data when adding flowshear.
+        # Though be careful with global vs copy
+
+        index = (
+            self.current_step - int(steps_before_current)
+        ) % self.fields_history_size
+
+        return self.fields[index]
+
+    def get_restart_data(self) -> dict[str, np.ndarray]:
+        """
+        Get the complex Fourier data for the fields at the current step.
+        """
+
+        current_fields = self.get_fields()
+
+        data = (
+            cp.asnumpy(current_fields)
+            if isinstance(current_fields, cp.ndarray)
+            else np.asarray(current_fields)
         )
 
-        if self.input["dealiasing.method"] != "2/3":
-            # Phase-shifting kernels
-            self.add_phase_factors_health_check_kernel = KernelWrapper(
-                system=self,
-                cuda_kernel_name=f"add_phase_factors<1>",
-                grid=(self.half_cuda_grid_size,),
-                block=(self.cuda_block_size,),
-            )
-            self.undo_phase_factors_health_check_kernel = KernelWrapper(
-                system=self,
-                cuda_kernel_name=f"undo_phase_factors<1>",
-                grid=(self.half_cuda_grid_size,),
-                block=(self.cuda_block_size,),
-            )
+        return {
+            "fields": {
+                "data": data,
+                "dimension_names": ("number_of_fields", "nz", "nx", "half_ny"),
+            }
+        }
+
+    def get_realspace_fields_gpu(self):
+        """
+        Calculates the real-space fields at the current time step as a
+        NumPy array. The FFTs are done on the GPU to save time, but this
+        wastes some GPU memory.
+
+        The data is saved in FourierSystem.realspace_fields
+
+        """
+
+        # If not None, then we have already called it this time step
+        if self.realspace_fields is not None:
+            return
+
+        self.realspace_fields = cp.fft.irfftn(
+            self.get_fields(),
+            norm="forward",
+            axes=(1, 2, 3),
+            s=self.full_tuple,
+        ).get()
+
+    def get_realspace_fields_cpu(self):
+        """
+        Calculates the real-space fields at the current time step as a
+        NumPy array. The FFTs are done on the CPU in order to save GPU memory.
+        This makes them quite time-consuming so use this sparingly!
+
+        The data is saved in FourierSystem.realspace_fields
+
+        """
+
+        # If not None, then we have already called it this time step
+        if self.realspace_fields is not None:
+            return
+
+        # TODO: this needs to be changed if there's flow shear
+        fields_cpu_memory: np.ndarray = self.get_fields().get()
+
+        self.realspace_fields = np.fft.irfftn(
+            fields_cpu_memory,
+            norm="forward",
+            axes=(1, 2, 3),
+            s=self.full_tuple,
+        )
+
+    # -------------------------------------------------------------------------
+    # Linear matrix
+    # -------------------------------------------------------------------------
 
     def compute_linear_matrix(
         self, dt=None, time=None, step=None
@@ -1530,480 +2124,3 @@ class FourierSystem(FlucsSystem):
         self.linear_propagator = cp.asnumpy(propagator_cupy)
 
         return self.linear_propagator
-
-    def get_number_of_solved_modes(self, only_nonnegative_ky: bool = True) -> int:
-        """
-        Finds the number of all solved Fourier modes.
-
-        Parameters
-        ----------
-        only_nonnegative_ky : bool
-            If true, takes into account only the modes with nonnegative ky,
-            i.e., those that are directly solved for in the Fourier arrays.
-
-        Returns
-        -------
-        number_of_solved_modes: int
-            The number of solved modes
-        """
-
-        solved_grid_mask = self.get_solved_grid_mask()
-        number_of_nonnegative_ky = np.count_nonzero(solved_grid_mask > 0.5)
-
-        if only_nonnegative_ky:
-            return number_of_nonnegative_ky
-
-        number_of_zero_ky = np.count_nonzero(solved_grid_mask[:, :, 0] > 0.5)
-
-        return 2*number_of_nonnegative_ky - number_of_zero_ky
-
-    def get_solved_grid_mask(self) -> np.ndarray:
-        """
-        Returns a mask for the solved grid.
-        """
-
-        if not hasattr(self, "solved_grid_mask"):
-            solved_grid_mask_gpu = cp.empty(
-                self.half_tuple,
-                dtype=self.float,
-            )
-            self.compute_solved_grid_mask_kernel(solved_grid_mask_gpu)
-            self.solved_grid_mask = solved_grid_mask_gpu.get()
-
-        return self.solved_grid_mask
-
-    def get_solved_wavenumbers(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Returns flattened wavenumbers for the solved modes.
-
-        Returns
-        -------
-        kz, kx, ky
-            One-dimensional wavenumber arrays containing only solved modes.
-        """
-
-        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
-        kz, kx, ky = self.get_broadcast_wavenumbers()
-
-        return (
-            kz[solved_grid_mask],
-            kx[solved_grid_mask],
-            ky[solved_grid_mask],
-        )
-
-    def setup_initial_conditions(self) -> None:
-        """
-        Construct initial conditions on the solved Fourier modes.
-        """
-
-        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
-
-        # Set the initial conditions on solved modes
-        self._set_initial_conditions()
-
-        # Fill remainder with zeros
-        self.fields_initial = np.reshape(
-            self.fields_initial,
-            (self.number_of_fields, *self.half_tuple),
-        )
-        self.fields_initial[:, ~solved_grid_mask] = 0
-
-        # Check reality condition
-        self._check_initial_conditions()
-
-    def _set_initial_conditions(self) -> None:
-        """Generic setup for the first time step."""
-
-        # Use restart data if it was read
-        if self.restart_manager.data is not None:
-            restart_data = self.restart_manager.data
-
-            if "fields" not in restart_data:
-                raise ValueError("Restart data does not contain 'fields'.")
-
-            field_data = restart_data["fields"]["data"]
-
-            # TODO: remove when allowing for changing of sizes
-            expected_shape = (
-                self.number_of_fields,
-                self.nz,
-                self.nx,
-                self.half_ny,
-            )
-            if field_data.shape != expected_shape:
-                raise ValueError(
-                    f"Restart data has incorrect shape: "
-                    f"{field_data.shape}, "
-                    f"expected: {expected_shape}"
-                )
-
-            # Set initial field data
-            self.fields_initial = np.asarray(field_data)
-
-            return
-
-        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
-        number_of_solved_modes = np.count_nonzero(solved_grid_mask)
-
-        # Handle known initialisation methods
-        match self.input["init.method"]:
-            case "white_noise":
-                # Set random seed
-                np.random.seed(self.input["init.rand_seed"])
-
-                # Construct fields on the solved modes
-                solved_fields = self.input[
-                    "init.amplitude"
-                ] * np.random.random(
-                    (self.number_of_fields, number_of_solved_modes)
-                )
-
-            case "gaussian":
-                # Construct wavenumbers for the solved modes
-                kz, kx, ky = self.get_solved_wavenumbers()
-
-                try:
-                    k2 = sum(
-                        {"kx": kx**2, "ky": ky**2, "kz": kz**2}[component]
-                        for component in self.input["init.components"]
-                    )
-                except KeyError:
-                    raise InvalidFlucsInputFileError(
-                        "init.components entries must be one of kx, ky, or kz."
-                    )
-
-                # Envelope
-                envelope = (k2 ** self.input["init.power"]) * np.exp(
-                    -2.0 * (k2 / self.input["init.width"] ** 2)
-                )
-                envelope[k2 == 0] = 0.0
-
-                # Phase
-                phase = self.input["init.phase"]
-                if phase == "random":
-                    random = np.random.default_rng(self.input["init.rand_seed"])
-                    angle = random.uniform(
-                        0.0,
-                        2.0 * np.pi,
-                        size=(self.number_of_fields, number_of_solved_modes),
-                    )
-                else:
-                    angle = self.float(phase) / (2.0 * np.pi)
-
-                # Normalise fields to the requested amplitude
-                solved_fields = (
-                    envelope[None, :] * np.exp(1j * angle)
-                ).astype(self.complex)
-
-                norm = np.sqrt(np.sum(np.abs(solved_fields) ** 2))
-
-                solved_fields *= self.input["init.amplitude"] / norm
-
-            case _:
-                raise InvalidFlucsInputFileError(
-                    f"Invalid init.method: {self.input['init.method']}."
-                )
-                pass
-
-        # Embed the solved modes in the full Fourier grid
-        self.fields_initial = np.zeros(
-            (self.number_of_fields, *self.half_tuple),
-            dtype=self.complex,
-        )
-        self.fields_initial[:, solved_grid_mask] = solved_fields
-
-    def _check_initial_conditions(self) -> None:
-        """
-        Ensures that the initial conditions satisfy the reality condition
-        field[-ikz, -ikx, 0] = conj(field[ikz, ikx, 0]) for all ikx and ikz.
-        """
-
-        solved_grid_mask = self.get_solved_grid_mask().astype(bool)
-
-        fields_initial = self.fields_initial.reshape(
-            (self.number_of_fields, *self.half_tuple)
-        )
-
-        # The ky=0 modes are the ones that need to be checked
-        fields_initial_ky0 = fields_initial[:, :, :, 0]
-        solved_grid_mask_ky0 = solved_grid_mask[:, :, 0]
-
-        conjugate_ikz = (-np.arange(self.nz)) % self.nz
-        conjugate_ikx = (-np.arange(self.nx)) % self.nx
-        conjugate_mask_ky0 = solved_grid_mask_ky0[
-            conjugate_ikz[:, None], conjugate_ikx[None, :]
-        ]
-
-        # If not restarting, enforce the reality condition
-        if self.restart_manager.data is None:
-            # Enforce conjugate symmetry
-            conjugate_fields = np.conj(
-                fields_initial_ky0[
-                    :,
-                    conjugate_ikz[:, None],
-                    conjugate_ikx[None, :],
-                ]
-            )
-            fields_initial_ky0[:] = 0.5 * (
-                fields_initial_ky0 + conjugate_fields
-            )
-            fields_initial_ky0[:, ~solved_grid_mask_ky0] = 0
-            self.fields_initial = fields_initial
-
-        # Calculate and report error
-        conjugate_fields = np.conj(
-            fields_initial_ky0[
-                :,
-                conjugate_ikz[:, None],
-                conjugate_ikx[None, :],
-            ]
-        )
-        error = np.nanmax(
-            np.abs(fields_initial_ky0 - conjugate_fields)[
-                :, solved_grid_mask_ky0
-            ]
-        )
-        flucsprint(f"Init. condition reality error: {error:.3e}")
-
-    def get_restart_data(self) -> dict[str, np.ndarray]:
-        """
-        Get the complex Fourier data for the fields at the current step.
-        """
-
-        current_fields = self.get_fields()
-
-        data = (
-            cp.asnumpy(current_fields)
-            if isinstance(current_fields, cp.ndarray)
-            else np.asarray(current_fields)
-        )
-
-        return {
-            "fields": {
-                "data": data,
-                "dimension_names": ("number_of_fields", "nz", "nx", "half_ny"),
-            }
-        }
-
-    def _compute_current_dt(self) -> bool:
-        """
-        Computes the current time step based on the CFL condition.
-        Will be set to either 'compute_current_dt_discrete' or
-        'compute_current_dt_continuous' at runtime depending on the
-        value of 'time.dt_method'.
-
-        Returns
-        -------
-        bool
-            True if dt was changed, False if it stayed the same.
-        """
-
-    def _compute_current_dt_continuous(self) -> bool:
-        """
-        Computes the current time step based on the CFL condition.
-        'dt_multiplier' should be used to limit the increase in the
-        time step at each iteration.
-
-        Used if 'time.dt_method' is "continuous".
-
-        Returns
-        -------
-        bool
-            True (time step always changes)
-
-        """
-
-        # Compute new dt
-        new_dt = self.float(
-            min(
-                (
-                    self.max_cfl / self.cfl_rate_float,
-                    self.dt_max,
-                    self.current_dt * self.dt_mult_increase,
-                )
-            ),
-        )
-
-        # Assign value
-        self.current_dt = new_dt
-
-        # Continuously varying time step always changes
-        return True
-
-    def _compute_current_dt_discrete(self) -> bool:
-        """
-        Computes the current time step based on the CFL condition.
-        'dt_multiplier' should be used to limit the increase in the
-        time step at each iteration.
-
-        Used if 'time.dt_method' is "discrete".
-
-        Returns
-        -------
-        bool
-            True if dt was changed, False if it stayed the same.
-        """
-
-        # If CFL condition is violated
-        if self.cfl_rate_float * self.current_dt > self.max_cfl:
-            new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
-            flucsprint(
-                f"dt: {self.current_dt:.3e} -> "
-                f"{new_dt:.3e} (-, {self.current_step:.3e})"
-            )
-
-            self.current_dt = new_dt
-            self.sub_cfl_steps = self.int(0)
-
-            return True
-
-        # Check to see whether we can increase dt
-        elif self.sub_cfl_steps >= self.dt_mult_steps:
-            new_dt = self.float(
-                min(
-                    self.current_dt * self.dt_mult_increase,
-                    self.dt_max,
-                    self.max_cfl / self.cfl_rate_float,
-                )
-            )
-
-            if new_dt > self.current_dt:
-                flucsprint(
-                    f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
-                    f"(+, {self.current_step:.3e})"
-                )
-
-                self.current_dt = new_dt
-                self.sub_cfl_steps = self.int(0)
-
-                return True
-
-        # Otherwise just continue iterating with same current_dt
-        else:
-            self.sub_cfl_steps += 1
-
-        return False
-
-    def _update_dt(self) -> bool:
-        """
-        Updates the time step based on the CFL condition.
-
-        Returns
-        -------
-        dt_changed : bool
-            True if dt was changed, False if it stayed the same.
-
-        """
-
-        self.cfl_rate_float = self.float(cp.asnumpy(self.cfl_rate[0]))
-
-        dt_changed = self._compute_current_dt()
-        if self.current_dt < self.dt_min:
-            flucsprint(
-                f"({self.current_step}) Required time step "
-                f"{self.current_dt:.3e} is below dt_min. Exiting."
-            )
-            self.solver.interrupted = True
-
-        self.current_cfl = self.cfl_rate_float * self.current_dt
-        self.adaptive_rate = self.float(1.0) / self.current_dt
-
-        return dt_changed
-
-    def get_fields(self, steps_before_current=0) -> cp.ndarray:
-        """
-        Returns the fields at the specified time step.
-
-        Parameters
-        ----------
-        steps_before_current : int
-            Number of steps before the current step to return.
-            0 returns the current step, 1 returns the previous step, etc.
-
-        Returns
-        -------
-        fields : cp.ndarray
-            The fields at the specified time step.
-
-        """
-
-        # TODO: Add call to function to go from shearing-frame to lab-frame
-        # fourier data when adding flowshear.
-        # Though be careful with global vs copy
-
-        index = (
-            self.current_step - int(steps_before_current)
-        ) % self.fields_history_size
-
-        return self.fields[index]
-
-    def get_realspace_fields_gpu(self):
-        """
-        Calculates the real-space fields at the current time step as a
-        NumPy array. The FFTs are done on the GPU to save time, but this
-        wastes some GPU memory.
-
-        The data is saved in FourierSystem.realspace_fields
-
-        """
-
-        # If not None, then we have already called it this time step
-        if self.realspace_fields is not None:
-            return
-
-        self.realspace_fields = cp.fft.irfftn(
-            self.get_fields(),
-            norm="forward",
-            axes=(1, 2, 3),
-            s=self.full_tuple,
-        ).get()
-
-    def get_realspace_fields_cpu(self):
-        """
-        Calculates the real-space fields at the current time step as a
-        NumPy array. The FFTs are done on the CPU in order to save GPU memory.
-        This makes them quite time-consuming so use this sparingly!
-
-        The data is saved in FourierSystem.realspace_fields
-
-        """
-
-        # If not None, then we have already called it this time step
-        if self.realspace_fields is not None:
-            return
-
-        # TODO: this needs to be changed if there's flow shear
-        fields_cpu_memory: np.ndarray = self.get_fields().get()
-
-        self.realspace_fields = np.fft.irfftn(
-            fields_cpu_memory,
-            norm="forward",
-            axes=(1, 2, 3),
-            s=self.full_tuple,
-        )
-
-    def begin_time_step(self) -> None:
-        """
-        Executed in the beginning of the time step.
-        Can be overriden to advance any system-specific counters.
-
-        """
-        # Set this to None so that get_realspace_fields_*() knows
-        # whether it has already been called. Saves some time.
-        self.realspace_fields = None
-
-    @abstractmethod
-    def compute_nonlinear_terms(self, fields: cp.ndarray) -> None:
-        """
-        Computes the nonlinear terms for the supplied fields.
-
-        """
-
-    def finish_time_step(self) -> None:
-        """
-        Executed at the end of the time step.
-
-        """
-        pass

@@ -119,8 +119,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             # Perform a step
             self.timestepper.execute_timestep()
 
-            # Update current_time to reflect the time
-            # of current_step
+            # Update current_time to reflect the time of current_step
             self.system.current_time += self.system.current_dt
 
             # System-specific end-of-step hook
@@ -130,9 +129,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             self.system.execute_diagnostics()
             self.system.write_output()
             self.system.restart_manager.write_restart()
+
         end_time = time.time()
 
-        # One final write
+        # Force a final write
         self.system.execute_diagnostics(force=True)
         self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
