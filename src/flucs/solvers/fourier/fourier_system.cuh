@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cupy/complex.cuh>
-#include <math_constants.h>
 
 // Deal with float types
 #ifdef DOUBLE_PRECISION
@@ -13,7 +12,7 @@
     #define flucs_cos(x) cos(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
-    #define FLUCS_PI CUDART_PI
+    #define FLUCS_PI ((FLUCS_FLOAT)3.141592653589793115997963468544185161590576171875)
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
@@ -23,7 +22,7 @@
     #define flucs_cos(x) cosf(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
-    #define FLUCS_PI CUDART_PI_F
+    #define FLUCS_PI ((FLUCS_FLOAT)3.1415927410125732421875)
 #endif
 
 #define FLUCS_COMPLEX complex<FLUCS_FLOAT>
