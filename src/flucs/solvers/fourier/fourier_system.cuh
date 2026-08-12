@@ -239,7 +239,6 @@ __global__ void add_phase_factors(
     const FLUCS_COMPLEX phase_shift_factor = 
         get_phase_shift_factor(ikz, ikx, iky);
 
-
     #pragma unroll 
     for (int i = 0; i < N; i++) {
         array_shifted_global[i][index] = array_global[i][index] * phase_shift_factor;

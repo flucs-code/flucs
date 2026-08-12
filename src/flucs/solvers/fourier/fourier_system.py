@@ -28,8 +28,6 @@ from .fourier_system_diagnostics import (
 from .fourier_system_forcing import FourierSystemForcing
 
 
-# Used for debugging for now, should refactor in a more
-# maintainable way
 def dealiased_multiplication_rfft(*args, **kwargs):
     """
     Returns the real DFT (see rfft docs of numpy/scipy) of the product in real space
@@ -250,7 +248,6 @@ class FourierSystem(FlucsSystem):
                     "true if time.dt_method = 'continuous'."
                 )
             flucsprint("Using continuous time stepping.")
-
         else:
             raise InvalidFlucsInputFileError(
                 f"Invalid time.dt_method: {self.input['time.dt_method']}. "
@@ -267,7 +264,8 @@ class FourierSystem(FlucsSystem):
                 "and hyperdissipation.kx/ky simultaneously. "
                 "Use either kperp or kx/ky. "
             )
-        # Figure out how we will be dealiasing
+
+        # Check for the dialiasing method
         match self.input["dealiasing.method"]:
             case "2/3":
                 self._setup_two_thirds_dealiasing()
@@ -279,6 +277,21 @@ class FourierSystem(FlucsSystem):
                     f"{self.input['dealiasing.method']}"
                 )
 
+        # Report equivalent grid, if applicable
+        message = f"Using dealiasing method: {self.input['dealiasing.method']}"
+
+        if (
+            self.input["dealiasing.method"],
+            self.input["dealiasing.phase_shift_truncation"],
+        ) != ("phase-shift", "optimal"):
+            message += (
+                " [equivalent unpadded grid (nz, nx, ny) = "
+                f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})]"
+            )
+
+        flucsprint(message)
+
+        # Assign total sizes and half sizes
         self.half_size = self.nz * self.nx * self.half_ny
         self.half_tuple = (self.nz, self.nx, self.half_ny)
 
@@ -332,10 +345,6 @@ class FourierSystem(FlucsSystem):
 
                     half_n = n // 2 + 1
 
-                    flucsprint(
-                        f"Found n{dim} = {n} for n{dim}_unpadded = {n_unpadded}"
-                    )
-
                 case (False, True):
                     # Given a padded_n, it's easiest to figure out half_n
 
@@ -349,10 +358,6 @@ class FourierSystem(FlucsSystem):
 
                     half_n_unpadded = _x + 1
                     n_unpadded = 2 * _x + 1
-
-                    flucsprint(
-                        f"Found n{dim}_unpadded = {n_unpadded} for n{dim} = {n}"
-                    )
 
                 case (False, False):
                     raise ValueError(
@@ -379,17 +384,32 @@ class FourierSystem(FlucsSystem):
                         "Optimal phase-shift truncation is implemented"
                         "only for quadratic nonlinearities."
                     )
-                self.module_options.define_flag(
-                    "PHASE_SHIFT_OPTIMAL",
-                )
+                self.module_options.define_flag("PHASE_SHIFT_OPTIMAL")
+
             case "spherical":
-                self.module_options.define_flag(
-                    "PHASE_SHIFT_SPHERICAL",
-                )
-                dealiasing_radius = np.sqrt(
-                    self._choose_dealiasing_radius()
+                self.module_options.define_flag("PHASE_SHIFT_SPHERICAL")
+                
+                # Set dealiasing radius
+                if self.input["dealiasing.radius_squared"] > 0:
+                    radius_squared = self.input["dealiasing.radius_squared"]
+                else:
+                    # Set to largest multiple of 1/scale that is strictly below
+                    # the theoretical limit of 2/(nonlinear_order + 1)^2
+                    denominator = (
+                        self.input["dealiasing.nonlinear_order"] + 1
+                    )**2
+
+                    scale = 1000
+                    radius_squared = ((2 * scale - 1) // denominator) / scale
+
+                self.module_options.define_float(
+                    "DEALIASING_RADIUS_SQUARED",
+                    radius_squared,
                 )
 
+                dealiasing_radius = np.sqrt(radius_squared)
+
+        # Calculate dimensions in each direction
         for dim in ["z", "x", "y"]:
             n = self.input[f"dimensions.n{dim}"]
 
@@ -409,35 +429,12 @@ class FourierSystem(FlucsSystem):
                 # Find equivalent unpadded
                 half_n_unpadded = int(half_n * (2 * dealiasing_radius))
                 n_unpadded = 2 * half_n_unpadded - 1
+
                 setattr(self, f"n{dim}_unpadded", n_unpadded)
                 setattr(self, f"half_n{dim}_unpadded", half_n_unpadded)
             else:
                 setattr(self, f"n{dim}_unpadded", n)
                 setattr(self, f"half_n{dim}_unpadded", half_n)
-
-    def _choose_dealiasing_radius(self):
-        if self.input["dealiasing.radius_squared"] > 0:
-            return
-
-        denominator = (
-            self.input["dealiasing.nonlinear_order"] + 1
-        )**2
-
-        # Round to three decimals
-        scale = 1000
-
-        radius_squared = ((2 * scale - 1) // denominator) / scale
-
-        flucsprint(
-            f"Using dealiasing radius^2 = {radius_squared}",
-        )
-
-        self.module_options.define_float(
-            "DEALIASING_RADIUS_SQUARED",
-            radius_squared,
-        )
-
-        return radius_squared
 
     def _setup_forcing(self):
         """Sets up the forcing method."""
@@ -590,6 +587,12 @@ class FourierSystem(FlucsSystem):
         find_derivatives_function: Callable = lambda *args: None,
         find_real_bits_function: Callable = lambda *args: None,
     ):
+        """
+        Function that allows systems to create their own df_derivatives_operation.
+        This is a simple wrapper for create_dealiased_operation that sets the 
+        appropriate arguments for FourierSystem.
+        """
+
         return self.create_dealiased_operation(
             n_in=self.number_of_dft_derivatives,
             n_out=self.number_of_dft_bits,
@@ -614,6 +617,28 @@ class FourierSystem(FlucsSystem):
         first_function: Callable = lambda *args: None,
         second_function: Callable = lambda *args: None,
     ):
+        """
+        Builds a dealiased Fourier-to-real-to-Fourier operation.
+
+        first_function constructs n_in Fourier-space intermediate arrays
+        from the supplied input. After inverse FFTs, second_function constructs
+        n_out real-space products. Forward FFTs place the result in the output
+        array.
+
+        For 2/3 dealiasing the pipeline is evaluated once on the padded grid. 
+        For phase-shift dealiasing it is evaluated on both the original and 
+        half-cell-shifted grids; the shifted result is unshifted and averaged 
+        with the original result.
+
+        The returned callable has the signature::
+
+            operation(dt, time, step, input_array, output_array, calculate_cfl)
+
+        When ``combine_arrays`` is true, intermediate input and output storage may
+        alias, so ``second_function`` must read values before overwriting them.
+        """
+
+        # Create the cuFFT plans for the forward and backward transforms
         plan_c2r = self.create_standard_real_cufft_plan(
             fft_type="c2r",
             batch_size=n_in,
@@ -625,7 +650,16 @@ class FourierSystem(FlucsSystem):
         )
 
         if self.input["dealiasing.method"] == "2/3":
-            def dealiased_operation(current_dt, current_time, current_step, input_array, output_array, calculate_cfl):
+            def dealiased_operation(
+                current_dt, 
+                current_time, 
+                current_step, 
+                input_array, 
+                output_array, 
+                calculate_cfl
+                ):
+
+                # Input fourier fields -> Fourier intermediate quantities
                 first_function(
                     current_dt,
                     current_time,
@@ -634,12 +668,14 @@ class FourierSystem(FlucsSystem):
                     first_fourier,
                 )
 
+                # Fourier intermediate quantities -> real-space ...
                 plan_c2r.fft(
                     first_fourier,
                     first_real,
                     cufft.CUFFT_INVERSE,
                 )
 
+                # Real-space intermediate quantities -> real-space products
                 second_function(
                     current_dt,
                     current_time,
@@ -648,6 +684,8 @@ class FourierSystem(FlucsSystem):
                     second_real,
                     calculate_cfl,
                 )
+
+                # Real-space products -> Fourier output fields
                 plan_r2c.fft(
                     second_real,
                     output_array,
@@ -698,7 +736,15 @@ class FourierSystem(FlucsSystem):
                     dtype=self.float,
                 )
 
-            def dealiased_operation(current_dt, current_time, current_step, input_array, output_array, calculate_cfl):
+            def dealiased_operation(
+                current_dt, 
+                current_time, 
+                current_step, 
+                input_array,
+                output_array, 
+                calculate_cfl
+            ):
+                # Input fourier fields -> Fourier intermediate quantities
                 first_function(
                     current_dt,
                     current_time,
@@ -707,12 +753,19 @@ class FourierSystem(FlucsSystem):
                     first_fourier,
                 )
 
-                self.add_phase_factors_kernel(first_fourier, first_fourier_shifted)
+                # Fourier intermediates -> shifted Fourier intermediates
+                self.add_phase_factors_kernel(
+                    first_fourier, first_fourier_shifted
+                )
+
+                # Fourier intermediates -> real-space intermediates
                 plan_c2r.fft(
                     first_fourier,
                     first_real,
                     cufft.CUFFT_INVERSE,
                 )
+
+                # Real-space intermediate quantities -> real-space products
                 second_function(
                     current_dt,
                     current_time,
@@ -722,12 +775,14 @@ class FourierSystem(FlucsSystem):
                     calculate_cfl,
                 )
 
+                # Shifted Fourier intermediates -> shifted real-space intermediates
                 plan_c2r.fft(
                     first_fourier_shifted,
                     first_real_shifted,
                     cufft.CUFFT_INVERSE,
                 )
 
+                # Shifted real-space intermediates -> shifted real-space products
                 second_function(
                     current_dt,
                     current_time,
@@ -737,20 +792,24 @@ class FourierSystem(FlucsSystem):
                     False,
                 )
 
+                # Real-space products -> Fourier output fields
                 plan_r2c.fft(
                     second_real,
                     output_array,
                     cufft.CUFFT_INVERSE,
                 )
 
-                # reuse shifted fourier array
+                # Shifted real-space products -> shifted Fourier output fields
                 plan_r2c.fft(
                     second_real_shifted,
                     first_fourier_shifted,
                     cufft.CUFFT_INVERSE,
                 )
 
-                self.undo_phase_factors_kernel(output_array, first_fourier_shifted)
+                # Shifted and unshifted Fourier outputs -> dealiased output
+                self.undo_phase_factors_kernel(
+                    output_array, first_fourier_shifted
+                )
 
         return dealiased_operation
 
@@ -758,23 +817,36 @@ class FourierSystem(FlucsSystem):
         self, fft_type: str, batch_size: int
     ):
         """
-        Returns a CuFFT plan for real-to-complex ("r2c") or
-        complex-to-real ("c2r") transforms for data of standard FourierSystem
-        shape (batch, nz, nx, ny).
+        Create a reusable batched 3D real cuFFT plan for the FourierSystem grid.
+
+        The plan transforms contiguous arrays with a leading batch dimension:
+
+            c2r: (batch, nz, nx, half_ny) -> (batch, nz, nx, ny)
+            r2c: (batch, nz, nx, ny)      -> (batch, nz, nx, half_ny)
+
+        cuFFT transforms are unnormalised; callers must apply any required 
+        normalisation separately.
 
         Parameters
         ----------
-        type : str
-            Type of the FFT. Can be "c2r" or "r2c".
+        fft_type : {"c2r", "r2c"}
+            Direction and real/complex layout of the transform.
         batch_size : int
-            Numbers of FFTs in the batch.
+            Number of independent 3D transforms performed by the plan.
+
+        Returns
+        -------
+        cupy.cuda.cufft.PlanNd
+            A reusable plan for the requested batched transform.
         """
 
+        # Sizes
         nz = self.nz
         nx = self.nx
         ny = self.ny
         half_ny = self.half_ny
 
+        # Shapes and tuples for the transform
         shape = (nz, nx, ny)
         istride = 1
         ostride = 1
@@ -783,6 +855,7 @@ class FourierSystem(FlucsSystem):
         real_embed = (1, nx, ny)
         real_dist = nz * nx * ny
 
+        # Complex to real
         if fft_type == "c2r":
             inembed = compex_embed
             onembed = real_embed
@@ -790,6 +863,8 @@ class FourierSystem(FlucsSystem):
             odist = real_dist
             fft_type = self.fft_c2r_plan_type
             last_size = ny
+
+        # Real to complex
         elif fft_type == "r2c":
             inembed = real_embed
             onembed = compex_embed
@@ -800,6 +875,7 @@ class FourierSystem(FlucsSystem):
         else:
             raise ValueError("fft_type must be c2r or r2c.")
 
+        # Create plan
         return cufft.PlanNd(
             shape=shape,
             istride=istride,
@@ -940,52 +1016,30 @@ class FourierSystem(FlucsSystem):
         Alerts the user if anything needs their attention.
         """
 
-        self._check_linear_matrix()
         self._check_dealiasing()
+        self._check_linear_matrix()
 
     def _check_dealiasing(self) -> None:
-        all_active_modes = self.number_of_active_modes(
+        # Find all active modes
+        all_solved_modes = self.get_number_of_solved_modes(
             only_nonnegative_ky=False
         )
-        active_fraction = 100 * (all_active_modes / self.full_size)
+        solved_fraction = 100 * (all_solved_modes / self.full_size)
 
-        match self.input["dealiasing.method"]:
-            case "2/3":
-                flucsprint(
-                    f"2/3 dealiasing with {all_active_modes} active modes, "
-                    f"{active_fraction:.2f}% "
-                    f"out of {self.full_size} total modes.",
-                    source=self,
-                    message_type="info",
-                )
-                flucsprint(
-                    "Unpadded grid is (nz, nx, ny) = "
-                    f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})."
-                )
-            case "phase-shift":
-                flucsprint(
-                    f"Phase-shift dealiasing with {all_active_modes} active modes, "
-                    f"{active_fraction:.2f}% "
-                    f"out of {self.full_size} total modes.",
-                    source=self,
-                    message_type="info",
-                )
-
-                if (
-                    self.input["dealiasing.phase_shift_truncation"]
-                    == "spherical"
-                ):
-
-                    flucsprint(
-                        "Approx. equivalent unpadded grid is (nz, nx, ny) = "
-                        f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})."
-                    )
+        print(
+            f"Total number of solved modes: {all_solved_modes} / "
+            f"{self.full_size} ({solved_fraction:.2f}%)"
+        )
 
         if self.input["dealiasing.method"] == "2/3":
             return
 
         if not self.input["dealiasing.check_errors"]:
             return
+
+        #TODO a test of the dealiasing boundaries should be written, in which
+        # the padded values or radius are changed, and all of this code moved into
+        # said function. This should be both for 2/3 and phase-shifted dealiasing.
 
         solved_modes_mask = self.get_solved_grid_mask()
 
@@ -1477,9 +1531,9 @@ class FourierSystem(FlucsSystem):
 
         return self.linear_propagator
 
-    def number_of_active_modes(self, only_nonnegative_ky: bool = True) -> int:
+    def get_number_of_solved_modes(self, only_nonnegative_ky: bool = True) -> int:
         """
-        Finds the number of all active Fourier modes.
+        Finds the number of all solved Fourier modes.
 
         Parameters
         ----------
@@ -1489,8 +1543,8 @@ class FourierSystem(FlucsSystem):
 
         Returns
         -------
-        number_of_active_modes: int
-            The number of active modes
+        number_of_solved_modes: int
+            The number of solved modes
         """
 
         solved_grid_mask = self.get_solved_grid_mask()
