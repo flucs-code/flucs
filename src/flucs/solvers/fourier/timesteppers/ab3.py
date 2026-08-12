@@ -89,14 +89,14 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         self.precompute_iteration_matrices_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="precompute_iteration_matrices",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
 
         self.finish_step_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="finish_step",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
 
@@ -108,7 +108,14 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         previous_fields = system.get_fields(1)
 
         if self.is_nonlinear:
-            system.compute_nonlinear_terms(previous_fields)
+            system.cfl_rate[0] = 0
+            system.compute_nonlinear_terms(
+                system.float(system.current_dt),
+                system.float(system.current_time),
+                system.int(system.current_step),
+                previous_fields,
+                True,
+            )
 
             if system._update_dt():
                 self.precompute_iteration_matrices()
