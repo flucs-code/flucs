@@ -333,12 +333,12 @@ class FourierSystem(FlucsSystem):
         message = f"Using dealiasing method: {self.input['dealiasing.method']}"
 
         if self.input["dealiasing.method"] == "phase-shift":
-            message += f" ({self.input['dealiasing.phase_shift_truncation']})"
+            message += f" ({self.input['dealiasing.truncation']})"
 
         if (
             self.input["dealiasing.method"],
-            self.input["dealiasing.phase_shift_truncation"],
-        ) != ("phase-shift", "optimal"):
+            self.input["dealiasing.truncation"],
+        ) != ("phase-shift", "maximal"):
             message += (
                 " [equivalent unpadded grid (nz, nx, ny) = "
                 f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})]"
@@ -436,14 +436,14 @@ class FourierSystem(FlucsSystem):
     def _setup_phase_shift_dealiasing(self):
         self.module_options.define_flag("PHASE_SHIFT_DEALIASING")
 
-        match self.input["dealiasing.phase_shift_truncation"]:
-            case "optimal":
+        match self.input["dealiasing.truncation"]:
+            case "maximal":
                 if self.input["dealiasing.nonlinear_order"] != 2:
                     raise InvalidFlucsInputFileError(
-                        "Optimal phase-shift truncation is implemented"
+                        "Maximal phase-shift truncation is implemented "
                         "only for quadratic nonlinearities."
                     )
-                self.module_options.define_flag("PHASE_SHIFT_OPTIMAL")
+                self.module_options.define_flag("PHASE_SHIFT_MAXIMAL")
 
             case "spherical":
                 self.module_options.define_flag("PHASE_SHIFT_SPHERICAL")
@@ -482,7 +482,7 @@ class FourierSystem(FlucsSystem):
             setattr(self, f"half_n{dim}", half_n)
 
             if (
-                self.input["dealiasing.phase_shift_truncation"]
+                self.input["dealiasing.truncation"]
                 == "spherical"
             ):
                 # Find equivalent unpadded

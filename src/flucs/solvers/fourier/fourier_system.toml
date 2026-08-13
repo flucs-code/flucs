@@ -54,9 +54,9 @@ padded_primes = [2, 3]
 #
 # There are two options:
 # 1. "spherical" for a truncation at |q|^2 < radius_squared
-# 2. "optimal" for a truncation at |q_i| + |q_j| < 2/3,
+# 2. "maximal" for a truncation at |q_i| + |q_j| < 2/3,
 #    valid only for nonlinear_order = 2
-phase_shift_truncation = "optimal"
+truncation = "maximal"
 
 # Dealiasing radius^2 for the phase-shift method.
 # The optimal value is 2/9 ~ 0.222
