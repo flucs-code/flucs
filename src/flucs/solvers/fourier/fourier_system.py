@@ -332,6 +332,9 @@ class FourierSystem(FlucsSystem):
         # Report equivalent grid, if applicable
         message = f"Using dealiasing method: {self.input['dealiasing.method']}"
 
+        if self.input["dealiasing.method"] == "phase-shift":
+            message += f" ({self.input['dealiasing.phase_shift_truncation']})"
+
         if (
             self.input["dealiasing.method"],
             self.input["dealiasing.phase_shift_truncation"],
