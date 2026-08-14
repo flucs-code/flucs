@@ -320,6 +320,10 @@ class FourierSystem(FlucsSystem):
         # Check for the dialiasing method
         match self.input["dealiasing.method"]:
             case "2/3":
+                if self.input["dealiasing.low_memory"]:
+                    raise InvalidFlucsInputFileError(
+                        "Low memory is not available for 2/3 dealiasing."
+                    )
                 self._setup_two_thirds_dealiasing()
             case "phase-shift":
                 self._setup_phase_shift_dealiasing()
@@ -487,8 +491,11 @@ class FourierSystem(FlucsSystem):
                 self.input["dealiasing.truncation"]
                 == "spherical"
             ):
-                # Find equivalent unpadded
-                half_n_unpadded = int(half_n * (2 * dealiasing_radius))
+                # Find equivalent unpadded (handle edge case for n=1)
+                half_n_unpadded = max(
+                    1,
+                    int(half_n * (2 * dealiasing_radius)),
+                )
                 n_unpadded = 2 * half_n_unpadded - 1
 
                 setattr(self, f"n{dim}_unpadded", n_unpadded)
@@ -1682,7 +1689,14 @@ class FourierSystem(FlucsSystem):
         self.realspace_fields = None
 
     @abstractmethod
-    def compute_nonlinear_terms(self, fields: cp.ndarray) -> None:
+    def compute_nonlinear_terms(
+        self,
+        current_dt,
+        current_time,
+        current_step,
+        fields: cp.ndarray,
+        calculate_cfl: bool,
+        ) -> None:
         """
         Computes the nonlinear terms for the supplied fields.
 
