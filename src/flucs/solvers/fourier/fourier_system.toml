@@ -31,22 +31,22 @@ Lz = -1.0
 
 [dealiasing]
 # Currently supported methods are
-# 1. "2/3" for standard zero padding in all dimensions
+# 1. "two-thirds" for standard zero padding in all dimensions
 # 2. "phase-shift" for isotropic phase-shifts
-method = "2/3"
+method = "two-thirds"
 
 # Order of the nonlinear terms that need dealiasing
 nonlinear_order = 2
 
 # These can be used to override the unpadded grid
-# for 2/3 dealiasing for a smaller/larger padding
+# for two-thirds dealiasing for a smaller/larger padding
 # Ignored for the phase-shift method
 nx_unpadded = -1
 ny_unpadded = -1
 nz_unpadded = -1
 
 # Prime numbers for determining padded grids
-# for 2/3 dealiasing from their unpadded values
+# for two-thirds dealiasing from their unpadded values
 padded_primes = [2, 3]
 
 # Phase-shift dealiasing needs a truncation in q_i space, where the

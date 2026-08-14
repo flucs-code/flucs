@@ -227,6 +227,7 @@ class FourierSystem(FlucsSystem):
     compute_linear_matrix_kernel: KernelWrapper
     compute_propagator_global_kernel: KernelWrapper
     compute_solved_grid_mask_kernel: KernelWrapper
+    compute_hyperdissipation_kmax_kernel: KernelWrapper
     cuda_block_size: int = 512
 
     # CUDA grids
@@ -319,10 +320,10 @@ class FourierSystem(FlucsSystem):
 
         # Check for the dialiasing method
         match self.input["dealiasing.method"]:
-            case "2/3":
+            case "two-thirds":
                 if self.input["dealiasing.low_memory"]:
                     raise InvalidFlucsInputFileError(
-                        "Low memory is not available for 2/3 dealiasing."
+                        "Low memory is not available for two-thirds dealiasing."
                     )
                 self._setup_two_thirds_dealiasing()
             case "phase-shift":
@@ -903,6 +904,13 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
+        self.compute_hyperdissipation_kmax_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_hyperdissipation_kmax",
+            grid=(1,),
+            block=(1,),
+        )
+
         self.compute_propagator_global_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="compute_propagator_global",
@@ -910,7 +918,7 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
-        if self.input["dealiasing.method"] != "2/3":
+        if self.input["dealiasing.method"] != "two-thirds":
             # Phase-shifting kernels
             self.add_phase_factors_health_check_kernel = KernelWrapper(
                 system=self,
@@ -924,6 +932,16 @@ class FourierSystem(FlucsSystem):
                 grid=(self.half_cuda_grid_size,),
                 block=(self.cuda_block_size,),
             )
+
+    def setup_kernels(self) -> None:
+        """
+        Binds the CUDA kernels and computes solved-grid properties.
+        """
+
+        super().setup_kernels()
+
+        # Compute hyperdissipation values
+        self.compute_hyperdissipation_kmax_kernel()
 
     # -------------------------------------------------------------------------
     # Dealiased operations
@@ -972,10 +990,10 @@ class FourierSystem(FlucsSystem):
         n_out real-space products. Forward FFTs place the result in the output
         array.
 
-        For 2/3 dealiasing the pipeline is evaluated once on the padded grid. 
-        For phase-shift dealiasing it is evaluated on both the original and 
-        half-cell-shifted grids; the shifted result is unshifted and averaged 
-        with the original result.
+        For two-thirds dealiasing the pipeline is evaluated once on the padded 
+        grid.  For phase-shift dealiasing it is evaluated on both the original 
+        and half-cell-shifted grids; the shifted result is unshifted and 
+        averaged with the original result.
 
         The returned callable has the signature::
 
@@ -996,7 +1014,7 @@ class FourierSystem(FlucsSystem):
             batch_size=n_out,
         )
 
-        if self.input["dealiasing.method"] == "2/3":
+        if self.input["dealiasing.method"] == "two-thirds":
             def dealiased_operation(
                 current_dt, 
                 current_time, 
@@ -1505,7 +1523,7 @@ class FourierSystem(FlucsSystem):
             f"{self.full_size} ({solved_fraction:.2f}%)"
         )
 
-        if self.input["dealiasing.method"] == "2/3":
+        if self.input["dealiasing.method"] == "two-thirds":
             return
 
         if not self.input["dealiasing.check_errors"]:
@@ -1513,7 +1531,7 @@ class FourierSystem(FlucsSystem):
 
         #TODO a test of the dealiasing boundaries should be written, in which
         # the padded values or radius are changed, and all of this code moved into
-        # said function. This should be both for 2/3 and phase-shifted dealiasing.
+        # said function. This should be both for two-thirds and phase-shifted dealiasing.
 
         solved_modes_mask = self.get_solved_grid_mask()
 
