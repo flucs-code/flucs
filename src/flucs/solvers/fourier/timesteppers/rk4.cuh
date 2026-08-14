@@ -419,7 +419,7 @@ __global__ void finish_stage(
         }
 
         complete_finish_step(
-            index, dt, current_time + dt, current_step, current_fields_global
+            index, dt, current_time + dt, current_step, previous_fields_global, current_fields_global
         );
     }
 

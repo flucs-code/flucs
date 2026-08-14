@@ -179,17 +179,29 @@ __device__ __forceinline__ void complete_timestep_stage(
 ) {}
 #endif
 
+
 // Function for end-of-timestep operations
+#ifdef COMPLETE_TIMESTEP
 __device__ __forceinline__
 void complete_finish_step(
     const size_t index,
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
-) {
-    ;
-}
+);
+#else
+__device__ __forceinline__
+void complete_finish_step(
+    const size_t index,
+    const FLUCS_FLOAT dt,
+    const FLUCS_FLOAT current_time,
+    const long long current_step,
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+) {}
+#endif
 
 } // extern "C"
 
