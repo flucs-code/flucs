@@ -405,7 +405,7 @@ class FourierSystem(FlucsSystem):
                     n = next_smooth_number(
                         (self.input["dealiasing.nonlinear_order"] + 1)
                         * half_n_unpadded,
-                        primes=self.input["dimensions.padded_primes"],
+                        primes=self.input["dealiasing.padded_primes"],
                     )
 
                     half_n = n // 2 + 1
