@@ -208,7 +208,7 @@ __global__ void finish_step(
 
 
     complete_finish_step(
-        index, dt, current_time, current_step, current_fields_global
+        index, dt, current_time, current_step, previous_fields_global, current_fields_global
     );
 
 }
