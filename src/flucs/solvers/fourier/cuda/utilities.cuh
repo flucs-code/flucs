@@ -106,7 +106,7 @@ void update_cfl(FLUCS_FLOAT cfl, FLUCS_FLOAT* cfl_rate_global) {
 
     // First thread in block writes to global max via atomic
     if (threadIdx.x == 0) {
-        const float block_cfl = cfl_shared[0];
+        const FLUCS_FLOAT block_cfl = cfl_shared[0];
 
         if (block_cfl > *cfl_rate_global) {
             atomicMaxNonnegativeFloat(cfl_rate_global, block_cfl);

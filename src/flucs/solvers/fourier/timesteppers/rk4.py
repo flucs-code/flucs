@@ -107,7 +107,6 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         previous_fields = system.get_fields(1)
 
         # Stage 1
-
         if self.is_nonlinear:
             system.cfl_rate[0] = 0
             system.compute_nonlinear_terms(
@@ -134,7 +133,6 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         )
 
         # Stage 2
-
         if self.is_nonlinear:
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
@@ -156,7 +154,6 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         )
 
         # Stage 3
-
         if self.is_nonlinear:
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
@@ -178,7 +175,6 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         )
 
         # Stage 4
-
         if self.is_nonlinear:
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),

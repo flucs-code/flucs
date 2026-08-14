@@ -98,6 +98,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
 
         # Stage 1
         if self.is_nonlinear:
+            system.cfl_rate[0] = 0
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
                 system.float(system.current_time),
@@ -106,6 +107,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
                 True,
             )
 
+            # Update dt as necessary
             if system._update_dt():
                 self.precompute_iteration_matrices()
 
