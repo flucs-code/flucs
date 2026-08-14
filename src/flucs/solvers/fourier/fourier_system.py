@@ -1494,7 +1494,7 @@ class FourierSystem(FlucsSystem):
         self._check_linear_matrix()
 
     def _check_dealiasing(self) -> None:
-        # Find all active modes
+        # Find all solved modes
         all_solved_modes = self.get_number_of_solved_modes(
             only_nonnegative_ky=False
         )
