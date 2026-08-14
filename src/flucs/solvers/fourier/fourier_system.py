@@ -329,11 +329,13 @@ class FourierSystem(FlucsSystem):
                     f"{self.input['dealiasing.method']}"
                 )
 
-        # Report equivalent grid, if applicable
+        # Report dealiasing information
         message = f"Using dealiasing method: {self.input['dealiasing.method']}"
 
         if self.input["dealiasing.method"] == "phase-shift":
-            message += f" ({self.input['dealiasing.truncation']})"
+            truncation = self.input["dealiasing.truncation"]
+            memory = ", low memory" if self.input["dealiasing.low_memory"] else ""
+            message += f" ({truncation}{memory})"
 
         if (
             self.input["dealiasing.method"],
@@ -1030,6 +1032,42 @@ class FourierSystem(FlucsSystem):
                     cufft.CUFFT_INVERSE,
                 )
         else:
+            # Useful helper function that computes Fourier-space products given
+            # Fourier intermediate quantities (e.g., derivatives of fields)
+            def compute_fourier_products(
+                current_dt,
+                current_time,
+                current_step,
+                fourier_array,
+                real_array,
+                product_array,
+                output_array,
+                calculate_cfl,
+            ):
+                # Fourier intermediates -> real-space intermediates
+                plan_c2r.fft(
+                    fourier_array,
+                    real_array,
+                    cufft.CUFFT_INVERSE,
+                )
+
+                # Real-space intermediates -> real-space products
+                second_function(
+                    current_dt,
+                    current_time,
+                    current_step,
+                    real_array,
+                    product_array,
+                    calculate_cfl,
+                )
+
+                # Real-space products -> Fourier output fields
+                plan_r2c.fft(
+                    product_array,
+                    output_array,
+                    cufft.CUFFT_INVERSE,
+                )
+
             # Phase-shifting kernels
             self.add_phase_factors_kernel = KernelWrapper(
                 system=self,
@@ -1044,35 +1082,46 @@ class FourierSystem(FlucsSystem):
                 block=(self.cuda_block_size,),
             )
 
-            # Additional memory
-            combined_size = max(n_in, n_out)
-            if combine_arrays:
+            # Allocate additional memory
+            low_memory = self.input["dealiasing.low_memory"]
+            if low_memory:
+                # Retain only the shifted Fourier output. The Fourier and
+                # real-space working arrays will be reused for both evaluations
+                shifted_fourier_output = cp.zeros(
+                    (n_out, *self.half_tuple), 
+                    dtype=self.complex
+                )
+            else:
+                # Retain separate shifted Fourier and real-space working arrays,
+                # avoiding reconstruction of the Fourier intermediates.
+                combined_size = max(n_in, n_out)
+
                 first_fourier_shifted = cp.zeros(
                     (combined_size, *self.half_tuple),
                     dtype=self.complex,
-                )
-                first_real_shifted = cp.zeros(
-                    (combined_size, *self.full_tuple),
-                    dtype=self.float,
                 )
 
-                second_real_shifted = first_real_shifted
-            else:
-                # Will end up reusing first_fourier_shifted
-                # for the final FFT of shifted data, so
-                # make sure we have enough memory
-                first_fourier_shifted = cp.zeros(
-                    (combined_size, *self.half_tuple),
-                    dtype=self.complex,
-                )
-                first_real_shifted = cp.zeros(
-                    (n_in, *self.full_tuple),
-                    dtype=self.float,
-                )
-                second_real_shifted = cp.zeros(
-                    (n_out, *self.full_tuple),
-                    dtype=self.float,
-                )
+                if combine_arrays:
+                    first_real_shifted = cp.zeros(
+                        (combined_size, *self.full_tuple),
+                        dtype=self.float,
+                    )
+
+                    second_real_shifted = first_real_shifted
+                else:
+                    # Will end up reusing first_fourier_shifted
+                    # for the final FFT of shifted data, so
+                    # make sure we have enough memory
+                    first_real_shifted = cp.zeros(
+                        (n_in, *self.full_tuple),
+                        dtype=self.float,
+                    )
+                    second_real_shifted = cp.zeros(
+                        (n_out, *self.full_tuple),
+                        dtype=self.float,
+                    )
+
+                shifted_fourier_output = first_fourier_shifted
 
             def dealiased_operation(
                 current_dt, 
@@ -1091,62 +1140,79 @@ class FourierSystem(FlucsSystem):
                     first_fourier,
                 )
 
-                # Fourier intermediates -> shifted Fourier intermediates
-                self.add_phase_factors_kernel(
-                    first_fourier, first_fourier_shifted
-                )
+                if low_memory:
+                    # Phase-shift in place
+                    self.add_phase_factors_kernel(first_fourier, first_fourier)
 
-                # Fourier intermediates -> real-space intermediates
-                plan_c2r.fft(
-                    first_fourier,
-                    first_real,
-                    cufft.CUFFT_INVERSE,
-                )
+                    # Shifted Fourier intermediates -> shifted Fourier products
+                    compute_fourier_products(
+                        current_dt,
+                        current_time,
+                        current_step,
+                        first_fourier,
+                        first_real,
+                        second_real,
+                        shifted_fourier_output,
+                        False,
+                    )
 
-                # Real-space intermediate quantities -> real-space products
-                second_function(
-                    current_dt,
-                    current_time,
-                    current_step,
-                    first_real,
-                    second_real,
-                    calculate_cfl,
-                )
+                    # Input fourier fields -> Fourier intermediates
+                    # Overwrites the shifted intermediates in place
+                    first_function(
+                        current_dt,
+                        current_time,
+                        current_step,
+                        input_array,
+                        first_fourier,
+                    )
 
-                # Shifted Fourier intermediates -> shifted real-space intermediates
-                plan_c2r.fft(
-                    first_fourier_shifted,
-                    first_real_shifted,
-                    cufft.CUFFT_INVERSE,
-                )
+                    # Unshifted Fourier intermediates -> Fourier products
+                    compute_fourier_products(
+                        current_dt,
+                        current_time,
+                        current_step,
+                        first_fourier,
+                        first_real,
+                        second_real,
+                        output_array,
+                        calculate_cfl,
+                    )
+                else:
+                    # Copy shifted Fourier intermediates into separate shifted 
+                    # working array
+                    self.add_phase_factors_kernel(
+                        first_fourier,
+                        first_fourier_shifted,
+                    )
 
-                # Shifted real-space intermediates -> shifted real-space products
-                second_function(
-                    current_dt,
-                    current_time,
-                    current_step,
-                    first_real_shifted,
-                    second_real_shifted,
-                    False,
-                )
+                    # Unshifted Fourier intermediates -> Fourier output fields
+                    compute_fourier_products(
+                        current_dt,
+                        current_time,
+                        current_step,
+                        first_fourier,
+                        first_real,
+                        second_real,
+                        output_array,
+                        calculate_cfl,
+                    )
 
-                # Real-space products -> Fourier output fields
-                plan_r2c.fft(
-                    second_real,
-                    output_array,
-                    cufft.CUFFT_INVERSE,
-                )
-
-                # Shifted real-space products -> shifted Fourier output fields
-                plan_r2c.fft(
-                    second_real_shifted,
-                    first_fourier_shifted,
-                    cufft.CUFFT_INVERSE,
-                )
+                    # Shifted Fourier intermediates -> shifted Fourier output
+                    compute_fourier_products(
+                        current_dt,
+                        current_time,
+                        current_step,
+                        first_fourier_shifted,
+                        first_real_shifted,
+                        second_real_shifted,
+                        shifted_fourier_output,
+                        False,
+                    )
 
                 # Shifted and unshifted Fourier outputs -> dealiased output
                 self.undo_phase_factors_kernel(
-                    output_array, first_fourier_shifted
+                    output_array,
+                    shifted_fourier_output,
                 )
 
         return dealiased_operation
