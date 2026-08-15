@@ -221,13 +221,14 @@ class FourierSystem(FlucsSystem):
 
     # Hyperdissipation variables
     hyperdissipation_components = ("kz", "kx", "ky", "kperp")
+    hyperdissipation_components_kmax: np.ndarray
     adaptive_rate: float
 
     # CUDA kernels
     compute_linear_matrix_kernel: KernelWrapper
     compute_propagator_global_kernel: KernelWrapper
     compute_solved_grid_mask_kernel: KernelWrapper
-    compute_hyperdissipation_kmax_kernel: KernelWrapper
+    compute_hyperdissipation_components_kmax_kernel: KernelWrapper
     cuda_block_size: int = 512
 
     # CUDA grids
@@ -770,11 +771,14 @@ class FourierSystem(FlucsSystem):
     # -------------------------------------------------------------------------
 
     def setup_cuda_definitions(self) -> None:
-        # FourierSystem specific constants
+        """
+        Adds any general CUDA definitions. Additional ones may be added after
+        executing the initialisation kernels.
+        """
+        # Layouts
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
         )
-
         self.module_options.define_int(
             "NUMBER_OF_DFT_DERIVATIVES",
             self.number_of_dft_derivatives,
@@ -788,13 +792,13 @@ class FourierSystem(FlucsSystem):
             max(self.number_of_dft_bits, self.number_of_dft_derivatives),
         )
 
+        # Sizes
         self.module_options.define_dimension(
             "HALFSIZE", self.half_size
         )
         self.module_options.define_dimension(
             "FULLSIZE", self.full_size
         )
-
         self.module_options.define_float(
             "DFT_FULLSIZE_FACTOR", self.float(1.0 / self.full_size)
         )
@@ -847,9 +851,6 @@ class FourierSystem(FlucsSystem):
                     message += " (adaptive)"
 
                 if self.input[f"hyperdissipation.{component}_normalised"]:
-                    self.module_options.define_flag(
-                        f"HYPERDISSIPATION_{component.upper()}_NORMALISED"
-                    )
                     message += " (normalised)"
 
                 flucsprint(message)
@@ -878,8 +879,68 @@ class FourierSystem(FlucsSystem):
         if not self.input["setup.linear"]:
             self.module_options.define_flag("NONLINEAR")
 
+    def register_initialisation_kernels(self) -> None:
+        """
+        Registers any initialisation kernels required for computing compile-time
+        constants.
+        """
+
+        # Normalised hyperdissipation
+        if not any(
+            self.input[f"hyperdissipation.{component}"] > 0.0
+            and self.input[f"hyperdissipation.{component}_normalised"]
+            for component in self.hyperdissipation_components
+        ):
+            return
+
+        self.compute_hyperdissipation_components_kmax_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_hyperdissipation_components_kmax",
+            grid=(1,),
+            block=(1,),
+        )
+
+    def execute_initialisation_kernels(self) -> None:
+        """
+        Executes any initialisation kernels
+        """
+
+        # Hyperdissipation normalisation
+        hyperdissipation_components_kmax = cp.empty(4, dtype=self.float)
+
+        self.compute_hyperdissipation_components_kmax_kernel(
+            hyperdissipation_components_kmax
+        )
+        self.hyperdissipation_components_kmax = hyperdissipation_components_kmax.get()
+
+        # Cleanup kernels (no longer required after initialisation)
+        del self.compute_hyperdissipation_components_kmax_kernel
+
+    def setup_cuda_definitions_init(self) -> None:
+        """
+        Adds any CUDA definitions that were computed during the
+        initialisation kernels.
+        """
+
+        # Hyperdissipation normalisation
+        for index, component in enumerate(self.hyperdissipation_components):
+            if (self.input[f"hyperdissipation.{component}"] <= 0.0) or not (
+                self.input[f"hyperdissipation.{component}_normalised"]
+            ):
+                continue
+
+            self.module_options.define_flag(
+                f"HYPERDISSIPATION_{component.upper()}_NORMALISED"
+            )
+            self.module_options.define_float(
+                f"HYPERDISSIPATION_{component.upper()}_KMAX",
+                self.hyperdissipation_components_kmax[index],
+            )
+
     def register_kernels(self) -> None:
-        """Registers the CUDA kernels."""
+        """
+        Registers the CUDA kernels.
+        """
 
         # Setup kernel parameters (grid, block, shared memory)
         self.half_cuda_grid_size = (
@@ -904,13 +965,6 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
-        self.compute_hyperdissipation_kmax_kernel = KernelWrapper(
-            system=self,
-            cuda_kernel_name="compute_hyperdissipation_kmax",
-            grid=(1,),
-            block=(1,),
-        )
-
         self.compute_propagator_global_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="compute_propagator_global",
@@ -918,8 +972,8 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
+        # Phase-shifting kernels
         if self.input["dealiasing.method"] != "two-thirds":
-            # Phase-shifting kernels
             self.add_phase_factors_health_check_kernel = KernelWrapper(
                 system=self,
                 cuda_kernel_name=f"add_phase_factors<1>",
@@ -932,16 +986,6 @@ class FourierSystem(FlucsSystem):
                 grid=(self.half_cuda_grid_size,),
                 block=(self.cuda_block_size,),
             )
-
-    def setup_kernels(self) -> None:
-        """
-        Binds the CUDA kernels and computes solved-grid properties.
-        """
-
-        super().setup_kernels()
-
-        # Compute hyperdissipation values
-        self.compute_hyperdissipation_kmax_kernel()
 
     # -------------------------------------------------------------------------
     # Dealiased operations
@@ -1345,7 +1389,9 @@ class FourierSystem(FlucsSystem):
         self._check_initial_conditions()
 
     def _set_initial_conditions(self) -> None:
-        """Generic setup for the first time step."""
+        """
+        Generic setup for the first time step.
+        """
 
         # Use restart data if it was read
         if self.restart_manager.data is not None:
@@ -1865,7 +1911,8 @@ class FourierSystem(FlucsSystem):
     # -------------------------------------------------------------------------
 
     def get_broadcast_wavenumbers(self):
-        """Returns wavenumber arrays broadcast to (nz, nx, half_ny)
+        """
+        Returns wavenumber arrays broadcast to (nz, nx, half_ny)
 
         Returns
         -------

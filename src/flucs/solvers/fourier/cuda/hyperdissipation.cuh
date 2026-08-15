@@ -1,20 +1,11 @@
-// Maximum solved wavenumbers, ordered by HYPERDISSIPATION_*_INT.
 #pragma once
-__device__ FLUCS_FLOAT hyperdissipation_kmax_array[4];
-
-
-__device__ __forceinline__
-FLUCS_FLOAT get_hyperdissipation_kmax(
-    const int hyperdissipation_type
-) {
-    return hyperdissipation_kmax_array[hyperdissipation_type];
-}
-
 
 // Computes the maximum solved wavenumber for each hyperdissipation component.
-// Runs once after compilation of CUDA modules
+// Runs once during CUDA initialisation.
 extern "C" __global__
-void compute_hyperdissipation_kmax() {
+void compute_hyperdissipation_components_kmax(
+    FLUCS_FLOAT hyperdissipation_components_kmax[4]
+) {
     if (blockIdx.x != 0 || threadIdx.x != 0)
         return;
 
@@ -53,10 +44,10 @@ void compute_hyperdissipation_kmax() {
     }
 
     // Store maximum wavenumbers
-    hyperdissipation_kmax_array[HYPERDISSIPATION_KZ_INT] = kz_max;
-    hyperdissipation_kmax_array[HYPERDISSIPATION_KX_INT] = kx_max;
-    hyperdissipation_kmax_array[HYPERDISSIPATION_KY_INT] = ky_max;
-    hyperdissipation_kmax_array[HYPERDISSIPATION_KPERP_INT] = (
+    hyperdissipation_components_kmax[HYPERDISSIPATION_KZ_INT] = kz_max;
+    hyperdissipation_components_kmax[HYPERDISSIPATION_KX_INT] = kx_max;
+    hyperdissipation_components_kmax[HYPERDISSIPATION_KY_INT] = ky_max;
+    hyperdissipation_components_kmax[HYPERDISSIPATION_KPERP_INT] = (
         flucs_sqrt(kperp2_max)
     );
 }
@@ -75,9 +66,7 @@ FLUCS_FLOAT get_hyperdissipation_kperp(
     const FLUCS_FLOAT kperp2 = kx * kx + ky * ky;
 
 #ifdef HYPERDISSIPATION_KPERP_NORMALISED
-    const FLUCS_FLOAT kperp_max = get_hyperdissipation_kmax(
-        HYPERDISSIPATION_KPERP_INT
-    );
+    constexpr FLUCS_FLOAT kperp_max = HYPERDISSIPATION_KPERP_KMAX;
     const FLUCS_FLOAT kperp2_norm = kperp_max > 0
         ? kperp2 / (kperp_max * kperp_max)
         : (FLUCS_FLOAT)0;
@@ -112,9 +101,7 @@ FLUCS_FLOAT get_hyperdissipation_kx(
 #ifdef HYPERDISSIPATION_KX
 
 #ifdef HYPERDISSIPATION_KX_NORMALISED
-    const FLUCS_FLOAT kx_max = get_hyperdissipation_kmax(
-        HYPERDISSIPATION_KX_INT
-    );
+    constexpr FLUCS_FLOAT kx_max = HYPERDISSIPATION_KX_KMAX;
     const FLUCS_FLOAT kx_norm = kx_max > 0
         ? kx / kx_max
         : (FLUCS_FLOAT)0;
@@ -149,9 +136,7 @@ FLUCS_FLOAT get_hyperdissipation_ky(
 #ifdef HYPERDISSIPATION_KY
 
 #ifdef HYPERDISSIPATION_KY_NORMALISED
-    const FLUCS_FLOAT ky_max = get_hyperdissipation_kmax(
-        HYPERDISSIPATION_KY_INT
-    );
+    constexpr FLUCS_FLOAT ky_max = HYPERDISSIPATION_KY_KMAX;
     const FLUCS_FLOAT ky_norm = ky_max > 0
         ? ky / ky_max
         : (FLUCS_FLOAT)0;
@@ -186,9 +171,7 @@ FLUCS_FLOAT get_hyperdissipation_kz(
 #ifdef HYPERDISSIPATION_KZ
 
 #ifdef HYPERDISSIPATION_KZ_NORMALISED
-    const FLUCS_FLOAT kz_max = get_hyperdissipation_kmax(
-        HYPERDISSIPATION_KZ_INT
-    );
+    constexpr FLUCS_FLOAT kz_max = HYPERDISSIPATION_KZ_KMAX;
     const FLUCS_FLOAT kz_norm = kz_max > 0
         ? kz / kz_max
         : (FLUCS_FLOAT)0;

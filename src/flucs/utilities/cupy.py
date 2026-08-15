@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 def cupy_set_device_pointer(
     module: cp.RawModule, ptr_name: str, data_array: cp.ndarray
 ):
-    """Assigns a device memory pointer to point to a given device array.
+    """
+    Assigns a device memory pointer to point to a given device array.
 
     Parameters
     ----------
@@ -35,7 +36,8 @@ def cupy_set_device_pointer(
 def cupy_get_device_array(
     module: cp.RawModule, array_name: str, shape: tuple, dtype
 ) -> cp.ndarray:
-    """Gets a CuPy array associated with a __device__ array.
+    """
+    Gets a CuPy array associated with a __device__ array.
 
     Parameters
     ----------
@@ -63,7 +65,8 @@ def cupy_get_device_array(
 
 
 class ModuleOptions:
-    """Helper class that builds the tuple of options needed to compule CuPy's
+    """
+    Helper class that builds the tuple of options needed to compule CuPy's
     RawModule. Useful for defining compile-time macros and definitions.
 
     Attributes
@@ -89,7 +92,8 @@ class ModuleOptions:
     def _define_constant(
         self, name: str, value=None, value_type: str | None = None
     ):
-        """Adds a definition to the compiler flags.
+        """
+        Adds a definition to the compiler flags.
         Equivalent to
 
             #define name (value_type)(value)
@@ -121,7 +125,8 @@ class ModuleOptions:
         name: str,
         value: str = "",
     ):
-        """Adds a flag-like macro to the compiler flags.
+        """
+        Adds a flag-like macro to the compiler flags.
         Equivalent to
 
             #define name value
@@ -137,7 +142,8 @@ class ModuleOptions:
         self._defs[name] = value
 
     def define_float(self, name: str, value):
-        """Adds a definition to the compiler flags.
+        """
+        Adds a definition to the compiler flags.
         Equivalent to
 
             #define name ((FLUCS_FLOAT)(value))
@@ -154,7 +160,8 @@ class ModuleOptions:
         self._define_constant(name, value, "FLUCS_FLOAT")
 
     def define_int(self, name: str, value):
-        """Adds a definition of a 32-bit int to the compiler flags.
+        """
+        Adds a definition of a 32-bit int to the compiler flags.
         Equivalent to
 
             #define name ((int)(value))
@@ -171,7 +178,8 @@ class ModuleOptions:
         self._define_constant(name, value, "int")
 
     def define_dimension(self, name: str, value):
-        """Adds a definition of a size_t value to the compiler flags.
+        """
+        Adds a definition of a size_t value to the compiler flags.
         Equivalent to
 
             #define name ((size_t)(value))
@@ -188,7 +196,9 @@ class ModuleOptions:
         self._define_constant(name, value, "size_t")
 
     def get_options(self) -> tuple:
-        """Returns the tuple of options to be passed to CuPy's RawModule/"""
+        """
+        Returns the tuple of options to be passed to CuPy's RawModule
+        """
 
         ret = ()
         ret += self.options
@@ -211,10 +221,19 @@ class KernelWrapper:
     shared_mem: int
 
     def bind(self) -> None:
-        """Binds the wrapper to the compiled kernel."""
+        """
+        Binds the wrapper to the compiled kernel.
+        """
         self.kernel = self.system.cupy_module.get_function(
             self.cuda_kernel_name
         )
+
+    def unbind(self) -> None:
+        """
+        Releases the compiled kernel bound to the wrapper.
+        """
+        if hasattr(self, "kernel"):
+            del self.kernel
 
     def __call__(self, *args) -> None:
         self.kernel(self.grid, self.block, args, shared_mem=self.shared_mem)
@@ -252,9 +271,18 @@ class KernelCollection:
     system: FlucsSystem
 
     def bind(self):
-        """Binds the KernelWrappers to the compiled symbols."""
+        """
+        Binds the KernelWrappers to the compiled symbols.
+        """
         for kernel in self._kernels:
             kernel.bind()
+
+    def unbind(self) -> None:
+        """
+        Unbinds all KernelWrappers from their compiled symbols.
+        """
+        for kernel in self._kernels:
+            kernel.unbind()
 
     def __init__(self, system: FlucsSystem):
         self._kernels = []
@@ -265,3 +293,6 @@ class KernelCollection:
 
     def __iter__(self):
         return iter(self._kernels)
+
+    def __bool__(self):
+        return bool(self._kernels)

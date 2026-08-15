@@ -82,7 +82,8 @@ class FlucsSystem(ABC):
 
     @classmethod
     def get_available_diags(cls) -> dict[str, type[FlucsDiagnostic]]:
-        """Returns a dict of available diagnostics.
+        """
+        Returns a dict of available diagnostics.
         Goes recursively through all the parent systems.
 
         """
@@ -105,7 +106,8 @@ class FlucsSystem(ABC):
 
     @classmethod
     def load_defaults(cls, flucs_input: FlucsInput):
-        """Loads default parameters into a flucs input object.
+        """
+        Loads default parameters into a flucs input object.
         Goes recursively through all the parent systems.
 
         Parameters
@@ -126,7 +128,9 @@ class FlucsSystem(ABC):
             flucs_input.load_toml_str(contents, default=True)
 
     def _set_precision(self):
-        """Interprets the precision parameter and sets types accordingly."""
+        """
+        Interprets the precision parameter and sets types accordingly.
+        """
         match self.input["setup.precision"]:
             case "single":
                 self.float = np.float32
@@ -152,7 +156,8 @@ class FlucsSystem(ABC):
         heapq.heappush(self.output_heap, output)
 
     def execute_diagnostics(self, force: bool = False):
-        """Executes diagnostics based on the current time step.
+        """
+        Executes diagnostics based on the current time step.
 
         Parameters
         ----------
@@ -238,7 +243,9 @@ class FlucsSystem(ABC):
             stop_file_location.unlink()
 
     def setup_output(self) -> None:
-        """Initialise outputs."""
+        """
+        Initialise outputs.
+        """
 
         for output_name, output_opt in self.input["output"].items():
             if not isinstance(output_opt, dict):
@@ -251,7 +258,8 @@ class FlucsSystem(ABC):
             self.add_output(FlucsOutput(name=output_name, system=self))
 
     def compile_cupy_module(self) -> None:
-        """Compiles the CuPy CUDA module associated with the system
+        """
+        Compiles the CuPy CUDA module associated with the system
 
         Custom CUDA setup should be done by overriding this method. Do not
         forget to call super().compile_cupy_module()!
@@ -273,19 +281,63 @@ class FlucsSystem(ABC):
         # Add the current date at the end of the source to force recompilation
         cuda_module += f"\n// {datetime.datetime.now()}"
 
+        # Setup initial CUDA definitions
         self.setup_cuda_definitions()
         self.solver.setup_cuda_definitions()
+
+        # Diagnostics may already have registered runtime kernels. Keep those
+        # separate from the temporary initialisation module.
+        runtime_kernels = self.kernels
+        runtime_name_expressions = self.module_options.name_expressions
+
+        initialisation_kernels = KernelCollection(self)
+        self.kernels = initialisation_kernels
+        self.module_options.name_expressions = []
+
+        # Compile and execute any kernels needed to determine additional
+        # compile-time definitions.
+        initialisation_module = None
+        try:
+            self.register_initialisation_kernels()
+            if initialisation_kernels:
+                initialisation_module = self._compile_cupy_module(cuda_module)
+                self.cupy_module = initialisation_module
+                initialisation_kernels.bind()
+                self.execute_initialisation_kernels()
+                self.setup_cuda_definitions_init()
+        finally:
+            # Initialisation kernels and their module are not needed at
+            # runtime. Get rid of all references before clearing cupy cache
+            initialisation_kernels.unbind()
+
+            self.kernels = runtime_kernels
+            self.module_options.name_expressions = runtime_name_expressions
+
+            if initialisation_module is not None:
+                del self.cupy_module
+                initialisation_module = None
+                cp.clear_memo()
+
+        # Register final kernels
         self.register_kernels()
         self.solver.register_kernels()
 
-        self.cupy_module = cp.RawModule(
+        # Compile final module
+        self.cupy_module = self._compile_cupy_module(cuda_module)
+        self.setup_kernels()
+
+    def _compile_cupy_module(self, cuda_module: str) -> cp.RawModule:
+        """
+        Compile and return a CUDA module using the current options.
+        """
+        cupy_module = cp.RawModule(
             code=cuda_module,
             options=self.module_options.get_options(),
             name_expressions=self.module_options.name_expressions,
         )
 
-        self.cupy_module.compile(log_stream=sys.stdout)
-        self.setup_kernels()
+        cupy_module.compile(log_stream=sys.stdout)
+        return cupy_module
 
     @abstractmethod
     def setup_cuda_definitions(self) -> None:
@@ -294,13 +346,34 @@ class FlucsSystem(ABC):
         """
         pass
 
+    def register_initialisation_kernels(self) -> None:
+        """
+        Register kernels needed to determine compile-time definitions.
+        """
+        pass
+
+    def execute_initialisation_kernels(self) -> None:
+        """
+        Execute registered initialisation kernels.
+        """
+        pass
+
+    def setup_cuda_definitions_init(self) -> None:
+        """
+        Register definitions computed by initialisation kernels
+        """
+        pass
+
     @abstractmethod
     def register_kernels(self) -> None:
-        """Registers kernels (incl. templated kernels) that are to be used."""
+        """
+        Registers kernels (incl. templated kernels) that are to be used.
+        """
         pass
 
     def setup_kernels(self) -> None:
-        """Sets up the CUDA kernels.
+        """
+        Sets up the CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
         """
@@ -462,7 +535,8 @@ class FlucsSystem(ABC):
         """
 
     def _add_include_dirs(self) -> None:
-        """Adds the base src folder of the projects of each FlucsSystem in the
+        """
+        Adds the base src folder of the projects of each FlucsSystem in the
         inheritance chain of the current instance.
 
         """
