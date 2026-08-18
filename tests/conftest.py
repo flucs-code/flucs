@@ -1,6 +1,7 @@
 """Setup shared by all test files."""
 
 from pathlib import Path
+from textwrap import dedent
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -87,4 +88,29 @@ def mock_system(monkeypatch):
 
     monkeypatch.setattr(flucs, "get_system_type", mock_get_system_type)
 
+    # We also need to fake FlucsInput.load_dict here, as it depends on
+    # FlucsSystem looking up an installed TOML file via importlib to set its
+    # valid input fields, which are then passed to the FlucsInput.  That file
+    # does not exist for MockSystem.
+    def patch_load_dict(self, input_file_dict: dict, default: bool):
+        self._dict = {"setup": {"solver": "MockSolver", "system": "MockSystem"}}
+        self._default_input_dict = {}
+
+    monkeypatch.setattr(flucs.FlucsInput, "load_dict", patch_load_dict)
+
     return system_type
+
+
+@pytest.fixture
+def mock_input_path(tmp_path, mock_solver, mock_system):
+    """Create a temporary TOML file for testing FlucsInput.
+
+    Depends on mock_solver and mock_system."""
+    toml = dedent("""\
+        [setup]
+        solver = "MockSolver"
+        system = "MockSystem"
+        """)
+    toml_path = tmp_path / "setup.toml"
+    toml_path.write_text(toml)
+    return toml_path

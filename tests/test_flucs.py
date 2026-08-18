@@ -1,6 +1,5 @@
 """Tests functions in the top-level flucs module (flucs/flucs.py)."""
 
-from textwrap import dedent
 from unittest.mock import MagicMock
 
 import pytest
@@ -80,35 +79,16 @@ def test_list_plugins(capfd):
     assert "Installed systems:" in out
 
 
-def test_run_flucs(tmp_path, monkeypatch, mock_system, mock_solver):
-    # Create a barebones TOML input file for testing.
-    toml = dedent("""\
-        [setup]
-        solver = "MockSolver"
-        system = "MockSystem"
-    """)
-    toml_path = tmp_path / "setup.toml"
-    toml_path.write_text(toml)
-
-    # We need to fake FlucsInput.load_dict here, as it depends on FlucsSystem
-    # looking up an installed TOML file via importlib to set its valid input
-    # fields, which are then passed to the FlucsInput.  That file does not exist
-    # for MockSystem.
-    def patch_load_dict(self, input_file_dict: dict, default: bool):
-        self._dict = {"setup": {"solver": "MockSolver", "system": "MockSystem"}}
-        self._default_input_dict = {}
-
-    monkeypatch.setattr(flucs.FlucsInput, "load_dict", patch_load_dict)
-
+def test_run_flucs(mock_input_path, mock_solver, mock_system):
     # Run the flucs.run_flucs function with the test input file.
-    (input, solver) = flucs.run_flucs(toml_path)
+    (input, solver) = flucs.run_flucs(mock_input_path)
 
     # Test that the input was set up correctly
     assert isinstance(input, FlucsInput)
     assert input._solver_type == mock_solver
     assert input._system_type == mock_system
     assert input._initialised
-    assert input.input_path == toml_path
+    assert input.input_path == mock_input_path
 
     # Test that the solver.run() method was called.
     solver.run.assert_called_once()
