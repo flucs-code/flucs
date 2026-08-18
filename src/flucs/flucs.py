@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import importlib.metadata
 import pathlib as pl
@@ -123,7 +125,7 @@ def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
     return argv, None
 
 
-def run_flucs(input_path: pl.Path, override: list | None = None):
+def run_flucs(input_path: pl.Path, override: list | None = None) -> tuple[FlucsInput, FlucsSolver]:
     """
     Construct FlucsInput then call the appropriate solver.
 
@@ -150,6 +152,9 @@ def run_flucs(input_path: pl.Path, override: list | None = None):
             solver, _ = flucs_input.create_solver_system()
 
             solver.run()
+
+    # Return the input and solver for debugging purposes
+    return flucs_input, solver
 
 
 def main():
