@@ -88,16 +88,6 @@ def mock_system(monkeypatch):
 
     monkeypatch.setattr(flucs, "get_system_type", mock_get_system_type)
 
-    # We also need to fake FlucsInput.load_dict here, as it depends on
-    # FlucsSystem looking up an installed TOML file via importlib to set its
-    # valid input fields, which are then passed to the FlucsInput.  That file
-    # does not exist for MockSystem.
-    def patch_load_dict(self, input_file_dict: dict, default: bool):
-        self._dict = {"setup": {"solver": "MockSolver", "system": "MockSystem"}}
-        self._default_input_dict = {}
-
-    monkeypatch.setattr(flucs.FlucsInput, "load_dict", patch_load_dict)
-
     return system_type
 
 
@@ -110,7 +100,53 @@ def mock_input_path(tmp_path, mock_solver, mock_system):
         [setup]
         solver = "MockSolver"
         system = "MockSystem"
+
+        [parameters]
+        alpha = 1.0
+        beta = 2.0
+
+        [dimensions]
+        nx = 64
+        ny = 64
+        nz = 1
         """)
     toml_path = tmp_path / "setup.toml"
     toml_path.write_text(toml)
+
+    # We also need to modify the behaviour of MockSystem, as loading an input
+    # requires the following chain of events:
+    #
+    # - The [setup] section of the input file is read, and the solver and system
+    #   types are determined.
+    #   self._system_type.load_defaults(self) is called, with self being the
+    #   FlucsInput object.
+    # - This looks up an installed TOML file via importlib to set the valid
+    #   input fields, and writes these to the FlucsInput
+    # - load_dict then uses these input fields to validate the input from
+    #   the input file while overriding the defaults.
+    #
+    # MockSystem does not have an installed TOML file, so we need to bypass this
+    # in order to test FlucsInput with our mock system.
+    def mock_load_defaults(flucs_input: flucs.FlucsInput):
+        default_toml = dedent("""\
+            [parameters]
+            alpha = 1.0
+            beta = 1.0
+
+            [dimensions]
+            nx = 1
+            ny = 1
+            nz = 1
+
+            # Liam: I couldn't get it work without this,
+            # but it isn't present in the plugin TOML files,
+            # so I don't know what's going wrong here!
+            [setup]
+            solver = "DefaultSolver"
+            system = "DefaultSystem"
+            """)
+        flucs_input.load_toml_str(default_toml, default=True)
+
+    mock_system.load_defaults.side_effect = mock_load_defaults
+
     return toml_path
