@@ -81,7 +81,6 @@ def test_list_plugins(capfd):
 
 
 def test_run_flucs(tmp_path, monkeypatch, mock_system, mock_solver):
-
     # Create a barebones TOML input file for testing.
     toml = dedent("""\
         [setup]
@@ -96,13 +95,9 @@ def test_run_flucs(tmp_path, monkeypatch, mock_system, mock_solver):
     # fields, which are then passed to the FlucsInput.  That file does not exist
     # for MockSystem.
     def patch_load_dict(self, input_file_dict: dict, default: bool):
-        self._dict = {
-            "setup": {
-                "solver": "MockSolver",
-                "system": "MockSystem"
-            }
-        }
+        self._dict = {"setup": {"solver": "MockSolver", "system": "MockSystem"}}
         self._default_input_dict = {}
+
     monkeypatch.setattr(flucs.FlucsInput, "load_dict", patch_load_dict)
 
     # Run the flucs.run_flucs function with the test input file.
