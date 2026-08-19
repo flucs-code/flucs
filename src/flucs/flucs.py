@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import importlib.metadata
 import pathlib as pl
@@ -5,11 +7,15 @@ import subprocess
 import sys
 from datetime import datetime
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING
 
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
 from flucs.utilities.messages import flucsprint
+
+if TYPE_CHECKING:
+    from flucs.solvers import FlucsSolver
 
 FLUCS_HEADER = rf"""
 ***************************************************
@@ -123,7 +129,9 @@ def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
     return argv, None
 
 
-def run_flucs(input_path: pl.Path, override: list | None = None):
+def run_flucs(
+    input_path: pl.Path, override: list | None = None
+) -> tuple[FlucsInput, FlucsSolver]:
     """
     Construct FlucsInput then call the appropriate solver.
 
@@ -150,6 +158,9 @@ def run_flucs(input_path: pl.Path, override: list | None = None):
             solver, _ = flucs_input.create_solver_system()
 
             solver.run()
+
+    # Return the input and solver for debugging purposes
+    return flucs_input, solver
 
 
 def main():
