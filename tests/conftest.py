@@ -1,6 +1,5 @@
 """Setup shared by all test files."""
 
-from pathlib import Path
 from textwrap import dedent
 from unittest.mock import MagicMock, create_autospec
 
@@ -9,12 +8,6 @@ import pytest
 import flucs
 from flucs.solvers import FlucsSolver
 from flucs.systems import FlucsSystem
-
-
-@pytest.fixture(scope="session")
-def testdata() -> Path:
-    """Path to the test data directory."""
-    return Path(__file__).parent / "__testdata__"
 
 
 def pytest_configure(config):
