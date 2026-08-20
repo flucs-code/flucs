@@ -346,7 +346,7 @@ class FourierSystem(FlucsSystem):
         if (
             self.input["dealiasing.method"],
             self.input["dealiasing.truncation"],
-        ) != ("phase-shift", "maximal"):
+        ) != ("phase-shift", "polyhedral"):
             message += (
                 " [equivalent unpadded grid (nz, nx, ny) = "
                 f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})]"
@@ -445,13 +445,13 @@ class FourierSystem(FlucsSystem):
         self.module_options.define_flag("PHASE_SHIFT_DEALIASING")
 
         match self.input["dealiasing.truncation"]:
-            case "maximal":
+            case "polyhedral":
                 if self.input["dealiasing.nonlinear_order"] != 2:
                     raise InvalidFlucsInputFileError(
-                        "Maximal phase-shift truncation is implemented "
+                        "Polyhedral phase-shift truncation is implemented "
                         "only for quadratic nonlinearities."
                     )
-                self.module_options.define_flag("PHASE_SHIFT_MAXIMAL")
+                self.module_options.define_flag("PHASE_SHIFT_POLYHEDRAL")
 
             case "spherical":
                 self.module_options.define_flag("PHASE_SHIFT_SPHERICAL")

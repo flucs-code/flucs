@@ -100,7 +100,7 @@ bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
     const FLUCS_FLOAT qx_abs = (FLUCS_FLOAT)( (ikx < HALF_NX) ? ikx : NX - ikx ) * ONE_OVER_NX;
     const FLUCS_FLOAT qy_abs = (FLUCS_FLOAT)(iky) * ONE_OVER_NY;
 
-#ifdef PHASE_SHIFT_MAXIMAL
+#ifdef PHASE_SHIFT_POLYHEDRAL
     // Get rid of Nyquist
 
     if constexpr (NZ % 2 == 0) {
@@ -123,7 +123,7 @@ bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
         || (qy_abs + qz_abs > max_sum)
         || (qx_abs + qy_abs > max_sum)
     );
-#endif // PHASE_SHIFT_MAXIMAL
+#endif // PHASE_SHIFT_POLYHEDRAL
 
 #ifdef PHASE_SHIFT_SPHERICAL
     
