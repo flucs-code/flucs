@@ -509,7 +509,7 @@ class FlucsSystem(ABC):
         "{days}d {hrs:02d}:{min:02d}:{sec:02d}".
         and omits {days}d if days==0
         """
-        
+
         total_seconds = int(seconds)
         days, remainder = divmod(total_seconds, 86400)
         hours, remainder = divmod(remainder, 3600)
