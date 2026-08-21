@@ -250,15 +250,19 @@ class FlucsSystem(ABC):
             ) / self.current_dt
             remaining_seconds = steps_remaining * timing_rate
 
-            completion_time = datetime.datetime.now() + datetime.timedelta(
-                seconds=float(remaining_seconds)
-            )
+            if remaining_seconds > 86400 * 20:
+                flucsprint("MORE THAN 20 DAYS")
+            else:
+                completion_time = datetime.datetime.now() + datetime.timedelta(
+                    seconds=float(remaining_seconds)
+                )
 
-            flucsprint(
-                f"Estimated remaining time is "
-                f"{self._format_time_interval(remaining_seconds)} and will "
-                f"complete at {completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
+                flucsprint(
+                    f"Estimated remaining time is "
+                    f"{self._format_time_interval(remaining_seconds)} and will "
+                    f"complete at "
+                    f"{completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
 
     def setup_output(self) -> None:
         """Initialise outputs."""
@@ -505,7 +509,7 @@ class FlucsSystem(ABC):
         "{days}d {hrs:02d}:{min:02d}:{sec:02d}".
         and omits {days}d if days==0
         """
-
+        
         total_seconds = int(seconds)
         days, remainder = divmod(total_seconds, 86400)
         hours, remainder = divmod(remainder, 3600)
