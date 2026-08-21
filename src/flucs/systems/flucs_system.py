@@ -246,8 +246,8 @@ class FlucsSystem(ABC):
             # is skipped during the timing run's own forced final write.)
             timing_rate = self.timing_seconds / self.input["setup.timing_steps"]
             steps_remaining = (
-                (self.final_time - self.current_time) / self.current_dt
-            )
+                self.final_time - self.current_time
+            ) / self.current_dt
             remaining_seconds = steps_remaining * timing_rate
 
             completion_time = datetime.datetime.now() + datetime.timedelta(
@@ -267,7 +267,7 @@ class FlucsSystem(ABC):
                 days, remainder = divmod(total_seconds, 86400)
                 hours, remainder = divmod(remainder, 3600)
                 minutes, secs = divmod(remainder, 60)
-                if days>0:
+                if days > 0:
                     return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
                 else:
                     return f"{hours:02d}:{minutes:02d}:{secs:02d}"

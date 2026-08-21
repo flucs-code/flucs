@@ -70,7 +70,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         # Keep this for the code finishing estimate
         self.system.timing_seconds = time_taken
 
-
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
