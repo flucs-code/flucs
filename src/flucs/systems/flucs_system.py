@@ -54,8 +54,8 @@ class FlucsSystem(ABC):
     init_dt: float
 
     # Variable to estimate time until completion
-    timing_seconds: float 
-    
+    timing_seconds: float
+
     # Restart manager
     restart_manager: FlucsRestart
 
@@ -499,8 +499,7 @@ class FlucsSystem(ABC):
 
             self.module_options.add_compiler_option(f"-I{root_src_path}")
 
-
-    def _format_time_interval(self,seconds: float) -> str:
+    def _format_time_interval(self, seconds: float) -> str:
         """
         Formats a duration in seconds as
         "{days}d {hrs:02d}:{min:02d}:{sec:02d}".
@@ -515,7 +514,6 @@ class FlucsSystem(ABC):
             return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
         else:
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
