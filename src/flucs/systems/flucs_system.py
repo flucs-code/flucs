@@ -54,8 +54,8 @@ class FlucsSystem(ABC):
     init_dt: float
 
     # Variable to estimate time until completion
-    timing_seconds: float
-
+    timing_seconds: float 
+    
     # Restart manager
     restart_manager: FlucsRestart
 
@@ -254,27 +254,9 @@ class FlucsSystem(ABC):
                 seconds=float(remaining_seconds)
             )
 
-            # Helper fn to print time nicely.
-            # Can be moved elsewhere to be accessible outside this code
-            def format_duration(seconds: float) -> str:
-                """
-                Formats a duration in seconds as
-                "{days}d {hrs:02d}:{min:02d}:{sec:02d}".
-                and omits {days}d if days==0
-                """
-
-                total_seconds = int(seconds)
-                days, remainder = divmod(total_seconds, 86400)
-                hours, remainder = divmod(remainder, 3600)
-                minutes, secs = divmod(remainder, 60)
-                if days > 0:
-                    return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
-                else:
-                    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-
             flucsprint(
                 f"Estimated remaining time is "
-                f"{format_duration(remaining_seconds)} and will "
+                f"{self._format_time_interval(remaining_seconds)} and will "
                 f"complete at {completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
@@ -516,6 +498,24 @@ class FlucsSystem(ABC):
             root_src_path = pl.Path(root_mod.__file__).parent.parent
 
             self.module_options.add_compiler_option(f"-I{root_src_path}")
+
+
+    def _format_time_interval(self,seconds: float) -> str:
+        """
+        Formats a duration in seconds as
+        "{days}d {hrs:02d}:{min:02d}:{sec:02d}".
+        and omits {days}d if days==0
+        """
+
+        total_seconds = int(seconds)
+        days, remainder = divmod(total_seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, secs = divmod(remainder, 60)
+        if days > 0:
+            return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input

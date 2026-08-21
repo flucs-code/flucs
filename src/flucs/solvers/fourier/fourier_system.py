@@ -1106,7 +1106,7 @@ class FourierSystem(FlucsSystem):
                 # Set initial fields
                 self.fields_initial = np.random.random(
                     (self.number_of_fields, *self.half_unpadded_tuple)
-                ).astype(dtype=np.complex128)
+                ).astype(dtype=self.complex)
                 self.fields_initial = np.exp(1j * np.pi * self.fields_initial)
                 # this randomizes phases
 
@@ -1122,11 +1122,12 @@ class FourierSystem(FlucsSystem):
                     if n_amplitudes == self.number_of_fields:
                         noise_amplitude_list = self.input["init.amplitude_list"]
                         for i in range(self.number_of_fields):
-                            noise_amplitude[i] *= noise_amplitude_list[i]
+                            self.fields_initial[i] *= noise_amplitude_list[i]
                     else:
                         raise InvalidFlucsInputFileError(
-                            "Ignoring init.amplitude_list: Length"
-                            + "does not match number of fields."
+                            "Incorrect init.amplitude_list: Length"
+                            + "does not match number of fields "
+                            + "and is non-zero."
                         )
 
             case "gaussian":
