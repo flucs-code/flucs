@@ -120,6 +120,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             if system._update_dt():
                 self.precompute_iteration_matrices()
 
+        if system.requires_explicit_terms:
             self._update_ab3_coefficients()
 
         self.finish_step_kernel(
