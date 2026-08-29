@@ -21,6 +21,8 @@ class FourierSystemForcing(ABC):
     explicit: bool
     forced_mode_count: int
     forcing_range_mask: np.ndarray
+    below_forcing_range_mask: np.ndarray
+    above_forcing_range_mask: np.ndarray
 
     def __init__(self, system: FourierSystem):
         self.system = system
@@ -110,6 +112,11 @@ class FourierSystemForcing(ABC):
             & (kz_abs < kz_max)
         )
 
+        # Other useful masks
+        self.below_forcing_range_mask = kperp2 >= kperp_max**2
+        self.above_forcing_range_mask = kperp2 <= kperp_min**2
+
+        # Calculate the number of forced modes
         self._calculate_forced_mode_count()
 
         flucsprint(

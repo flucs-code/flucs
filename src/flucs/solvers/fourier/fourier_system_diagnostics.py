@@ -386,12 +386,15 @@ class RealspaceDataDiag(FlucsDiagnostic):
         "locations": list(),
         "compute_on_gpu": True,
         "exclude_forcing_range": False,
+        "exclude_below_forcing_range": False,
+        "exclude_above_forcing_range": False,
     }
 
     slice_calculators: list[Callable[[], None]]
     realspace_fields: np.ndarray
-    forcing_range_mask: np.ndarray
-    forcing_range_mask_gpu: cp.ndarray
+    exclude_modes: bool
+    excluded_modes_mask: np.ndarray
+    excluded_modes_mask_gpu: cp.ndarray
 
     def init_vars(self):
         self.slice_calculators = []
@@ -477,29 +480,53 @@ class RealspaceDataDiag(FlucsDiagnostic):
             self.slice_calculators.append(slice_calculator)
 
     def ready(self):
-        # Nothing to do if not excluding forcing range
-        if not self.exclude_forcing_range:
+        # The ranges above and below the forcing cannot both be excluded.
+        if (
+            self.exclude_below_forcing_range
+            and self.exclude_above_forcing_range
+        ):
+            raise ValueError(
+                "RealspaceDataDiag options 'exclude_below_forcing_range' and "
+                "'exclude_above_forcing_range' cannot both be enabled."
+            )
+
+        # Combine masks in ready step to reduce copying
+        mask_options = (
+            (self.exclude_forcing_range, "forcing_range_mask"),
+            (self.exclude_below_forcing_range, "below_forcing_range_mask"),
+            (self.exclude_above_forcing_range, "above_forcing_range_mask"),
+        )
+        selected_mask_names = [
+            name for enabled, name in mask_options if enabled
+        ]
+        self.exclude_modes = bool(selected_mask_names)
+
+        # Nothing to do if no ranges are being excluded.
+        if not self.exclude_modes:
             return
 
         # Validate inputs
         if not self.system.input["forcing.method"]:
             raise ValueError(
-                "RealspaceDataDiag option 'exclude_forcing_range' requires "
-                "an active forcing method."
+                "RealspaceDataDiag forcing-range exclusions require an "
+                "active forcing method."
             )
 
-        # Get masks
-        self.forcing_range_mask = self.system.forcing_object.forcing_range_mask
+        # Combine the selected masks once during setup.
+        forcing = self.system.forcing_object
+        self.excluded_modes_mask = np.logical_or.reduce(
+            [getattr(forcing, name) for name in selected_mask_names]
+        )
 
         if self.compute_on_gpu:
-            self.forcing_range_mask_gpu = cp.asarray(self.forcing_range_mask)
+            self.excluded_modes_mask_gpu = cp.asarray(self.excluded_modes_mask)
 
     def execute(self):
-        # Excluding forcing range
-        if self.exclude_forcing_range:
+        # Exclude the selected Fourier ranges before transforming.
+        if self.exclude_modes:
             if self.compute_on_gpu:
                 fields = self.system.get_fields().copy()
-                fields[:, self.forcing_range_mask_gpu] = 0
+                fields[:, self.excluded_modes_mask_gpu] = 0
                 self.realspace_fields = cp.fft.irfftn(
                     fields,
                     norm="forward",
@@ -508,7 +535,7 @@ class RealspaceDataDiag(FlucsDiagnostic):
                 ).get()
             else:
                 fields = self.system.get_fields().get()
-                fields[:, self.forcing_range_mask] = 0
+                fields[:, self.excluded_modes_mask] = 0
                 self.realspace_fields = np.fft.irfftn(
                     fields,
                     norm="forward",
