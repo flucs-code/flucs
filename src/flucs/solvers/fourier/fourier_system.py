@@ -10,7 +10,6 @@ from typing import ClassVar
 
 import cupy as cp
 import numpy as np
-import scipy as sp
 from cupy.cuda import cufft
 
 from flucs.diagnostic import FlucsDiagnostic
@@ -26,6 +25,7 @@ from .fourier_system_diagnostics import (
     RealspaceDataDiag,
 )
 from .fourier_system_forcing import FourierSystemForcing
+
 
 #TODO: move this somewhere sensible
 def dealiased_multiplication_rfft(*args, **kwargs):
@@ -1673,17 +1673,35 @@ class FourierSystem(FlucsSystem):
             f"{self.dt_max * max_real_frequency:.3e})"
         )
 
-        # Evaluate accuracy of Pade approximations for exponential
+        # Evaluate the accuracy of the CUDA Pade propagator
         propagator = self.compute_linear_propagator(dt=self.dt_max)
         propagator = propagator[..., solved_grid_mask]
         propagator = np.moveaxis(propagator, (0, 1), (-2, -1))
 
-        pade_eigvals = (
-            1j * np.log(np.linalg.eigvals(propagator)) / self.dt_max
-        ).T
-        pade_eigvals = np.sort(pade_eigvals, axis=0)
+        pade_eigvals = np.linalg.eigvals(propagator).T
+        exact_eigvals = np.exp(-1j * self.dt_max * eigvals)
 
-        abs_errors = np.abs(pade_eigvals - eigvals)
+        # Pair each numerical eigenvalue with the nearest exact eigenvalue
+        grid_indices = np.arange(pade_eigvals.shape[1])
+        pade_eigvals = np.stack(
+            [
+                pade_eigvals[
+                    np.argmin(
+                        np.abs(pade_eigvals - exact_eigval), axis=0
+                    ),
+                    grid_indices,
+                ]
+                for exact_eigval in exact_eigvals
+            ]
+        )
+
+        # Calculate and report errors
+        abs_errors = np.abs(
+            1j
+            * np.log(pade_eigvals / exact_eigvals)
+            / self.dt_max
+        )
+
         rel_errors = np.divide(
             abs_errors,
             np.abs(eigvals),
