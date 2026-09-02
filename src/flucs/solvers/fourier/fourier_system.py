@@ -977,19 +977,43 @@ class FourierSystem(FlucsSystem):
             block=(self.cuda_block_size,),
         )
 
-        # Phase-shifting kernels
-        if self.input["dealiasing.method"] == "phase-shift":
-            self.add_phase_factors_health_check_kernel = KernelWrapper(
-                system=self,
-                cuda_kernel_name=f"add_phase_factors<1>",
-                grid=(self.half_cuda_grid_size,),
-                block=(self.cuda_block_size,),
-            )
-            self.undo_phase_factors_health_check_kernel = KernelWrapper(
-                system=self,
-                cuda_kernel_name=f"undo_phase_factors<1>",
-                grid=(self.half_cuda_grid_size,),
-                block=(self.cuda_block_size,),
+        # Dealiasing error-checking
+        # This wastes memory, so isn't on by default
+        if self.input["dealiasing.check_errors"]:
+            def first_function(
+                current_dt,
+                current_time,
+                current_step: int,
+                input: cp.ndarray,
+                output: cp.ndarray,
+            ) -> None:
+                output[:] = input[:]
+
+            def second_function(
+                current_dt,
+                current_time,
+                current_step: int,
+                input: cp.ndarray,
+                output: cp.ndarray,
+                calculate_cfl: bool,
+            ) -> None:
+                output[:] = input[0, :] * input[1, :] / self.full_size
+
+            first_fourier = cp.zeros((2, *self.half_tuple), dtype=self.complex)
+            first_real = cp.zeros((2, *self.full_tuple), dtype=self.float)
+            second_real = cp.zeros(self.full_tuple, dtype=self.float)
+            second_fourier = cp.zeros(self.half_tuple, dtype=self.complex)
+
+            self.check_dealiasing_errors_operation = self.create_dealiased_operation(
+                n_in=2,
+                n_out=1,
+                first_fourier=first_fourier,
+                first_real=first_real,
+                second_real=second_real,
+                second_fourier=second_fourier,
+                combine_arrays=self.combine_derivatives_and_bits,
+                first_function=first_function,
+                second_function=second_function,
             )
 
     # -------------------------------------------------------------------------
@@ -1143,13 +1167,13 @@ class FourierSystem(FlucsSystem):
                 )
 
             # Phase-shifting kernels
-            self.add_phase_factors_kernel = KernelWrapper(
+            add_phase_factors_kernel = KernelWrapper(
                 system=self,
                 cuda_kernel_name=f"add_phase_factors<{n_in}>",
                 grid=(self.half_cuda_grid_size,),
                 block=(self.cuda_block_size,),
             )
-            self.undo_phase_factors_kernel = KernelWrapper(
+            undo_phase_factors_kernel = KernelWrapper(
                 system=self,
                 cuda_kernel_name=f"undo_phase_factors<{n_out}>",
                 grid=(self.half_cuda_grid_size,),
@@ -1221,7 +1245,7 @@ class FourierSystem(FlucsSystem):
 
                 if low_memory:
                     # Phase-shift in place
-                    self.add_phase_factors_kernel(first_fourier, first_fourier)
+                    add_phase_factors_kernel(first_fourier, first_fourier)
 
                     # Shifted Fourier intermediates -> shifted Fourier products
                     compute_fourier_products(
@@ -1259,7 +1283,7 @@ class FourierSystem(FlucsSystem):
                 else:
                     # Copy shifted Fourier intermediates into separate shifted
                     # working array
-                    self.add_phase_factors_kernel(
+                    add_phase_factors_kernel(
                         first_fourier,
                         first_fourier_shifted,
                     )
@@ -1300,7 +1324,7 @@ class FourierSystem(FlucsSystem):
                     main_stream.wait_event(done_shifted)
 
                 # Shifted and unshifted Fourier outputs -> dealiased output
-                self.undo_phase_factors_kernel(
+                undo_phase_factors_kernel(
                     output_array,
                     shifted_fourier_output,
                 )
@@ -1590,9 +1614,6 @@ class FourierSystem(FlucsSystem):
             f"{self.full_size} ({solved_fraction:.2f}%)"
         )
 
-        if self.input["dealiasing.method"] == "two-thirds":
-            return
-
         if not self.input["dealiasing.check_errors"]:
             return
 
@@ -1601,49 +1622,35 @@ class FourierSystem(FlucsSystem):
         # said function. This should be both for two-thirds and phase-shifted dealiasing.
 
         solved_modes_mask = self.get_solved_grid_mask()
-
         solved_modes_mask = cp.array(solved_modes_mask)
 
         nx = self.nx
         ny = self.ny
         nz = self.nz
 
-        array1 = cp.random.rand(nz, nx, ny, dtype=self.float)
-        array2 = cp.random.rand(nz, nx, ny, dtype=self.float)
-
-        array1_rfft = cp.fft.rfftn(array1, norm="forward")
-        array2_rfft = cp.fft.rfftn(array2, norm="forward")
-
-        array1_rfft_shifted = cp.zeros(array1_rfft.shape, dtype=self.complex)
-        array2_rfft_shifted = cp.zeros(array1_rfft.shape, dtype=self.complex)
+        input_array = cp.random.rand(2, nz, nx, ny, dtype=self.float)
+        input_array_rfft = cp.fft.rfftn(input_array, norm="forward")
+        array1_rfft = input_array_rfft[0]
+        array2_rfft = input_array_rfft[1]
 
         array1_rfft[solved_modes_mask < 0.5] = 0
         array2_rfft[solved_modes_mask < 0.5] = 0
 
-        self.add_phase_factors_health_check_kernel(array1_rfft, array1_rfft_shifted)
-        self.add_phase_factors_health_check_kernel(array2_rfft, array2_rfft_shifted)
+        product_operation = cp.zeros(self.half_tuple, dtype=self.complex)
+        self.check_dealiasing_errors_operation(
+                current_dt=0,
+                current_time=0,
+                current_step=0,
+                input_array=input_array_rfft,
+                output_array=product_operation,
+                calculate_cfl=False
+        )
+        product_operation[solved_modes_mask < 0.5] = 0
 
         product_dealiased_rfft = dealiased_multiplication_rfft(array1_rfft, array2_rfft, nx=nx, ny=ny, nz=nz, padded_nx=2*nx, padded_ny=2*ny, padded_nz=2*nz)
         product_dealiased_rfft[solved_modes_mask < 0.5] = 0
 
-        product = (
-            cp.fft.irfftn(array1_rfft, s=(nz, nx, ny), norm="forward")
-            * cp.fft.irfftn(array2_rfft, s=(nz, nx, ny), norm="forward")
-        )
-
-        product_shifted = (
-            cp.fft.irfftn(array1_rfft_shifted, s=(nz, nx, ny), norm="forward")
-            * cp.fft.irfftn(array2_rfft_shifted, s=(nz, nx, ny), norm="forward")
-        )
-
-        product_rfft = cp.fft.rfftn(product, norm="forward", s=(nz, nx, ny))
-        product_rfft_shifted = cp.fft.rfftn(product_shifted, norm="forward", s=(nz, nx, ny))
-
-        self.undo_phase_factors_health_check_kernel(product_rfft, product_rfft_shifted)
-
-        product_rfft[solved_modes_mask < 0.5] = 0
-
-        print("Max abs error is ", cp.max(cp.abs(product_rfft - product_dealiased_rfft)))
+        print("Max abs error is ", cp.max(cp.abs(product_operation - product_dealiased_rfft)))
 
     def _check_linear_matrix(self) -> None:
         if not self.input["setup.check_linear_matrix"]:
