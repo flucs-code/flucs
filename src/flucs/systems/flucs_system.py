@@ -489,14 +489,11 @@ class FlucsSystem(ABC):
 
             global_used_gb = info["global"]["used"] / bytes_to_gb
             global_total_gb = info["global"]["total"] / bytes_to_gb
-            cupy_total_gb = info["cupy"]["total"] / bytes_to_gb
 
             flucsprint(
                 f"({info['id']}) {info['name']}: {global_used_gb:.3f} / "
                 f"{global_total_gb:.3f} GB "
-                f"({global_used_gb / global_total_gb * 100:.2f}%), "
-                f"CuPy usage: {cupy_total_gb:.3f} GB "
-                f"({cupy_total_gb / global_total_gb * 100:.2f}%)"
+                f"({global_used_gb / global_total_gb * 100:.2f}%)"
             )
 
         return device_info
