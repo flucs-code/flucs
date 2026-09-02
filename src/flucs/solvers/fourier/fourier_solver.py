@@ -6,8 +6,8 @@ pseudospectral Fourier methods.
 
 """
 
-import time
 import datetime
+import time
 from typing import ClassVar
 
 from flucs.solvers import FlucsSolver, FlucsSolverState

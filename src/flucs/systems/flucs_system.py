@@ -246,11 +246,8 @@ class FlucsSystem(ABC):
                 time_elapsed = (
                     datetime.datetime.now() - self.initial_wallclock_time
                 )
-                
-                step_rate = (
-                    time_elapsed.total_seconds()
-                    / self.current_step 
-                )
+
+                step_rate = time_elapsed.total_seconds() / self.current_step
 
                 steps_remaining = (
                     self.final_time - self.current_time
@@ -272,8 +269,6 @@ class FlucsSystem(ABC):
                         f" and will complete at "
                         f"{completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-
-            
 
     def setup_output(self) -> None:
         """Initialise outputs."""
