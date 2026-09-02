@@ -54,7 +54,8 @@ class FlucsSystem(ABC):
     init_dt: float
 
     # Variable to estimate time until completion
-    timing_seconds: float
+    last_save_wallclock_time: datetime.datetime
+    last_save_step: int
 
     # Restart manager
     restart_manager: FlucsRestart
@@ -240,29 +241,41 @@ class FlucsSystem(ABC):
             self.solver.interrupted = True
             stop_file_location.unlink()
 
-        elif hasattr(self, "timing_seconds"):
+        else:
             # Not stopping, so print out remaining time.
-            # (Only known once the timing run has completed, so this
-            # is skipped during the timing run's own forced final write.)
-            timing_rate = self.timing_seconds / self.input["setup.timing_steps"]
-            steps_remaining = (
-                self.final_time - self.current_time
-            ) / self.current_dt
-            remaining_seconds = steps_remaining * timing_rate
-
-            if remaining_seconds > 86400 * 20:
-                flucsprint("MORE THAN 20 DAYS")
-            else:
-                completion_time = datetime.datetime.now() + datetime.timedelta(
-                    seconds=float(remaining_seconds)
+            if hasattr(self, "last_save_wallclock_time"):
+                current_save_timedelta = (
+                    datetime.datetime.now() - self.last_save_wallclock_time
+                )
+                step_rate = (
+                    current_save_timedelta.microseconds
+                    * 1e-6
+                    / (self.current_step - self.last_save_step)
                 )
 
-                flucsprint(
-                    f"Estimated remaining time is "
-                    f"{self._format_time_interval(remaining_seconds)} and will "
-                    f"complete at "
-                    f"{completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
+                steps_remaining = (
+                    self.final_time - self.current_time
+                ) / self.current_dt
+
+                remaining_seconds = steps_remaining * step_rate
+
+                if remaining_seconds > 86400 * 20:
+                    flucsprint("MORE THAN 20 DAYS")
+                else:
+                    completion_time = (
+                        datetime.datetime.now()
+                        + datetime.timedelta(seconds=float(remaining_seconds))
+                    )
+
+                    flucsprint(
+                        f"Estimated remaining time is "
+                        f"{self._format_time_interval(remaining_seconds)}"
+                        f" and will complete at "
+                        f"{completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+
+            self.last_save_wallclock_time = datetime.datetime.now()
+            self.last_save_step = self.current_step
 
     def setup_output(self) -> None:
         """Initialise outputs."""

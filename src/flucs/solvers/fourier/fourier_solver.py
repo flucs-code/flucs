@@ -67,9 +67,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             flucsprint("Timing completed. Exiting.\n")
             return
 
-        # Keep this for the code finishing estimate
-        self.system.timing_seconds = time_taken
-
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
