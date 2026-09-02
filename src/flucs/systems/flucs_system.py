@@ -261,7 +261,7 @@ class FlucsSystem(ABC):
                     flucsprint(
                         f"({self.current_step:.3e}) Time remaining exceeds "
                         f"20 days.",
-                        source=self, 
+                        source=self,
                         message_type="warning"
                     )
                 else:
