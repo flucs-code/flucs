@@ -96,6 +96,9 @@ def dealiased_multiplication_rfft(*args, **kwargs):
     complex_type = args[0].dtype
     padded_half_ny = padded_ny // 2 + 1
 
+    # Allows us to deal with nz = 1 correctly
+    neg_z = slice(-half_nz + 1, None) if nz > 1 else slice(0, 0)
+
     # Accumulate the product on the padded real-space grid
     product = 1
     for i in range(n):
@@ -110,9 +113,9 @@ def dealiased_multiplication_rfft(*args, **kwargs):
             :half_nz, :half_nx, :half_ny
         ]
         padded_array[
-            -half_nz+1:, :half_nx, :half_ny
+            neg_z, :half_nx, :half_ny
         ] = args[i][
-            -half_nz+1:, :half_nx, :half_ny
+            neg_z, :half_nx, :half_ny
         ]
         padded_array[
             :half_nz, -half_nx+1:, :half_ny
@@ -120,9 +123,9 @@ def dealiased_multiplication_rfft(*args, **kwargs):
             :half_nz, -half_nx+1:, :half_ny
         ]
         padded_array[
-            -half_nz+1:, -half_nx+1:, :half_ny
+            neg_z, -half_nx+1:, :half_ny
         ] = args[i][
-            -half_nz+1:, -half_nx+1:, :half_ny
+            neg_z, -half_nx+1:, :half_ny
         ]
 
         # Transform each padded field and multiply it into the real-space product
@@ -144,9 +147,9 @@ def dealiased_multiplication_rfft(*args, **kwargs):
         :half_nz, :half_nx, :half_ny
     ]
     product_rfft[
-        -half_nz+1:, :half_nx, :half_ny
+        neg_z, :half_nx, :half_ny
     ] = product_rfft_padded[
-        -half_nz+1:, :half_nx, :half_ny
+        neg_z, :half_nx, :half_ny
     ]
     product_rfft[
         :half_nz, -half_nx+1:, :half_ny
@@ -154,9 +157,9 @@ def dealiased_multiplication_rfft(*args, **kwargs):
         :half_nz, -half_nx+1:, :half_ny
     ]
     product_rfft[
-        -half_nz+1:, -half_nx+1:, :half_ny
+        neg_z, -half_nx+1:, :half_ny
     ] = product_rfft_padded[
-        -half_nz+1:, -half_nx+1:, :half_ny
+        neg_z, -half_nx+1:, :half_ny
     ]
 
     return product_rfft
@@ -457,7 +460,7 @@ class FourierSystem(FlucsSystem):
 
             case "spherical":
                 self.module_options.define_flag("PHASE_SHIFT_SPHERICAL")
-                
+
                 # Set dealiasing radius
                 if self.input["dealiasing.radius_squared"] > 0:
                     radius_squared = self.input["dealiasing.radius_squared"]
@@ -975,7 +978,7 @@ class FourierSystem(FlucsSystem):
         )
 
         # Phase-shifting kernels
-        if self.input["dealiasing.method"] != "two-thirds":
+        if self.input["dealiasing.method"] == "phase-shift":
             self.add_phase_factors_health_check_kernel = KernelWrapper(
                 system=self,
                 cuda_kernel_name=f"add_phase_factors<1>",
@@ -1062,11 +1065,11 @@ class FourierSystem(FlucsSystem):
 
         if self.input["dealiasing.method"] == "two-thirds":
             def dealiased_operation(
-                current_dt, 
-                current_time, 
-                current_step, 
-                input_array, 
-                output_array, 
+                current_dt,
+                current_time,
+                current_step,
+                input_array,
+                output_array,
                 calculate_cfl
                 ):
 
@@ -1159,7 +1162,7 @@ class FourierSystem(FlucsSystem):
                 # Retain only the shifted Fourier output. The Fourier and
                 # real-space working arrays will be reused for both evaluations
                 shifted_fourier_output = cp.zeros(
-                    (n_out, *self.half_tuple), 
+                    (n_out, *self.half_tuple),
                     dtype=self.complex
                 )
             else:
@@ -1194,12 +1197,17 @@ class FourierSystem(FlucsSystem):
 
                 shifted_fourier_output = first_fourier_shifted
 
+                # We will use separate CUDA streams to get work done in parallel
+                main_stream = cp.cuda.get_current_stream()
+                stream_unshifted = cp.cuda.Stream(non_blocking=True)
+                stream_shifted = cp.cuda.Stream(non_blocking=True)
+
             def dealiased_operation(
-                current_dt, 
-                current_time, 
-                current_step, 
+                current_dt,
+                current_time,
+                current_step,
                 input_array,
-                output_array, 
+                output_array,
                 calculate_cfl
             ):
                 # Input fourier fields -> Fourier intermediate quantities
@@ -1249,36 +1257,47 @@ class FourierSystem(FlucsSystem):
                         calculate_cfl,
                     )
                 else:
-                    # Copy shifted Fourier intermediates into separate shifted 
+                    # Copy shifted Fourier intermediates into separate shifted
                     # working array
                     self.add_phase_factors_kernel(
                         first_fourier,
                         first_fourier_shifted,
                     )
 
+                    inputs_ready = main_stream.record()
+
                     # Unshifted Fourier intermediates -> Fourier output fields
-                    compute_fourier_products(
-                        current_dt,
-                        current_time,
-                        current_step,
-                        first_fourier,
-                        first_real,
-                        second_real,
-                        output_array,
-                        calculate_cfl,
-                    )
+                    stream_unshifted.wait_event(inputs_ready)
+                    with stream_unshifted:
+                        compute_fourier_products(
+                            current_dt,
+                            current_time,
+                            current_step,
+                            first_fourier,
+                            first_real,
+                            second_real,
+                            output_array,
+                            calculate_cfl,
+                        )
+                        done_unshifted = stream_unshifted.record()
 
                     # Shifted Fourier intermediates -> shifted Fourier output
-                    compute_fourier_products(
-                        current_dt,
-                        current_time,
-                        current_step,
-                        first_fourier_shifted,
-                        first_real_shifted,
-                        second_real_shifted,
-                        shifted_fourier_output,
-                        False,
-                    )
+                    stream_shifted.wait_event(inputs_ready)
+                    with stream_shifted:
+                        compute_fourier_products(
+                            current_dt,
+                            current_time,
+                            current_step,
+                            first_fourier_shifted,
+                            first_real_shifted,
+                            second_real_shifted,
+                            shifted_fourier_output,
+                            False,
+                        )
+                        done_shifted = stream_shifted.record()
+
+                    main_stream.wait_event(done_unshifted)
+                    main_stream.wait_event(done_shifted)
 
                 # Shifted and unshifted Fourier outputs -> dealiased output
                 self.undo_phase_factors_kernel(
