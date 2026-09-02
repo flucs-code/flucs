@@ -60,7 +60,7 @@ truncation = "polyhedral"
 
 # Dealiasing radius^2 for the spherical truncation.
 # The optimal value is 2/9 ~ 0.222
-radius_squared = -1
+radius_squared = -1.0
 
 # Save memory at the expense of speed when using phase-shift dealiasing
 low_memory = false
