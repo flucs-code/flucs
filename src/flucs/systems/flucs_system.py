@@ -262,7 +262,7 @@ class FlucsSystem(ABC):
                         f"({self.current_step:.3e}) Time remaining exceeds "
                         f"20 days.",
                         source=self,
-                        message_type="warning"
+                        message_type="warning",
                     )
                 else:
                     completion_time = (
