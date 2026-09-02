@@ -1,5 +1,4 @@
-import cupy as cp
-
+from flucs import cupy as cp
 from flucs.solvers import FlucsSolver, FlucsTimestepper
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.cupy import KernelWrapper

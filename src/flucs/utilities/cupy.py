@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import cupy as cp
+from flucs import cupy as cp
 
 if TYPE_CHECKING:
     from flucs.systems import FlucsSystem

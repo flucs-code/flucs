@@ -1,7 +1,8 @@
+from __future__ import  annotations
+
 from collections.abc import Callable
 
-import cupy as cp
-
+from flucs import cupy as cp
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.cupy import KernelWrapper
 

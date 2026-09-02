@@ -15,10 +15,9 @@ import sys
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-import cupy as cp
 import numpy as np
-from cupy.cuda import cufft
 
+from flucs import cupy as cp
 from flucs import FlucsInput
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
@@ -29,6 +28,8 @@ from flucs.utilities.messages import flucsprint
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
 
+if cp is not None:
+    from cupy.cuda import cufft
 
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""

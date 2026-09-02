@@ -8,10 +8,9 @@ from abc import abstractmethod
 from collections.abc import Callable
 from typing import ClassVar
 
-import cupy as cp
 import numpy as np
-from cupy.cuda import cufft
 
+from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
@@ -25,6 +24,9 @@ from .fourier_system_diagnostics import (
     RealspaceDataDiag,
 )
 from .fourier_system_forcing import FourierSystemForcing
+
+if cp is not None:
+    from cupy.cuda import cufft
 
 
 #TODO: move this somewhere sensible

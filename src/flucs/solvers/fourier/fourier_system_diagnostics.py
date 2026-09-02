@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
 
-import cupy as cp
 import numpy as np
 
+from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 from flucs.solvers import FlucsSolverState
 from flucs.utilities.messages import flucsprint

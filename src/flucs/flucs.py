@@ -11,6 +11,17 @@ from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
 from flucs.utilities.messages import flucsprint
 
+try:
+    import cupy as cupy
+    cupy.fft.fft(cupy.zeros(1))  # quickly test if CuPy actually works
+except Exception as exc:
+    cupy = None
+    CUPY_IMPORT_ERROR = exc
+    print("CuPy not found.")
+    print(CUPY_IMPORT_ERROR)
+else:
+    CUPY_IMPORT_ERROR = None
+
 FLUCS_HEADER = rf"""
 ***************************************************
 
