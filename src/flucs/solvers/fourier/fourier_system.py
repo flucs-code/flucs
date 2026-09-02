@@ -1301,9 +1301,10 @@ class FourierSystem(FlucsSystem):
         # If CFL condition is violated
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
+
             flucsprint(
-                f"dt: {self.current_dt:.3e} -> "
-                f"{new_dt:.3e} (-, {self.current_step:.3e})"
+                f"({self.current_step:.3e}) dt: "
+                f"{self.current_dt:.3e} -> {new_dt:.3e} (-)"
             )
 
             self.current_dt = new_dt
@@ -1323,8 +1324,8 @@ class FourierSystem(FlucsSystem):
 
             if new_dt > self.current_dt:
                 flucsprint(
-                    f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
-                    f"(+, {self.current_step:.3e})"
+                    f"({self.current_step:.3e}) dt: "
+                    f"{self.current_dt:.3e} -> {new_dt:.3e} (+)"
                 )
 
                 self.current_dt = new_dt
@@ -1354,7 +1355,7 @@ class FourierSystem(FlucsSystem):
         dt_changed = self._compute_current_dt()
         if self.current_dt < self.dt_min:
             flucsprint(
-                f"({self.current_step}) Required time step "
+                f"({self.current_step:.3e}) Required time step "
                 f"{self.current_dt:.3e} is below dt_min. Exiting."
             )
             self.solver.interrupted = True

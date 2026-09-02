@@ -240,13 +240,14 @@ class FlucsSystem(ABC):
             self.solver.interrupted = True
             stop_file_location.unlink()
 
-        else:
-            # Not stopping, so print out remaining time.
+        # Not stopping or interrupted, so print time remaining
+        elif not self.solver.interrupted:
             if hasattr(self, "initial_wallclock_time"):
                 time_elapsed = (
                     datetime.datetime.now() - self.initial_wallclock_time
                 )
 
+                # Approximate time remaining
                 step_rate = time_elapsed.total_seconds() / self.current_step
 
                 steps_remaining = (
@@ -255,23 +256,29 @@ class FlucsSystem(ABC):
 
                 remaining_seconds = steps_remaining * step_rate
 
+                # Report result and warn if it exceeds 20 days
                 if remaining_seconds > 86400 * 20:
-                    flucsprint("MORE THAN 20 DAYS")
+                    flucsprint(
+                        f"({self.current_step:.3e}) Time remaining exceeds "
+                        f"20 days.",
+                        source=self, 
+                        message_type="warning"
+                    )
                 else:
                     completion_time = (
                         datetime.datetime.now()
                         + datetime.timedelta(seconds=float(remaining_seconds))
                     )
-
                     flucsprint(
-                        f"Estimated remaining time is "
-                        f"{self._format_time_interval(remaining_seconds)}"
-                        f" and will complete at "
-                        f"{completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                        f"({self.current_step:.3e}) Est. walltime: "
+                        f"{self._format_time_interval(remaining_seconds)} "
+                        f"({completion_time.strftime('%Y-%m-%d %H:%M:%S')})"
                     )
 
     def setup_output(self) -> None:
-        """Initialise outputs."""
+        """
+        Initialise outputs.
+        """
 
         for output_name, output_opt in self.input["output"].items():
             if not isinstance(output_opt, dict):
@@ -284,7 +291,8 @@ class FlucsSystem(ABC):
             self.add_output(FlucsOutput(name=output_name, system=self))
 
     def compile_cupy_module(self) -> None:
-        """Compiles the CuPy CUDA module associated with the system
+        """
+        Compiles the CuPy CUDA module associated with the system
 
         Custom CUDA setup should be done by overriding this method. Do not
         forget to call super().compile_cupy_module()!
@@ -329,11 +337,14 @@ class FlucsSystem(ABC):
 
     @abstractmethod
     def register_kernels(self) -> None:
-        """Registers kernels (incl. templated kernels) that are to be used."""
+        """
+        Registers kernels (incl. templated kernels) that are to be used.
+        """
         pass
 
     def setup_kernels(self) -> None:
-        """Sets up the CUDA kernels.
+        """
+        Sets up the CUDA kernels.
 
         In the future, this may be the place to do some automatic optimisation.
         """
@@ -495,7 +506,8 @@ class FlucsSystem(ABC):
         """
 
     def _add_include_dirs(self) -> None:
-        """Adds the base src folder of the projects of each FlucsSystem in the
+        """
+        Adds the base src folder of the projects of each FlucsSystem in the
         inheritance chain of the current instance.
 
         """
@@ -511,19 +523,14 @@ class FlucsSystem(ABC):
 
     def _format_time_interval(self, seconds: float) -> str:
         """
-        Formats a duration in seconds as
-        "{days}d {hrs:02d}:{min:02d}:{sec:02d}".
-        and omits {days}d if days==0
+        Formats a duration in seconds to be human readable
         """
-
         total_seconds = int(seconds)
         days, remainder = divmod(total_seconds, 86400)
         hours, remainder = divmod(remainder, 3600)
         minutes, secs = divmod(remainder, 60)
-        if days > 0:
-            return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
-        else:
-            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+        return f"{days:02d}:{hours:02d}:{minutes:02d}:{secs:02d}"
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
