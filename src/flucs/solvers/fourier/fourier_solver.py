@@ -7,6 +7,7 @@ pseudospectral Fourier methods.
 """
 
 import time
+import datetime
 from typing import ClassVar
 
 from flucs.solvers import FlucsSolver, FlucsSolverState
@@ -66,6 +67,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         if self.system.input["setup.timing"]:
             flucsprint("Timing completed. Exiting.\n")
             return
+
+        # Start time for estimating duration
+        self.system.initial_wallclock_time = datetime.datetime.now()
 
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING

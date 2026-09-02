@@ -54,8 +54,7 @@ class FlucsSystem(ABC):
     init_dt: float
 
     # Variable to estimate time until completion
-    last_save_wallclock_time: datetime.datetime
-    last_save_step: int
+    initial_wallclock_time: datetime.datetime
 
     # Restart manager
     restart_manager: FlucsRestart
@@ -243,14 +242,14 @@ class FlucsSystem(ABC):
 
         else:
             # Not stopping, so print out remaining time.
-            if hasattr(self, "last_save_wallclock_time"):
-                current_save_timedelta = (
-                    datetime.datetime.now() - self.last_save_wallclock_time
+            if hasattr(self, "initial_wallclock_time"):
+                time_elapsed = (
+                    datetime.datetime.now() - self.initial_wallclock_time
                 )
+                
                 step_rate = (
-                    current_save_timedelta.microseconds
-                    * 1e-6
-                    / (self.current_step - self.last_save_step)
+                    time_elapsed.total_seconds()
+                    / self.current_step 
                 )
 
                 steps_remaining = (
@@ -274,8 +273,7 @@ class FlucsSystem(ABC):
                         f"{completion_time.strftime('%Y-%m-%d %H:%M:%S')}"
                     )
 
-            self.last_save_wallclock_time = datetime.datetime.now()
-            self.last_save_step = self.current_step
+            
 
     def setup_output(self) -> None:
         """Initialise outputs."""
