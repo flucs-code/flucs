@@ -1079,8 +1079,6 @@ class FourierSystem(FlucsSystem):
         combine_first_and_second_intermediates is ignored as it is not
         possible when batching the FFTs unless n_in = n_out.
         
-        TODO: add the option to combine them when n_in = n_out.
-
         """
         # Create the cuFFT plans for the forward and backward transforms
         plan_c2r = self.create_standard_real_cufft_plan(
@@ -1102,15 +1100,6 @@ class FourierSystem(FlucsSystem):
             (2*n_in, *self.full_tuple),
             dtype=self.float,
         )
-        second_intermediates_fourier = cp.zeros(
-            (2*n_out, *self.half_tuple),
-            dtype=self.complex,
-        )
-        second_intermediates_real = cp.zeros(
-            (2*n_out, *self.full_tuple),
-            dtype=self.float,
-        )
-
         # Assign subarrays accordingly 
         unshifted_first_intermediates_fourier = cp.ndarray(
             shape=(n_in, *self.half_tuple),
@@ -1134,6 +1123,19 @@ class FourierSystem(FlucsSystem):
             memptr=first_intermediates_real[n_in].data
         )
 
+        # Can combine and keep the FFTs batched iff n_in = n_out
+        if (combine_first_and_second_intermediates and n_in == n_out):
+            second_intermediates_fourier = first_intermediates_fourier
+            second_intermediates_real = first_intermediates_real
+        else:
+            second_intermediates_fourier = cp.zeros(
+                (2*n_out, *self.half_tuple),
+                dtype=self.complex,
+            )
+            second_intermediates_real = cp.zeros(
+                (2*n_out, *self.full_tuple),
+                dtype=self.float,
+            )
 
         unshifted_second_intermediates_fourier = cp.ndarray(
             shape=(n_out, *self.half_tuple),
