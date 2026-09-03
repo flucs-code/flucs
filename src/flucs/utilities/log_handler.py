@@ -67,3 +67,5 @@ class FlucsLogHandler(TextIOBase, AbstractContextManager):
 
         sys.stdout = self._old_stdout
         sys.stderr = self._old_stderr
+
+        self.close()
