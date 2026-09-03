@@ -838,82 +838,322 @@ class FourierSystem(FlucsSystem):
     # Dealiased operations
     # -------------------------------------------------------------------------
 
-    def create_dft_derivatives_operation(
+    # def create_dft_derivatives_operation(
+    #     self,
+    #     find_derivatives_function: Callable,
+    #     find_real_bits_function: Callable,
+    #     combine_derivatives_and_bits: bool = True,
+    #     allocate_additional_memory: Callable | None = None
+    # ):
+    #     """
+    #     Function that allows systems to create their own df_derivatives_operation.
+    #     This is a simple wrapper for create_dealiased_operation that sets the 
+    #     appropriate arguments for FourierSystem.
+    #     """
+    #
+    #     def allocate_intermediates_memory():
+    #
+    #         return memory_dict
+    #
+    #
+    #     return self.create_dealiased_operation(
+    #         n_in=self.number_of_dft_derivatives,
+    #         n_out=self.number_of_dft_bits,
+    #         create_first_intermediates=find_derivatives_function,
+    #         create_second_intermediates=find_real_bits_function,
+    #         allocate_intermediates_memory=allocate_intermediates_memory,
+    #     )
+    #
+
+    def create_dealiased_operation_two_thirds(
         self,
-        find_derivatives_function: Callable,
-        find_real_bits_function: Callable,
-        combine_derivatives_and_bits: bool = True,
-        allocate_additional_memory: Callable | None = None
+        n_in: int,
+        n_out: int,
+        create_first_intermediates: Callable,
+        create_second_intermediates: Callable,
+        allocate_additional_memory: Callable,
+        combine_first_and_second_intermediates: bool = True,
     ):
-        """
-        Function that allows systems to create their own df_derivatives_operation.
-        This is a simple wrapper for create_dealiased_operation that sets the 
-        appropriate arguments for FourierSystem.
-        """
-
-        def allocate_intermediates_memory():
-            if combine_derivatives_and_bits:
-                combined_size = max(
-                    self.number_of_dft_derivatives, self.number_of_dft_bits
-                )
-
-                fourier_derivatives = cp.zeros(
-                    (combined_size, *self.half_tuple),
-                    dtype=self.complex,
-                )
-                real_derivatives = cp.zeros(
-                    (combined_size, *self.full_tuple),
-                    dtype=self.float,
-                )
-
-                fourier_bits = fourier_derivatives
-                real_bits = real_derivatives
-
-            else:
-                fourier_derivatives = cp.zeros(
-                    (self.number_of_dft_derivatives, *self.half_tuple),
-                    dtype=self.complex,
-                )
-                real_derivatives = cp.zeros(
-                    (self.number_of_dft_derivatives, *self.full_tuple),
-                    dtype=self.float,
-                )
-
-                fourier_bits = cp.zeros(
-                    (self.number_of_dft_bits, *self.half_tuple),
-                    dtype=self.complex,
-                )
-                real_bits = cp.zeros(
-                    (self.number_of_dft_bits, *self.full_tuple),
-                    dtype=self.float,
-                )
-
-            memory_dict = {
-                "first_intermediates_fourier_array": fourier_derivatives,
-                "fourier_derivatives": fourier_derivatives,
-                "first_intermediates_real_array": real_derivatives,
-                "real_derivatives": real_derivatives,
-                "second_intermediates_fourier_array": fourier_bits,
-                "fourier_bits": fourier_bits,
-                "second_intermediates_real_array": real_bits,
-                "real_bits": real_bits,
-            }
-
-            if allocate_additional_memory is not None:
-                memory_dict.update(
-                    allocate_additional_memory()
-                )
-
-            return memory_dict
-
-
-        return self.create_dealiased_operation(
-            n_in=self.number_of_dft_derivatives,
-            n_out=self.number_of_dft_bits,
-            create_first_intermediates=find_derivatives_function,
-            create_second_intermediates=find_real_bits_function,
-            allocate_intermediates_memory=allocate_intermediates_memory,
+        # Create the cuFFT plans for the forward and backward transforms
+        plan_c2r = self.create_standard_real_cufft_plan(
+            fft_type="c2r",
+            batch_size=n_in,
         )
+
+        plan_r2c = self.create_standard_real_cufft_plan(
+            fft_type="r2c",
+            batch_size=n_out,
+        )
+
+        # Allocate the memory required by the intermediates
+        if combine_first_and_second_intermediates:
+            combined_size = max(n_in, n_out)
+
+            first_intermediates_fourier = cp.zeros(
+                (combined_size, *self.half_tuple),
+                dtype=self.complex,
+            )
+            first_intermediates_real = cp.zeros(
+                (combined_size, *self.full_tuple),
+                dtype=self.float,
+            )
+
+            second_intermediates_fourier = first_intermediates_fourier
+            second_intermediates_real = first_intermediates_real
+
+        else:
+            first_intermediates_fourier = cp.zeros(
+                (self.number_of_dft_derivatives, *self.half_tuple),
+                dtype=self.complex,
+            )
+            first_intermediates_real = cp.zeros(
+                (self.number_of_dft_derivatives, *self.full_tuple),
+                dtype=self.float,
+            )
+
+            second_intermediates_fourier = cp.zeros(
+                (self.number_of_dft_bits, *self.half_tuple),
+                dtype=self.complex,
+            )
+            second_intermediates_real = cp.zeros(
+                (self.number_of_dft_bits, *self.full_tuple),
+                dtype=self.float,
+            )
+
+        memory_dict = {
+            "first_intermediates_fourier": first_intermediates_fourier,
+            "first_intermediates_real": first_intermediates_real,
+            "second_intermediates_fourier": second_intermediates_fourier,
+            "second_intermediates_real": second_intermediates_real,
+        }
+
+        if allocate_additional_memory is not None:
+            memory_dict.update(
+                allocate_additional_memory()
+            )
+
+        def dealiased_operation(
+            current_dt,
+            current_time,
+            current_step,
+            input_array,
+            calculate_cfl
+            ):
+
+            # Input fourier fields -> Fourier intermediate quantities
+            create_first_intermediates(
+                current_dt,
+                current_time,
+                current_step,
+                input_array,
+                memory_dict,
+            )
+
+            # Fourier intermediate quantities -> real-space ...
+            plan_c2r.fft(
+                first_intermediates_fourier,
+                first_intermediates_real,
+                cufft.CUFFT_INVERSE,
+            )
+
+            # Real-space intermediate quantities -> real-space products
+            create_second_intermediates(
+                current_dt,
+                current_time,
+                current_step,
+                calculate_cfl,
+                memory_dict,
+            )
+
+            # Real-space products -> Fourier output fields
+            plan_r2c.fft(
+                second_intermediates_real,
+                second_intermediates_fourier,
+                cufft.CUFFT_INVERSE,
+            )
+
+        return dealiased_operation, second_intermediates_fourier
+
+
+    def create_dealiased_operation_phase_shift(
+        self,
+        n_in: int,
+        n_out: int,
+        create_first_intermediates: Callable,
+        create_second_intermediates: Callable,
+        allocate_additional_memory: Callable,
+        combine_first_and_second_intermediates: bool = False,  # ignored here
+    ):
+        # Create the cuFFT plans for the forward and backward transforms
+        plan_c2r = self.create_standard_real_cufft_plan(
+            fft_type="c2r",
+            batch_size=2*n_in,
+        )
+
+        plan_r2c = self.create_standard_real_cufft_plan(
+            fft_type="r2c",
+            batch_size=2*n_out,
+        )
+
+        # Allocate memory for batched FFTs for both shifted and unshifted data
+        first_intermediates_fourier = cp.zeros(
+            (2*n_in, *self.half_tuple),
+            dtype=self.complex,
+        )
+        first_intermediates_real = cp.zeros(
+            (2*n_in, *self.full_tuple),
+            dtype=self.float,
+        )
+
+        unshifted_first_intermediates_fourier = first_intermediates_fourier[0]
+        shifted_first_intermediates_fourier = first_intermediates_fourier[n_in]
+
+        unshifted_first_intermediates_real = first_intermediates_real[0]
+        shifted_first_intermediates_real = first_intermediates_real[n_in]
+
+        second_intermediates_fourier = cp.zeros(
+            (2*n_out, *self.half_tuple),
+            dtype=self.complex,
+        )
+        second_intermediates_real = cp.zeros(
+            (2*n_out, *self.full_tuple),
+            dtype=self.float,
+        )
+
+        unshifted_second_intermediates_fourier = second_intermediates_fourier[0]
+        shifted_second_intermediates_fourier = second_intermediates_fourier[n_out]
+
+        unshifted_second_intermediates_real = second_intermediates_real[0]
+        shifted_second_intermediates_real = second_intermediates_real[n_out]
+
+        unshifted_memory_dict = {
+            "first_intermediates_fourier": unshifted_first_intermediates_fourier,
+            "first_intermediates_real": unshifted_first_intermediates_real,
+            "second_intermediates_fourier": unshifted_second_intermediates_fourier,
+            "second_intermediates_real": unshifted_second_intermediates_real,
+        }
+
+        shifted_memory_dict = {
+            "first_intermediates_fourier": shifted_first_intermediates_fourier,
+            "first_intermediates_real": shifted_first_intermediates_real,
+            "second_intermediates_fourier": shifted_second_intermediates_fourier,
+            "second_intermediates_real": shifted_second_intermediates_real,
+        }
+
+        if allocate_additional_memory is not None:
+            unshifted_memory_dict.update(
+                allocate_additional_memory()
+            )
+            shifted_memory_dict.update(
+                allocate_additional_memory()
+            )
+
+        # Phase-shifting kernels
+        add_phase_factors_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name=f"add_phase_factors<{n_in}>",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+        undo_phase_factors_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name=f"undo_phase_factors<{n_out}>",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
+        main_stream = cp.cuda.get_current_stream()
+        stream_unshifted = cp.cuda.Stream(non_blocking=True)
+        stream_shifted = cp.cuda.Stream(non_blocking=True)
+
+        def dealiased_operation(
+            current_dt,
+            current_time,
+            current_step,
+            input_array,
+            calculate_cfl
+        ):
+            # Input fourier fields -> Fourier intermediate quantities
+            create_first_intermediates(
+                current_dt,
+                current_time,
+                current_step,
+                input_array,
+                unshifted_memory_dict,
+            )
+
+            add_phase_factors_kernel(
+                unshifted_first_intermediates_fourier,
+                shifted_first_intermediates_fourier,
+            )
+
+            plan_c2r.fft(
+                first_intermediates_fourier,
+                first_intermediates_real,
+                cufft.CUFFT_INVERSE,
+            )
+
+            # Copy shifted Fourier intermediates into separate shifted
+            # working array
+            # inputs_ready = main_stream.record()
+
+            # Unshifted Fourier intermediates -> Fourier output fields
+            # stream_unshifted.wait_event(inputs_ready)
+            # with stream_unshifted:
+
+                # Real-space intermediates -> real-space products
+            create_second_intermediates(
+                current_dt,
+                current_time,
+                current_step,
+                calculate_cfl,
+                unshifted_memory_dict,
+            )
+
+                # done_unshifted = stream_unshifted.record()
+
+            # Shifted Fourier intermediates -> shifted Fourier output
+            # stream_shifted.wait_event(inputs_ready)
+            # with stream_shifted:
+
+                # Real-space intermediates -> real-space products
+            create_second_intermediates(
+                current_dt,
+                current_time,
+                current_step,
+                False,
+                shifted_memory_dict,
+            )
+
+                # Real-space products -> Fourier output fields
+                # done_shifted = stream_shifted.record()
+            plan_r2c.fft(
+                second_intermediates_real,
+                second_intermediates_fourier,
+                cufft.CUFFT_INVERSE,
+            )
+
+            # main_stream.wait_event(done_unshifted)
+            # main_stream.wait_event(done_shifted)
+
+            # Shifted and unshifted Fourier outputs -> dealiased output
+            undo_phase_factors_kernel(
+                unshifted_second_intermediates_fourier,
+                shifted_second_intermediates_fourier,
+            )
+
+        return dealiased_operation, unshifted_second_intermediates_fourier
+
+    def create_dealiased_operation_phase_shift_low_memory(
+        self,
+        n_in: int,
+        n_out: int,
+        create_first_intermediates: Callable,
+        create_second_intermediates: Callable,
+        allocate_additional_memory: Callable,
+        combine_first_and_second_intermediates: bool = True,
+    ):
+        pass
 
     def create_dealiased_operation(
         self,
@@ -921,7 +1161,8 @@ class FourierSystem(FlucsSystem):
         n_out: int,
         create_first_intermediates: Callable = lambda *args: None,
         create_second_intermediates: Callable = lambda *args: None,
-        allocate_intermediates_memory: Callable = lambda: dict, 
+        allocate_additional_memory: Callable = lambda: dict, 
+        combine_first_and_second_intermediates: bool = True,
     ):
         """
         Builds a dealiased Fourier-to-real-to-Fourier operation.
@@ -942,65 +1183,37 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        # Create the cuFFT plans for the forward and backward transforms
-        plan_c2r = self.create_standard_real_cufft_plan(
-            fft_type="c2r",
-            batch_size=n_in,
-        )
-
-        plan_r2c = self.create_standard_real_cufft_plan(
-            fft_type="r2c",
-            batch_size=n_out,
-        )
-
-        # We always need at least one copy of all the arrays needed by the intermediates
-        unshifted_memory_dict = allocate_intermediates_memory()
-        first_intermediates_fourier_array = unshifted_memory_dict["first_intermediates_fourier_array"]
-        first_intermediates_real_array = unshifted_memory_dict["first_intermediates_real_array"]
-        second_intermediates_fourier_array = unshifted_memory_dict["second_intermediates_fourier_array"]
-        second_intermediates_real_array = unshifted_memory_dict["second_intermediates_real_array"]
 
         if self.input["dealiasing.method"] == "two-thirds":
-            def dealiased_operation(
-                current_dt,
-                current_time,
-                current_step,
-                input_array,
-                calculate_cfl
-                ):
-
-                # Input fourier fields -> Fourier intermediate quantities
-                create_first_intermediates(
-                    current_dt,
-                    current_time,
-                    current_step,
-                    input_array,
-                    unshifted_memory_dict,
-                )
-
-                # Fourier intermediate quantities -> real-space ...
-                plan_c2r.fft(
-                    first_intermediates_fourier_array,
-                    first_intermediates_real_array,
-                    cufft.CUFFT_INVERSE,
-                )
-
-                # Real-space intermediate quantities -> real-space products
-                create_second_intermediates(
-                    current_dt,
-                    current_time,
-                    current_step,
-                    calculate_cfl,
-                    unshifted_memory_dict,
-                )
-
-                # Real-space products -> Fourier output fields
-                plan_r2c.fft(
-                    second_intermediates_real_array,
-                    second_intermediates_fourier_array,
-                    cufft.CUFFT_INVERSE,
-                )
+            return self.create_dealiased_operation_two_thirds(
+                n_in=n_in,
+                n_out=n_out,
+                create_first_intermediates=create_first_intermediates,
+                create_second_intermediates=create_second_intermediates,
+                allocate_additional_memory=allocate_additional_memory,
+                combine_first_and_second_intermediates=combine_first_and_second_intermediates,
+            )
         else:
+            if self.input["dealiasing.low_memory"]:
+                return self.create_dealiased_operation_phase_shift_low_memory(
+                    n_in=n_in,
+                    n_out=n_out,
+                    create_first_intermediates=create_first_intermediates,
+                    create_second_intermediates=create_second_intermediates,
+                    allocate_additional_memory=allocate_additional_memory,
+                    combine_first_and_second_intermediates=combine_first_and_second_intermediates,
+                )
+            else:
+                return self.create_dealiased_operation_phase_shift(
+                    n_in=n_in,
+                    n_out=n_out,
+                    create_first_intermediates=create_first_intermediates,
+                    create_second_intermediates=create_second_intermediates,
+                    allocate_additional_memory=allocate_additional_memory,
+                    combine_first_and_second_intermediates=combine_first_and_second_intermediates,
+                )
+
+
             # Useful helper function that computes Fourier-space products given
             # Fourier intermediate quantities (e.g., derivatives of fields)
             def compute_fourier_products(
