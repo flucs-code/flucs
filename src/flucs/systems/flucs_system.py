@@ -55,6 +55,9 @@ class FlucsSystem(ABC):
     init_time: float
     init_dt: float
 
+    # Variable to estimate time until completion
+    initial_wallclock_time: datetime.datetime
+
     # Restart manager
     restart_manager: FlucsRestart
 
@@ -243,6 +246,41 @@ class FlucsSystem(ABC):
             flucsprint("\nFound a STOP file. Exiting cleanly.")
             self.solver.interrupted = True
             stop_file_location.unlink()
+
+        # Not stopping or interrupted, so print time remaining
+        elif not self.solver.interrupted:
+            if hasattr(self, "initial_wallclock_time"):
+                time_elapsed = (
+                    datetime.datetime.now() - self.initial_wallclock_time
+                )
+
+                # Approximate time remaining
+                step_rate = time_elapsed.total_seconds() / self.current_step
+
+                steps_remaining = (
+                    self.final_time - self.current_time
+                ) / self.current_dt
+
+                remaining_seconds = steps_remaining * step_rate
+
+                # Report result and warn if it exceeds 20 days
+                if remaining_seconds > 86400 * 20:
+                    flucsprint(
+                        f"({self.current_step:.3e}) Time remaining exceeds "
+                        f"20 days.",
+                        source=self,
+                        message_type="warning",
+                    )
+                else:
+                    completion_time = (
+                        datetime.datetime.now()
+                        + datetime.timedelta(seconds=float(remaining_seconds))
+                    )
+                    flucsprint(
+                        f"({self.current_step:.3e}) Est. walltime: "
+                        f"{self._format_time_interval(remaining_seconds)} "
+                        f"({completion_time.strftime('%Y-%m-%d %H:%M:%S')})"
+                    )
 
     def setup_output(self) -> None:
         """
@@ -548,6 +586,17 @@ class FlucsSystem(ABC):
             root_src_path = pl.Path(root_mod.__file__).parent.parent
 
             self.module_options.add_compiler_option(f"-I{root_src_path}")
+
+    def _format_time_interval(self, seconds: float) -> str:
+        """
+        Formats a duration in seconds to be human readable
+        """
+        total_seconds = int(seconds)
+        days, remainder = divmod(total_seconds, 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, secs = divmod(remainder, 60)
+
+        return f"{days:02d}:{hours:02d}:{minutes:02d}:{secs:02d}"
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input

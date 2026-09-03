@@ -1616,11 +1616,32 @@ class FourierSystem(FlucsSystem):
             case "white_noise":
                 # Set random seed
                 np.random.seed(self.input["init.rand_seed"])
-
-                # Construct fields on the solved modes
-                solved_fields = self.input["init.amplitude"] * np.random.random(
+                # Set initial fields
+                solved_fields = np.random.random(
                     (self.number_of_fields, number_of_solved_modes)
-                )
+                ).astype(dtype=self.complex)
+                solved_fields = np.exp(1j * np.pi * solved_fields)
+                # this randomizes phases
+
+                # Decide what amplitudes to use
+                n_amplitudes = len(self.input["init.amplitude_list"])
+                if n_amplitudes == 0:
+                    # no amplitude list supplied
+                    noise_amplitude = self.input["init.amplitude"]
+                    solved_fields *= noise_amplitude
+
+                else:
+                    # Non-empty amplitude list was supplied
+                    if n_amplitudes == self.number_of_fields:
+                        noise_amplitude_list = self.input["init.amplitude_list"]
+                        for i in range(self.number_of_fields):
+                            solved_fields[i, :] *= noise_amplitude_list[i]
+                    else:
+                        raise InvalidFlucsInputFileError(
+                            "Incorrect init.amplitude_list: Length"
+                            + "does not match number of fields "
+                            + "and is non-zero."
+                        )
 
             case "gaussian":
                 # Construct wavenumbers for the solved modes
@@ -2062,9 +2083,10 @@ class FourierSystem(FlucsSystem):
         # If CFL condition is violated
         if self.cfl_rate_float * self.current_dt > self.max_cfl:
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
+
             flucsprint(
-                f"dt: {self.current_dt:.3e} -> "
-                f"{new_dt:.3e} (-, {self.current_step:.3e})"
+                f"({self.current_step:.3e}) dt: "
+                f"{self.current_dt:.3e} -> {new_dt:.3e} (-)"
             )
 
             self.current_dt = new_dt
@@ -2084,8 +2106,8 @@ class FourierSystem(FlucsSystem):
 
             if new_dt > self.current_dt:
                 flucsprint(
-                    f"dt: {self.current_dt:.3e} -> {new_dt:.3e} "
-                    f"(+, {self.current_step:.3e})"
+                    f"({self.current_step:.3e}) dt: "
+                    f"{self.current_dt:.3e} -> {new_dt:.3e} (+)"
                 )
 
                 self.current_dt = new_dt
