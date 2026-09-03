@@ -1156,16 +1156,16 @@ class FourierSystem(FlucsSystem):
         )
 
         unshifted_memory_dict = {
-            "first_intermediates_fourier": unshifted_first_intermediates_fourier,
+            "first_intermediates_fourier": unshifted_first_intermediates_fourier,  # noqa: E501
             "first_intermediates_real": unshifted_first_intermediates_real,
-            "second_intermediates_fourier": unshifted_second_intermediates_fourier,
+            "second_intermediates_fourier": unshifted_second_intermediates_fourier,  # noqa: E501
             "second_intermediates_real": unshifted_second_intermediates_real,
         }
 
         shifted_memory_dict = {
             "first_intermediates_fourier": shifted_first_intermediates_fourier,
             "first_intermediates_real": shifted_first_intermediates_real,
-            "second_intermediates_fourier": shifted_second_intermediates_fourier,
+            "second_intermediates_fourier": shifted_second_intermediates_fourier,  # noqa: E501
             "second_intermediates_real": shifted_second_intermediates_real,
         }
 
