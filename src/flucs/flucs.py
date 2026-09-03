@@ -13,6 +13,7 @@ from flucs.utilities.messages import flucsprint
 
 try:
     import cupy as cupy
+
     cupy.fft.fft(cupy.zeros(1))  # quickly test if CuPy actually works
 except Exception as exc:
     cupy = None

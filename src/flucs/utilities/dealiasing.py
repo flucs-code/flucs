@@ -1,7 +1,8 @@
 import heapq
 
-from flucs import cupy as cp
 import numpy as np
+
+from flucs import cupy as cp
 
 
 def next_smooth_number(n: int, primes: list | None = None) -> int:
@@ -44,16 +45,17 @@ def next_smooth_number(n: int, primes: list | None = None) -> int:
             # we will ever use this for n > 10^4 or so.
             heapq.heappush(heap, p * guess)
 
+
 def dealiased_multiplication_rfft(*args, **kwargs):
     """
     Compute the RFFT of a real-space product using Fourier-space padding.
 
-    Each input is a 3D CuPy RFFT array with shape 
+    Each input is a 3D CuPy RFFT array with shape
 
         (nz, nx, half_ny)
 
     The input Fourier arrays are padded, inverse Fourier transformed, multiplied
-    pointwise in real space, and transformed back to Fourier space. The fields 
+    pointwise in real space, and transformed back to Fourier space. The fields
     are then cropped to the original grid.
 
     This is slow, unoptimised, and should therefore not be used
@@ -67,8 +69,8 @@ def dealiased_multiplication_rfft(*args, **kwargs):
         Fourier-space fields to multiply. All fields must have the same shape
         and dtype.
     **kwargs
-        Optional nx, ny, and nz real-space dimensions and their corresponding 
-        padded_nx, padded_ny, and padded_nz values. If omitted, dimensions and 
+        Optional nx, ny, and nz real-space dimensions and their corresponding
+        padded_nx, padded_ny, and padded_nz values. If omitted, dimensions and
         sufficiently large padding are inferred from the array input shape
     """
 
@@ -90,7 +92,7 @@ def dealiased_multiplication_rfft(*args, **kwargs):
     try:
         ny = kwargs["ny"]
     except KeyError:
-        ny = 2*args[0].shape[2] - 1
+        ny = 2 * args[0].shape[2] - 1
 
     try:
         nz = kwargs["nz"]
@@ -105,7 +107,7 @@ def dealiased_multiplication_rfft(*args, **kwargs):
     try:
         padded_nx = kwargs["padded_nx"]
     except KeyError:
-        padded_nx = int(np.ceil((1.1 + n) * nx / 2)) 
+        padded_nx = int(np.ceil((1.1 + n) * nx / 2))
 
     try:
         padded_ny = kwargs["padded_ny"]
@@ -132,28 +134,21 @@ def dealiased_multiplication_rfft(*args, **kwargs):
         )
 
         # Handle corners as RFFT returns only nonnegative ky modes.
-        padded_array[
-            :half_nz, :half_nx, :half_ny
-        ] = args[i][
+        padded_array[:half_nz, :half_nx, :half_ny] = args[i][
             :half_nz, :half_nx, :half_ny
         ]
-        padded_array[
-            neg_z, :half_nx, :half_ny
-        ] = args[i][
+        padded_array[neg_z, :half_nx, :half_ny] = args[i][
             neg_z, :half_nx, :half_ny
         ]
-        padded_array[
-            :half_nz, -half_nx+1:, :half_ny
-        ] = args[i][
-            :half_nz, -half_nx+1:, :half_ny
+        padded_array[:half_nz, -half_nx + 1 :, :half_ny] = args[i][
+            :half_nz, -half_nx + 1 :, :half_ny
         ]
-        padded_array[
-            neg_z, -half_nx+1:, :half_ny
-        ] = args[i][
-            neg_z, -half_nx+1:, :half_ny
+        padded_array[neg_z, -half_nx + 1 :, :half_ny] = args[i][
+            neg_z, -half_nx + 1 :, :half_ny
         ]
 
-        # Transform each padded field and multiply it into the real-space product
+        # Transform each padded field
+        # and multiply it into the real-space product
         product *= cp_np.fft.irfftn(
             padded_array, s=(padded_nz, padded_nx, padded_ny), norm="forward"
         )
@@ -166,27 +161,17 @@ def dealiased_multiplication_rfft(*args, **kwargs):
     # Crop the same four Fourier-space corners back to the original grid
     product_rfft = cp_np.zeros((nz, nx, half_ny), dtype=complex_type)
 
-    product_rfft[
-        :half_nz, :half_nx, :half_ny
-    ] = product_rfft_padded[
+    product_rfft[:half_nz, :half_nx, :half_ny] = product_rfft_padded[
         :half_nz, :half_nx, :half_ny
     ]
-    product_rfft[
-        neg_z, :half_nx, :half_ny
-    ] = product_rfft_padded[
+    product_rfft[neg_z, :half_nx, :half_ny] = product_rfft_padded[
         neg_z, :half_nx, :half_ny
     ]
-    product_rfft[
-        :half_nz, -half_nx+1:, :half_ny
-    ] = product_rfft_padded[
-        :half_nz, -half_nx+1:, :half_ny
+    product_rfft[:half_nz, -half_nx + 1 :, :half_ny] = product_rfft_padded[
+        :half_nz, -half_nx + 1 :, :half_ny
     ]
-    product_rfft[
-        neg_z, -half_nx+1:, :half_ny
-    ] = product_rfft_padded[
-        neg_z, -half_nx+1:, :half_ny
+    product_rfft[neg_z, -half_nx + 1 :, :half_ny] = product_rfft_padded[
+        neg_z, -half_nx + 1 :, :half_ny
     ]
 
     return product_rfft
-
-

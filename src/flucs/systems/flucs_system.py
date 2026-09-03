@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from flucs import cupy as cp
 from flucs import FlucsInput
+from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 if cp is not None:
     from cupy.cuda import cufft
+
 
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""

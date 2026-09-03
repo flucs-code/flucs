@@ -15,7 +15,10 @@ from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import KernelWrapper
-from flucs.utilities.dealiasing import next_smooth_number, dealiased_multiplication_rfft
+from flucs.utilities.dealiasing import (
+    dealiased_multiplication_rfft,
+    next_smooth_number,
+)
 from flucs.utilities.messages import flucsprint
 
 from .fourier_system_diagnostics import (
@@ -209,7 +212,9 @@ class FourierSystem(FlucsSystem):
 
         if self.input["dealiasing.method"] == "phase-shift":
             truncation = self.input["dealiasing.truncation"]
-            memory = ", low memory" if self.input["dealiasing.low_memory"] else ""
+            memory = (
+                ", low memory" if self.input["dealiasing.low_memory"] else ""
+            )
             message += f" ({truncation}{memory})"
 
         if (
@@ -333,7 +338,7 @@ class FourierSystem(FlucsSystem):
                     # the theoretical limit of 2/(nonlinear_order + 1)^2
                     denominator = (
                         self.input["dealiasing.nonlinear_order"] + 1
-                    )**2
+                    ) ** 2
 
                     scale = 1000
                     radius_squared = ((2 * scale - 1) // denominator) / scale
@@ -358,10 +363,7 @@ class FourierSystem(FlucsSystem):
             setattr(self, f"n{dim}", n)
             setattr(self, f"half_n{dim}", half_n)
 
-            if (
-                self.input["dealiasing.truncation"]
-                == "spherical"
-            ):
+            if self.input["dealiasing.truncation"] == "spherical":
                 # Find equivalent unpadded (handle edge case for n=1)
                 half_n_unpadded = max(
                     1,
@@ -616,12 +618,8 @@ class FourierSystem(FlucsSystem):
         )
 
         # Sizes
-        self.module_options.define_dimension(
-            "HALFSIZE", self.half_size
-        )
-        self.module_options.define_dimension(
-            "FULLSIZE", self.full_size
-        )
+        self.module_options.define_dimension("HALFSIZE", self.half_size)
+        self.module_options.define_dimension("FULLSIZE", self.full_size)
         self.module_options.define_float(
             "DFT_FULLSIZE_FACTOR", self.float(1.0 / self.full_size)
         )
@@ -734,7 +732,9 @@ class FourierSystem(FlucsSystem):
         self.compute_hyperdissipation_components_kmax_kernel(
             hyperdissipation_components_kmax
         )
-        self.hyperdissipation_components_kmax = hyperdissipation_components_kmax.get()
+        self.hyperdissipation_components_kmax = (
+            hyperdissipation_components_kmax.get()
+        )
 
         # Cleanup kernels (no longer required after initialisation)
         del self.compute_hyperdissipation_components_kmax_kernel
@@ -797,12 +797,13 @@ class FourierSystem(FlucsSystem):
 
         # Dealiasing error-checking
         if self.input["dealiasing.check_errors"]:
+
             def create_first_intermediates(
                 current_dt,
                 current_time,
                 current_step: int,
                 input: cp.ndarray,
-                memory_dict: dict
+                memory_dict: dict,
             ) -> None:
                 memory_dict["first_intermediates_fourier"][:] = input[:]
 
@@ -811,15 +812,18 @@ class FourierSystem(FlucsSystem):
                 current_time,
                 current_step: int,
                 calculate_cfl: bool,
-                memory_dict: dict
+                memory_dict: dict,
             ) -> None:
 
                 memory_dict["second_intermediates_real"][:] = (
-                      memory_dict["first_intermediates_real"][0, :]
+                    memory_dict["first_intermediates_real"][0, :]
                     * memory_dict["first_intermediates_real"][1, :]
                 ) / self.full_size
 
-            self.check_dealiasing_errors_operation, self.check_dealiasing_errors_output = self.create_dealiased_operation(
+            (
+                self.check_dealiasing_errors_operation,
+                self.check_dealiasing_errors_output,
+            ) = self.create_dealiased_operation(
                 n_in=2,
                 n_out=1,
                 create_first_intermediates=create_first_intermediates,
@@ -842,10 +846,10 @@ class FourierSystem(FlucsSystem):
         """
         Builds a dealiased Fourier-to-real-to-Fourier operation.
 
-        create_first_intermediates constructs n_in Fourier-space intermediate arrays
-        from the supplied input. After inverse FFTs, create_second_intermediates constructs
-        n_out real-space products. Forward FFTs place the result in the output
-        array.
+        create_first_intermediates constructs n_in Fourier-space intermediate
+        arrays from the supplied input. After inverse FFTs,
+        create_second_intermediates constructs n_out real-space products.
+        Forward FFTs place the result in the output array.
 
         Parameters
         ----------
@@ -915,7 +919,6 @@ class FourierSystem(FlucsSystem):
                     combine_first_and_second_intermediates=combine_first_and_second_intermediates,
                 )
 
-
     def create_dealiased_operation_two_thirds(
         self,
         n_in: int,
@@ -961,23 +964,23 @@ class FourierSystem(FlucsSystem):
             first_intermediates_fourier = cp.ndarray(
                 (n_in, *self.half_tuple),
                 dtype=self.complex,
-                memptr=first_intermediates_fourier.data
+                memptr=first_intermediates_fourier.data,
             )
             first_intermediates_real = cp.ndarray(
                 (n_in, *self.full_tuple),
                 dtype=self.float,
-                memptr=first_intermediates_real.data
+                memptr=first_intermediates_real.data,
             )
 
             second_intermediates_fourier = cp.ndarray(
                 (n_out, *self.half_tuple),
                 dtype=self.complex,
-                memptr=first_intermediates_fourier.data
+                memptr=first_intermediates_fourier.data,
             )
             second_intermediates_real = cp.ndarray(
                 (n_out, *self.full_tuple),
                 dtype=self.float,
-                memptr=first_intermediates_real.data
+                memptr=first_intermediates_real.data,
             )
 
         else:
@@ -1008,17 +1011,11 @@ class FourierSystem(FlucsSystem):
 
         # Add any additional, user-defined memory
         if allocate_additional_memory is not None:
-            memory_dict.update(
-                allocate_additional_memory()
-            )
+            memory_dict.update(allocate_additional_memory())
 
         # Create the dealiased_operation
         def dealiased_operation(
-            current_dt,
-            current_time,
-            current_step,
-            input_array,
-            calculate_cfl
+            current_dt, current_time, current_step, input_array, calculate_cfl
         ):
 
             # Input Fourier fields -> first Fourier intermediate quantities
@@ -1056,7 +1053,6 @@ class FourierSystem(FlucsSystem):
 
         return dealiased_operation, second_intermediates_fourier
 
-
     def create_dealiased_operation_phase_shift(
         self,
         n_in: int,
@@ -1078,29 +1074,29 @@ class FourierSystem(FlucsSystem):
 
         combine_first_and_second_intermediates is ignored as it is not
         possible when batching the FFTs unless n_in = n_out.
-        
+
         """
         # Create the cuFFT plans for the forward and backward transforms
         plan_c2r = self.create_standard_real_cufft_plan(
             fft_type="c2r",
-            batch_size=2*n_in,
+            batch_size=2 * n_in,
         )
 
         plan_r2c = self.create_standard_real_cufft_plan(
             fft_type="r2c",
-            batch_size=2*n_out,
+            batch_size=2 * n_out,
         )
 
         # Allocate memory for batched FFTs for both shifted and unshifted data
         first_intermediates_fourier = cp.zeros(
-            (2*n_in, *self.half_tuple),
+            (2 * n_in, *self.half_tuple),
             dtype=self.complex,
         )
         first_intermediates_real = cp.zeros(
-            (2*n_in, *self.full_tuple),
+            (2 * n_in, *self.full_tuple),
             dtype=self.float,
         )
-        # Assign subarrays accordingly 
+        # Assign subarrays accordingly
         unshifted_first_intermediates_fourier = cp.ndarray(
             shape=(n_in, *self.half_tuple),
             dtype=self.complex,
@@ -1109,31 +1105,31 @@ class FourierSystem(FlucsSystem):
         shifted_first_intermediates_fourier = cp.ndarray(
             shape=(n_in, *self.half_tuple),
             dtype=self.complex,
-            memptr=first_intermediates_fourier[n_in].data
+            memptr=first_intermediates_fourier[n_in].data,
         )
 
         unshifted_first_intermediates_real = cp.ndarray(
             shape=(n_in, *self.full_tuple),
             dtype=self.float,
-            memptr=first_intermediates_real[0].data
+            memptr=first_intermediates_real[0].data,
         )
         shifted_first_intermediates_real = cp.ndarray(
             shape=(n_in, *self.full_tuple),
             dtype=self.float,
-            memptr=first_intermediates_real[n_in].data
+            memptr=first_intermediates_real[n_in].data,
         )
 
         # Can combine and keep the FFTs batched iff n_in = n_out
-        if (combine_first_and_second_intermediates and n_in == n_out):
+        if combine_first_and_second_intermediates and n_in == n_out:
             second_intermediates_fourier = first_intermediates_fourier
             second_intermediates_real = first_intermediates_real
         else:
             second_intermediates_fourier = cp.zeros(
-                (2*n_out, *self.half_tuple),
+                (2 * n_out, *self.half_tuple),
                 dtype=self.complex,
             )
             second_intermediates_real = cp.zeros(
-                (2*n_out, *self.full_tuple),
+                (2 * n_out, *self.full_tuple),
                 dtype=self.float,
             )
 
@@ -1145,18 +1141,18 @@ class FourierSystem(FlucsSystem):
         shifted_second_intermediates_fourier = cp.ndarray(
             shape=(n_out, *self.half_tuple),
             dtype=self.complex,
-            memptr=second_intermediates_fourier[n_out].data
+            memptr=second_intermediates_fourier[n_out].data,
         )
 
         unshifted_second_intermediates_real = cp.ndarray(
             shape=(n_out, *self.full_tuple),
             dtype=self.float,
-            memptr=second_intermediates_real[0].data
+            memptr=second_intermediates_real[0].data,
         )
         shifted_second_intermediates_real = cp.ndarray(
             shape=(n_out, *self.full_tuple),
             dtype=self.float,
-            memptr=second_intermediates_real[n_out].data
+            memptr=second_intermediates_real[n_out].data,
         )
 
         unshifted_memory_dict = {
@@ -1180,12 +1176,8 @@ class FourierSystem(FlucsSystem):
             # It is up to the user whether allocate_additional_memory
             # returns the same arrays or allocates new
             # ones every time.
-            unshifted_memory_dict.update(
-                allocate_additional_memory()
-            )
-            shifted_memory_dict.update(
-                allocate_additional_memory()
-            )
+            unshifted_memory_dict.update(allocate_additional_memory())
+            shifted_memory_dict.update(allocate_additional_memory())
 
         # Phase-shifting kernels
         add_phase_factors_kernel = KernelWrapper(
@@ -1203,11 +1195,7 @@ class FourierSystem(FlucsSystem):
 
         # Create the dealiased_operation
         def dealiased_operation(
-            current_dt,
-            current_time,
-            current_step,
-            input_array,
-            calculate_cfl
+            current_dt, current_time, current_step, input_array, calculate_cfl
         ):
             # Input Fourier fields -> first Fourier intermediate quantities
             create_first_intermediates(
@@ -1320,23 +1308,23 @@ class FourierSystem(FlucsSystem):
             first_intermediates_fourier = cp.ndarray(
                 (n_in, *self.half_tuple),
                 dtype=self.complex,
-                memptr=first_intermediates_fourier.data
+                memptr=first_intermediates_fourier.data,
             )
             first_intermediates_real = cp.ndarray(
                 (n_in, *self.full_tuple),
                 dtype=self.float,
-                memptr=first_intermediates_real.data
+                memptr=first_intermediates_real.data,
             )
 
             second_intermediates_fourier = cp.ndarray(
                 (n_out, *self.half_tuple),
                 dtype=self.complex,
-                memptr=first_intermediates_fourier.data
+                memptr=first_intermediates_fourier.data,
             )
             second_intermediates_real = cp.ndarray(
                 (n_out, *self.full_tuple),
                 dtype=self.float,
-                memptr=first_intermediates_real.data
+                memptr=first_intermediates_real.data,
             )
 
         else:
@@ -1367,9 +1355,7 @@ class FourierSystem(FlucsSystem):
 
         # Add any additional, user-defined memory
         if allocate_additional_memory is not None:
-            memory_dict.update(
-                allocate_additional_memory()
-            )
+            memory_dict.update(allocate_additional_memory())
 
         # Shifted operations run after unshifted ones are reuse all
         # memory from unshifted apart from the final output array
@@ -1401,11 +1387,7 @@ class FourierSystem(FlucsSystem):
 
         # Create the dealiased_operation
         def dealiased_operation(
-            current_dt,
-            current_time,
-            current_step,
-            input_array,
-            calculate_cfl
+            current_dt, current_time, current_step, input_array, calculate_cfl
         ):
 
             # First do shifted...
@@ -1421,8 +1403,7 @@ class FourierSystem(FlucsSystem):
 
             # Phase shift
             add_phase_factors_kernel(
-                first_intermediates_fourier,
-                first_intermediates_fourier
+                first_intermediates_fourier, first_intermediates_fourier
             )
 
             # Fourier intermediates -> real-space intermediates
@@ -1494,9 +1475,7 @@ class FourierSystem(FlucsSystem):
 
         return dealiased_operation, second_intermediates_fourier
 
-    def create_standard_real_cufft_plan(
-        self, fft_type: str, batch_size: int
-    ):
+    def create_standard_real_cufft_plan(self, fft_type: str, batch_size: int):
         """
         Create a reusable batched 3D real cuFFT plan for the FourierSystem grid.
 
@@ -1505,7 +1484,7 @@ class FourierSystem(FlucsSystem):
             c2r: (batch, nz, nx, half_ny) -> (batch, nz, nx, ny)
             r2c: (batch, nz, nx, ny)      -> (batch, nz, nx, half_ny)
 
-        cuFFT transforms are unnormalised; callers must apply any required 
+        cuFFT transforms are unnormalised; callers must apply any required
         normalisation separately.
 
         Parameters
@@ -1639,9 +1618,7 @@ class FourierSystem(FlucsSystem):
                 np.random.seed(self.input["init.rand_seed"])
 
                 # Construct fields on the solved modes
-                solved_fields = self.input[
-                    "init.amplitude"
-                ] * np.random.random(
+                solved_fields = self.input["init.amplitude"] * np.random.random(
                     (self.number_of_fields, number_of_solved_modes)
                 )
 
@@ -1678,9 +1655,9 @@ class FourierSystem(FlucsSystem):
                     angle = self.float(phase) / (2.0 * np.pi)
 
                 # Normalise fields to the requested amplitude
-                solved_fields = (
-                    envelope[None, :] * np.exp(1j * angle)
-                ).astype(self.complex)
+                solved_fields = (envelope[None, :] * np.exp(1j * angle)).astype(
+                    self.complex
+                )
 
                 norm = np.sqrt(np.sum(np.abs(solved_fields) ** 2))
 
@@ -1717,9 +1694,9 @@ class FourierSystem(FlucsSystem):
 
         conjugate_ikz = (-np.arange(self.nz)) % self.nz
         conjugate_ikx = (-np.arange(self.nx)) % self.nx
-        conjugate_mask_ky0 = solved_grid_mask_ky0[
-            conjugate_ikz[:, None], conjugate_ikx[None, :]
-        ]
+        # conjugate_mask_ky0 = solved_grid_mask_ky0[
+        #     conjugate_ikz[:, None], conjugate_ikx[None, :]
+        # ]
 
         # If not restarting, enforce the reality condition
         if self.restart_manager.data is None:
@@ -1780,9 +1757,10 @@ class FourierSystem(FlucsSystem):
         if not self.input["dealiasing.check_errors"]:
             return
 
-        #TODO a test of the dealiasing boundaries should be written, in which
-        # the padded values or radius are changed, and all of this code moved into
-        # said function. This should be both for two-thirds and phase-shifted dealiasing.
+        # TODO a test of the dealiasing boundaries should be written, in which
+        # the padded values or radius are changed, and all of this code moved
+        # into said function.
+        # This should be both for two-thirds and phase-shifted dealiasing.
 
         solved_modes_mask = self.get_solved_grid_mask()
         solved_modes_mask = cp.array(solved_modes_mask)
@@ -1800,19 +1778,31 @@ class FourierSystem(FlucsSystem):
         array2_rfft[solved_modes_mask < 0.5] = 0
 
         self.check_dealiasing_errors_operation(
-                current_dt=0,
-                current_time=0,
-                current_step=0,
-                input_array=input_array_rfft,
-                calculate_cfl=False
+            current_dt=0,
+            current_time=0,
+            current_step=0,
+            input_array=input_array_rfft,
+            calculate_cfl=False,
         )
         product_operation = self.check_dealiasing_errors_output[0]
         product_operation[solved_modes_mask < 0.5] = 0
 
-        product_dealiased_rfft = dealiased_multiplication_rfft(array1_rfft, array2_rfft, nx=nx, ny=ny, nz=nz, padded_nx=2*nx, padded_ny=2*ny, padded_nz=2*nz)
+        product_dealiased_rfft = dealiased_multiplication_rfft(
+            array1_rfft,
+            array2_rfft,
+            nx=nx,
+            ny=ny,
+            nz=nz,
+            padded_nx=2 * nx,
+            padded_ny=2 * ny,
+            padded_nz=2 * nz,
+        )
         product_dealiased_rfft[solved_modes_mask < 0.5] = 0
 
-        print("Max abs error is ", cp.max(cp.abs(product_operation - product_dealiased_rfft)))
+        print(
+            "Max abs error is ",
+            cp.max(cp.abs(product_operation - product_dealiased_rfft)),
+        )
 
         del self.check_dealiasing_errors_operation
         del self.check_dealiasing_errors_output
@@ -1879,9 +1869,7 @@ class FourierSystem(FlucsSystem):
         pade_eigvals = np.stack(
             [
                 pade_eigvals[
-                    np.argmin(
-                        np.abs(pade_eigvals - exact_eigval), axis=0
-                    ),
+                    np.argmin(np.abs(pade_eigvals - exact_eigval), axis=0),
                     grid_indices,
                 ]
                 for exact_eigval in exact_eigvals
@@ -1890,9 +1878,7 @@ class FourierSystem(FlucsSystem):
 
         # Calculate and report errors
         abs_errors = np.abs(
-            1j
-            * np.log(pade_eigvals / exact_eigvals)
-            / self.dt_max
+            1j * np.log(pade_eigvals / exact_eigvals) / self.dt_max
         )
 
         rel_errors = np.divide(
@@ -1971,7 +1957,7 @@ class FourierSystem(FlucsSystem):
         current_step,
         fields: cp.ndarray,
         calculate_cfl: bool,
-        ) -> None:
+    ) -> None:
         """
         Computes the nonlinear terms for the supplied fields.
 
@@ -2160,7 +2146,9 @@ class FourierSystem(FlucsSystem):
 
         return self.solved_grid_mask
 
-    def get_number_of_solved_modes(self, only_nonnegative_ky: bool = True) -> int:
+    def get_number_of_solved_modes(
+        self, only_nonnegative_ky: bool = True
+    ) -> int:
         """
         Finds the number of all solved Fourier modes.
 
@@ -2184,7 +2172,7 @@ class FourierSystem(FlucsSystem):
 
         number_of_zero_ky = np.count_nonzero(solved_grid_mask[:, :, 0] > 0.5)
 
-        return 2*number_of_nonnegative_ky - number_of_zero_ky
+        return 2 * number_of_nonnegative_ky - number_of_zero_ky
 
     def get_solved_wavenumbers(
         self,
@@ -2411,9 +2399,9 @@ class FourierSystem(FlucsSystem):
         eigvecs *= np.conj(phase)
 
         # Compute inverse of solver eigenvectors for projection
-        eigvecs_inverse = np.linalg.inv(
-            eigvecs.transpose(2, 1, 0)
-        ).transpose(2, 1, 0)
+        eigvecs_inverse = np.linalg.inv(eigvecs.transpose(2, 1, 0)).transpose(
+            2, 1, 0
+        )
 
         # Embed the solved eigensystem in the full Fourier grid
         eigvals_full = np.zeros(

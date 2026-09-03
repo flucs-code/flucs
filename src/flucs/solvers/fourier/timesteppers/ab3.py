@@ -42,9 +42,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
 
     def ready(self):
         system = self.system
-        self.dt_array = np.array(
-            [10**10, 10**10, 10**10], dtype=system.float
-        )
+        self.dt_array = np.array([10**10, 10**10, 10**10], dtype=system.float)
         self.ab3_coefficients = np.array([1, 0, 0], dtype=system.float)
 
         # Reset AB3 history
