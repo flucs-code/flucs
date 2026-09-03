@@ -15,8 +15,8 @@ from flucs.diagnostic import FlucsDiagnostic
 from flucs.input import InvalidFlucsInputFileError
 from flucs.systems import FlucsSystem
 from flucs.utilities.cupy import KernelWrapper
+from flucs.utilities.dealiasing import next_smooth_number, dealiased_multiplication_rfft
 from flucs.utilities.messages import flucsprint
-from flucs.utilities.smooth_numbers import next_smooth_number
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,
@@ -27,142 +27,6 @@ from .fourier_system_forcing import FourierSystemForcing
 
 if cp is not None:
     from cupy.cuda import cufft
-
-
-#TODO: move this somewhere sensible
-def dealiased_multiplication_rfft(*args, **kwargs):
-    """
-    Compute the RFFT of a real-space product using Fourier-space padding.
-
-    Each input is a 3D CuPy RFFT array with shape 
-
-        (nz, nx, half_ny)
-
-    The input Fourier arrays are padded, inverse Fourier transformed, multiplied
-    pointwise in real space, and transformed back to Fourier space. The fields 
-    are then cropped to the original grid.
-
-    Parameters
-    ----------
-    *args
-        Fourier-space fields to multiply. All fields must have the same shape
-        and dtype.
-    **kwargs
-        Optional nx, ny, and nz real-space dimensions and their corresponding 
-        padded_nx, padded_ny, and padded_nz values. If omitted, dimensions and 
-        sufficiently large padding are inferred from the array input shape
-    """
-
-    # Number of fields in the real-space product
-    n = len(args)
-
-    # Get the original real-space dimensions
-    try:
-        nx = kwargs["nx"]
-    except KeyError:
-        nx = args[0].shape[1]
-
-    try:
-        ny = kwargs["ny"]
-    except KeyError:
-        ny = 2*args[0].shape[2] - 1
-
-    try:
-        nz = kwargs["nz"]
-    except KeyError:
-        nz = args[0].shape[0]
-
-    half_nx = nx // 2 + 1
-    half_ny = ny // 2 + 1
-    half_nz = nz // 2 + 1
-
-    # Choose padded dimensions large enough for the n-field convolution
-    try:
-        padded_nx = kwargs["padded_nx"]
-    except KeyError:
-        padded_nx = int(np.ceil((1.1 + n) * nx / 2)) 
-
-    try:
-        padded_ny = kwargs["padded_ny"]
-    except KeyError:
-        padded_ny = int(np.ceil((1.1 + n) * ny / 2))
-
-    try:
-        padded_nz = kwargs["padded_nz"]
-    except KeyError:
-        padded_nz = int(np.ceil((1.1 + n) * nz / 2))
-
-    # All Fourier arrays are assumed to use the same complex dtype
-    complex_type = args[0].dtype
-    padded_half_ny = padded_ny // 2 + 1
-
-    # Allows us to deal with nz = 1 correctly
-    neg_z = slice(-half_nz + 1, None) if nz > 1 else slice(0, 0)
-
-    # Accumulate the product on the padded real-space grid
-    product = 1
-    for i in range(n):
-        padded_array = cp.zeros(
-            (padded_nz, padded_nx, padded_half_ny), dtype=complex_type
-        )
-
-        # Handle corners as RFFT returns only nonnegative ky modes.
-        padded_array[
-            :half_nz, :half_nx, :half_ny
-        ] = args[i][
-            :half_nz, :half_nx, :half_ny
-        ]
-        padded_array[
-            neg_z, :half_nx, :half_ny
-        ] = args[i][
-            neg_z, :half_nx, :half_ny
-        ]
-        padded_array[
-            :half_nz, -half_nx+1:, :half_ny
-        ] = args[i][
-            :half_nz, -half_nx+1:, :half_ny
-        ]
-        padded_array[
-            neg_z, -half_nx+1:, :half_ny
-        ] = args[i][
-            neg_z, -half_nx+1:, :half_ny
-        ]
-
-        # Transform each padded field and multiply it into the real-space product
-        product *= cp.fft.irfftn(
-            padded_array, s=(padded_nz, padded_nx, padded_ny), norm="forward"
-        )
-
-    # Transform the product back to the padded Fourier grid
-    product_rfft_padded = cp.fft.rfftn(
-        product, norm="forward", s=(padded_nz, padded_nx, padded_ny)
-    )
-
-    # Crop the same four Fourier-space corners back to the original grid
-    product_rfft = cp.zeros((nz, nx, half_ny), dtype=complex_type)
-
-    product_rfft[
-        :half_nz, :half_nx, :half_ny
-    ] = product_rfft_padded[
-        :half_nz, :half_nx, :half_ny
-    ]
-    product_rfft[
-        neg_z, :half_nx, :half_ny
-    ] = product_rfft_padded[
-        neg_z, :half_nx, :half_ny
-    ]
-    product_rfft[
-        :half_nz, -half_nx+1:, :half_ny
-    ] = product_rfft_padded[
-        :half_nz, -half_nx+1:, :half_ny
-    ]
-    product_rfft[
-        neg_z, -half_nx+1:, :half_ny
-    ] = product_rfft_padded[
-        neg_z, -half_nx+1:, :half_ny
-    ]
-
-    return product_rfft
 
 
 class FourierSystem(FlucsSystem):
