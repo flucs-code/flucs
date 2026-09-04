@@ -5,10 +5,10 @@ import pathlib as pl
 import shutil
 from typing import TYPE_CHECKING
 
-import cupy as cp
 import numpy as np
 from netCDF4 import Dataset
 
+from flucs import cupy as cp
 from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
 from flucs.utilities.messages import flucsprint

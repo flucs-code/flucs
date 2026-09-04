@@ -6,12 +6,16 @@ pseudospectral Fourier methods.
 
 """
 
+import datetime
 import time
 from typing import ClassVar
 
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.messages import flucsprint
+from flucs.utilities.messages import (
+    flucsprint,
+    format_seconds,
+)
 
 from .timesteppers.ab3 import FourierAB3Timestepper
 from .timesteppers.rk4 import FourierRK4Timestepper
@@ -50,17 +54,23 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         self.system.setup_output()
         self.system.compile_cupy_module()
+        self.system.setup_initial_conditions()
         self.system.check_health()
         self.system.get_memory_usage()
 
         # Timing
+        flucsprint(
+            f"\nTiming {self.system.input['setup.timing_steps']:.3e} steps..."
+        )
+
         self.system.ready()
         self.timestepper.ready()
 
         time_taken = self._solver_loop()
+
         flucsprint(
             f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
-            f"taking  {time_taken:.3e} seconds."
+            f"taking  {time_taken:.3e} seconds.\n"
         )
 
         if self.system.input["setup.timing"]:
@@ -72,13 +82,18 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.ready()
         self.timestepper.ready()
 
+        # Start time for estimating duration
+        self.system.initial_wallclock_time = datetime.datetime.now()
+
         time_taken = self._solver_loop()
 
         flucsprint(
             f"Finished at time {float(self.system.current_time):.3e}, "
             f"dt {float(self.system.current_dt):.3e}"
         )
-        flucsprint(f"flucs given in {time_taken} seconds.\n")
+        flucsprint(
+            f"flucs given in {format_seconds(time_taken, verbose=True)}.\n"
+        )
 
     def _not_done(self) -> bool:
         if self.interrupted:
@@ -118,8 +133,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             # Perform a step
             self.timestepper.execute_timestep()
 
-            # Update current_time to reflect the time
-            # of current_step
+            # Update current_time to reflect the time of current_step
             self.system.current_time += self.system.current_dt
 
             # System-specific end-of-step hook
@@ -129,9 +143,10 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             self.system.execute_diagnostics()
             self.system.write_output()
             self.system.restart_manager.write_restart()
+
         end_time = time.time()
 
-        # One final write
+        # Force a final write
         self.system.execute_diagnostics(force=True)
         self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)

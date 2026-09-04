@@ -8,15 +8,21 @@
     #define flucs_fabs(x) fabs(x)
     #define flucs_sqrt(x) sqrt(x)
     #define flucs_fmax(x, y) fmax(x, y)
+    #define flucs_sin(x) sin(x)
+    #define flucs_cos(x) cos(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
+    #define FLUCS_PI ((FLUCS_FLOAT)3.141592653589793115997963468544185161590576171875)
 #else
     #define FLUCS_FLOAT float
     #define flucs_fabs(x) fabsf(x)
     #define flucs_sqrt(x) sqrtf(x)
     #define flucs_fmax(x, y) fmaxf(x, y)
+    #define flucs_sin(x) sinf(x)
+    #define flucs_cos(x) cosf(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
+    #define FLUCS_PI ((FLUCS_FLOAT)3.1415927410125732421875)
 #endif
 
 #define FLUCS_COMPLEX complex<FLUCS_FLOAT>
@@ -33,7 +39,6 @@
 #ifdef FORCING
 #include "flucs/solvers/fourier/cuda/forcing.cuh"
 #endif
-
 
 extern "C" {
 
@@ -52,7 +57,7 @@ __device__ void add_nonlinear_terms(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
 
 // Forcing terms
@@ -109,26 +114,38 @@ void get_linear_matrix_wrapped(
     }
 }
 
-// Returns the full (for all modes) linear matrix.
-// Matrix is assumed to be contiguous with shape (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index)
+// Returns the linear matrix in canonical-grid storage, with padded modes zero.
+// Matrix is assumed to be contiguous with shape
+// (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index).
 __global__ void compute_linear_matrix(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    FLUCS_COMPLEX linear_matrix_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE])
+    FLUCS_COMPLEX linear_matrix_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE])
 {
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
-    // Check if we are within bounds
-    if (!(index < HALFUNPADDEDSIZE))
+    if (!(index < HALFSIZE))
         return;
+
+    if (is_mode_padded(index)) {
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+                linear_matrix_global[i][j][index] = 0;
+            }
+        }
+        return;
+    }
 
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
     get_linear_matrix_wrapped(index, dt, current_time, current_step, FLOAT_ONE, matrix);
 
+    #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+        #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // linear_matrix[index + HALFUNPADDEDSIZE*(j + NUMBER_OF_FIELDS*i)] = matrix[i][j];
             linear_matrix_global[i][j][index] = matrix[i][j];
         }
     }
@@ -188,8 +205,8 @@ void complete_finish_step(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
-    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
 );
 #else
 __device__ __forceinline__
@@ -198,13 +215,84 @@ void complete_finish_step(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
-    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
 ) {}
 #endif
 
 } // extern "C"
 
+template<int N>
+__global__ void add_phase_factors(
+    const FLUCS_COMPLEX array_global[N][HALFSIZE],
+    FLUCS_COMPLEX array_shifted_global[N][HALFSIZE]
+) {
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(index < HALFSIZE))
+        return;
+
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    // Check if mode should be zeroed
+    if (is_mode_padded(ikz, ikx, iky)){
+
+        #pragma unroll 
+        for (int i = 0; i < N; i++) {
+            array_shifted_global[i][index] = 0;
+        }
+        return;
+    }
+
+    const FLUCS_COMPLEX phase_shift_factor = 
+        get_phase_shift_factor(ikz, ikx, iky);
+
+    #pragma unroll 
+    for (int i = 0; i < N; i++) {
+        array_shifted_global[i][index] = array_global[i][index] * phase_shift_factor;
+    }
+}
+
+template<int N>
+__global__ void undo_phase_factors(
+    FLUCS_COMPLEX array_global[N][HALFSIZE],
+    FLUCS_COMPLEX array_shifted_global[N][HALFSIZE]
+) {
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    // Check if we are within bounds
+    if (!(index < HALFSIZE))
+        return;
+
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    // Check if mode should be zeroed
+    if (is_mode_padded(ikz, ikx, iky)){
+
+        #pragma unroll 
+        for (int i = 0; i < N; i++) {
+            array_shifted_global[i][index] = 0;
+        }
+        return;
+    }
+
+    const FLUCS_COMPLEX phase_shift_factor = 
+        conj(get_phase_shift_factor(ikz, ikx, iky));
+
+    #pragma unroll 
+    for (int i = 0; i < N; i++) {
+        array_global[i][index] = (FLUCS_FLOAT)0.5 * (
+            array_global[i][index] + array_shifted_global[i][index] * phase_shift_factor
+        );
+    }
+}
 
 template<bool include_hyperdissipation = true>
 __device__ __forceinline__ void compute_propagator(
@@ -230,18 +318,44 @@ __device__ __forceinline__ void compute_propagator(
 
 extern "C" {
 
-// Returns the full linear propagator without hyperdissipation.
+// Returns one for solved modes and zero for dealiasing-only modes.
+__global__ void compute_solved_grid_mask(
+    FLUCS_FLOAT solved_grid_mask_global[HALFSIZE]
+) {
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (!(index < HALFSIZE))
+        return;
+
+    solved_grid_mask_global[index] = (
+        is_mode_padded(index) ? (FLUCS_FLOAT)0.0 : FLOAT_ONE
+    );
+}
+
+// Returns the full-grid linear propagator without hyperdissipation, with
+// padded modes zero.
 __global__ void compute_propagator_global(
     const FLUCS_FLOAT dt,
     const FLUCS_FLOAT current_time,
     const long long current_step,
     FLUCS_COMPLEX propagator_global
-        [NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+        [NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE]
 ) {
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (!(index < HALFUNPADDEDSIZE))
+    if (!(index < HALFSIZE))
         return;
+
+    if (is_mode_padded(index)) {
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
+            #pragma unroll
+            for (int j = 0; j < NUMBER_OF_FIELDS; j++) {
+                propagator_global[i][j][index] = 0;
+            }
+        }
+        return;
+    }
 
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS];
 

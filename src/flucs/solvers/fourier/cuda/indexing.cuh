@@ -33,51 +33,40 @@ FLUCS_COMPLEX dz_from_ikz(size_t ikz) {
     return FLUCS_COMPLEX(0, kz_from_ikz(ikz));
 }
 
-// Convering between padded and unpadded
-// Care must be taken not to overflow size_t!!!
 __device__ __forceinline__
-size_t ikx_from_padded_ikx(const size_t padded_ikx) {
-    return  (padded_ikx < HALF_NX) ? padded_ikx : (NX + padded_ikx) - PADDED_NX ;
+FLUCS_COMPLEX get_phase_shift_factor(size_t ikz, size_t ikx, size_t iky) {
+
+    constexpr FLUCS_FLOAT PI_OVER_NX = FLUCS_PI / (FLUCS_FLOAT)NX;
+    constexpr FLUCS_FLOAT PI_OVER_NY = FLUCS_PI / (FLUCS_FLOAT)NY;
+    constexpr FLUCS_FLOAT PI_OVER_NZ = FLUCS_PI / (FLUCS_FLOAT)NZ;
+
+    const FLUCS_FLOAT phase = (
+          ( (ikx < HALF_NX) ? PI_OVER_NX * ikx : -PI_OVER_NX * (NX - ikx) )
+        + ( (ikz < HALF_NZ) ? PI_OVER_NZ * ikz : -PI_OVER_NZ * (NZ - ikz) )
+        + (FLUCS_FLOAT)(iky) * PI_OVER_NY
+    );
+
+    return FLUCS_COMPLEX(flucs_cos(phase), flucs_sin(phase));
 }
 
-__device__ __forceinline__
-size_t ikz_from_padded_ikz(const size_t padded_ikz) {
-    return  (padded_ikz < HALF_NZ) ? padded_ikz : (NZ + padded_ikz) - PADDED_NZ ;
-}
-
-// We have implicity assumed that PADDED_N_ > N_
-__device__ __forceinline__
-size_t padded_ikx_from_ikx(const size_t ikx) {
-    return  (ikx < HALF_NX) ? ikx : (PADDED_NX - NX) + ikx;
-}
-
-__device__ __forceinline__
-size_t padded_ikz_from_ikz(const size_t ikz) {
-    return  (ikz < HALF_NZ) ? ikz : (PADDED_NZ - NZ) + ikz;
-}
 
 // Converting between 3D and linear indexing
-// nz is not used but I like it there for consistency
+// nz is not used but it is retained for signature consistency
 template<size_t nz, size_t nx, size_t ny>
 __device__ __forceinline__
 size_t index_from_3d(const size_t ikz, const size_t ikx, const size_t iky) {
     return iky + ny * (ikx + nx * ikz);
 }
 
-// __device__ __forceinline__
-// size_t padded_index_from_3d(const size_t padded_ikx, const size_t padded_iky, const size_t padded_ikz) {
-//     return padded_iky + HALF_PADDED_NY * (padded_ikx + PADDED_NX * padded_ikz);
-// }
-
 struct indices3d_t {
-    union {size_t ikx, padded_ikx, ix;};
-    union {size_t iky, padded_iky, iy;};
-    union {size_t ikz, padded_ikz, iz;};
+    union {size_t ikx, ix;};
+    union {size_t iky, iy;};
+    union {size_t ikz, iz;};
 };
 
 // Given a linear index in a 3D array of shape (nz, nx, ny)
 // find the corresponding 3D index (iz, ix, iy)
-// nz is not used but I like it there for consistency
+// nz is not used but it is retained for signature consistency
 template<size_t nz, size_t nx, size_t ny>
 __device__ __forceinline__
 indices3d_t get_indices3d(const size_t index) {
@@ -89,4 +78,71 @@ indices3d_t get_indices3d(const size_t index) {
     result.iz = intermediate / nx;
     result.ix = intermediate - result.iz * nx;
     return result;
+}
+
+// Check whether a mode is padded given specific indices
+__device__ __forceinline__
+bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
+
+#ifdef TWO_THIRDS_DEALIASING
+    return (   (ikx >= HALF_NX_UNPADDED && ikx < (HALF_NX_UNPADDED + NX) - NX_UNPADDED)
+            || (ikz >= HALF_NZ_UNPADDED && ikz < (HALF_NZ_UNPADDED + NZ) - NZ_UNPADDED)
+            ||  iky >= HALF_NY_UNPADDED);
+#endif
+
+#ifdef PHASE_SHIFT_DEALIASING
+    constexpr FLUCS_FLOAT ONE_OVER_NZ = FLOAT_ONE / (FLUCS_FLOAT)NZ;
+    constexpr FLUCS_FLOAT ONE_OVER_NX = FLOAT_ONE / (FLUCS_FLOAT)NX;
+    constexpr FLUCS_FLOAT ONE_OVER_NY = FLOAT_ONE / (FLUCS_FLOAT)NY;
+
+    // DFT wavenumbers
+    const FLUCS_FLOAT qz_abs = (FLUCS_FLOAT)( (ikz < HALF_NZ) ? ikz : NZ - ikz ) * ONE_OVER_NZ;
+    const FLUCS_FLOAT qx_abs = (FLUCS_FLOAT)( (ikx < HALF_NX) ? ikx : NX - ikx ) * ONE_OVER_NX;
+    const FLUCS_FLOAT qy_abs = (FLUCS_FLOAT)(iky) * ONE_OVER_NY;
+
+#ifdef PHASE_SHIFT_POLYHEDRAL
+    // Get rid of Nyquist
+
+    if constexpr (NZ % 2 == 0) {
+        if (ikz == NZ / 2)
+            return true;
+    }
+    if constexpr (NX % 2 == 0) {
+        if (ikx == NX / 2)
+            return true;
+    }
+    if constexpr (NY % 2 == 0) {
+        if (iky == NY / 2)
+            return true;
+    }
+
+    // Anything above max_sum will needs to be dealiased
+    constexpr FLUCS_FLOAT max_sum = 0.666;
+    return (
+           (qx_abs + qz_abs > max_sum)
+        || (qy_abs + qz_abs > max_sum)
+        || (qx_abs + qy_abs > max_sum)
+    );
+#endif // PHASE_SHIFT_POLYHEDRAL
+
+#ifdef PHASE_SHIFT_SPHERICAL
+    
+    return (
+        qx_abs*qx_abs + qy_abs*qy_abs + qz_abs*qz_abs
+    ) > DEALIASING_RADIUS_SQUARED;
+
+#endif // PHASE_SHIFT_SPHERICAL
+
+#endif // PHASE_SHIFT_DEALIASING
+}
+
+// Check whether a mode is padded given a linear index
+__device__ __forceinline__
+bool is_mode_padded(const size_t index) {
+    indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+    const size_t ikx = indices.ikx;
+    const size_t iky = indices.iky;
+    const size_t ikz = indices.ikz;
+
+    return is_mode_padded(ikz, ikx, iky);
 }

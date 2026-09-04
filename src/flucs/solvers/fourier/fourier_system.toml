@@ -23,22 +23,50 @@ nx = -1
 ny = -1
 nz = -1
 
-padded_nx = -1
-padded_ny = -1
-padded_nz = -1
-
 # Box dimensions must be specified
 Lx = -1.0
 Ly = -1.0
 Lz = -1.0
 
 
-# Finding optimal padded resolutions
+[dealiasing]
+# Currently supported methods are
+# 1. "two-thirds" for standard zero padding in all dimensions
+# 2. "phase-shift" for isotropic phase-shifts
+method = "two-thirds"
 
-# Prime numbers
-padded_primes = [2, 3]
-# Order of the nonlinear term
+# Order of the nonlinear terms that need dealiasing
 nonlinear_order = 2
+
+# These can be used to override the unpadded grid
+# for two-thirds dealiasing for a smaller/larger padding
+# Ignored for the phase-shift method
+nx_unpadded = -1
+ny_unpadded = -1
+nz_unpadded = -1
+
+# Prime numbers for determining padded grids
+# for two-thirds dealiasing from their unpadded values
+padded_primes = [2, 3]
+
+# Phase-shift dealiasing needs a truncation in q_i space, where the
+# q \in (-1/2, 1/2) is the DFT wavenumber, with 1/2 the Nyquist frequency
+#
+# There are two options:
+# 1. "spherical" for a truncation at |q|^2 < radius_squared
+# 2. "polyhedral" for a truncation at |q_i| + |q_j| < 2/3,
+#    valid only for nonlinear_order = 2
+truncation = "polyhedral"
+
+# Dealiasing radius^2 for the spherical truncation.
+# The optimal value is 2/9 ~ 0.222
+radius_squared = -1.0
+
+# Save memory at the expense of speed when using phase-shift dealiasing
+low_memory = false
+
+# Check errors
+check_errors = false
 
 [setup]
 # If true, run a linear-only simulation
@@ -52,13 +80,16 @@ check_linear_matrix = true
 method = "ab3"
 
 # Degree N of the [N,N] Pade approximant for the linear propagator
-linear_pade_degree = 2  # [1,1] is Crank-Nicolson
+linear_pade_degree = 4  # [1,1] is Crank-Nicolson
 
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false
 
-
 [init]
+# for method = "white_noise"
+rand_seed = 113  # seed for random-number generation
+amplitude = 1e-4 # amplitude if initialising all fields to the same value
+amplitude_list = [] # amplitudes for each individual field. Ignored if len does not match number_of_fields
 
 # for method = "gaussian"
 components = ['kx', 'ky']

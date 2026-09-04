@@ -42,9 +42,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
 
     def ready(self):
         system = self.system
-        self.dt_array = np.array(
-            [system.current_dt, 10**10, 10**10], dtype=system.float
-        )
+        self.dt_array = np.array([10**10, 10**10, 10**10], dtype=system.float)
         self.ab3_coefficients = np.array([1, 0, 0], dtype=system.float)
 
         # Reset AB3 history
@@ -89,14 +87,14 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         self.precompute_iteration_matrices_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="precompute_iteration_matrices",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
 
         self.finish_step_kernel = KernelWrapper(
             system=self.system,
             cuda_kernel_name="finish_step",
-            grid=(self.system.half_unpadded_cuda_grid_size,),
+            grid=(self.system.half_cuda_grid_size,),
             block=(self.system.cuda_block_size,),
         )
 
@@ -108,11 +106,19 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         previous_fields = system.get_fields(1)
 
         if self.is_nonlinear:
-            system.compute_nonlinear_terms(previous_fields)
+            system.cfl_rate[0] = 0
+            system.compute_nonlinear_terms(
+                system.float(system.current_dt),
+                system.float(system.current_time),
+                system.int(system.current_step),
+                previous_fields,
+                True,
+            )
 
             if system._update_dt():
                 self.precompute_iteration_matrices()
 
+        if system.requires_explicit_terms:
             self._update_ab3_coefficients()
 
         self.finish_step_kernel(
@@ -132,4 +138,5 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
-        return "Adams-Bashforth 3"
+        dt_method = self.system.input["time.dt_method"]
+        return f"Adams-Bashforth 3 ({dt_method})"

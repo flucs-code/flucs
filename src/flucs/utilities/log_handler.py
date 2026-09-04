@@ -58,12 +58,17 @@ class FlucsLogHandler(TextIOBase, AbstractContextManager):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            # Print the traceback while still redirected
-            # Print only to non-stdout
-            for s in self.streams:
-                if s is not self._old_stdout:
-                    traceback.print_exception(exc_type, exc_val, exc_tb, file=s)
+        try:
+            if exc_type is not None:
+                # Print the traceback while still redirected
+                # Print only to non-stdout
+                for s in self.streams:
+                    if s is not self._old_stdout:
+                        traceback.print_exception(
+                            exc_type, exc_val, exc_tb, file=s
+                        )
+        finally:
+            sys.stdout = self._old_stdout
+            sys.stderr = self._old_stderr
 
-        sys.stdout = self._old_stdout
-        sys.stderr = self._old_stderr
+            self.close()
