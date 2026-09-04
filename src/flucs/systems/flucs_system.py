@@ -620,8 +620,8 @@ class FlucsSystem(ABC):
     def _print_system_info(self) -> None:
         """Prints basic info about the system and solver"""
         flucsprint(
-            f"System: {self.input["setup.system"]}\n"
-            f"Solver: {self.input["setup.solver"]}"
+            f"System: {self.input['setup.system']}\n"
+            f"Solver: {self.input['setup.solver']}"
         )
 
     def __init__(self, input: FlucsInput) -> None:
