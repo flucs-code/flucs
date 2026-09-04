@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import ClassVar
 
 import numpy as np
+import toml
 
 from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic
@@ -209,11 +210,12 @@ class FourierSystem(FlucsSystem):
         message = f"Dealiasing method: {self.input['dealiasing.method']}"
 
         if self.input["dealiasing.method"] == "phase-shift":
-            truncation = self.input["dealiasing.truncation"]
-            memory = (
-                ", low memory" if self.input["dealiasing.low_memory"] else ""
-            )
-            message += f" ({truncation}{memory})"
+            modifiers = [self.input["dealiasing.truncation"]]
+
+            if self.input["dealiasing.low_memory"]:
+                modifiers.append("low memory")
+
+            message += f" ({', '.join(modifiers)})"
 
         if (
             self.input["dealiasing.method"],
@@ -324,6 +326,8 @@ class FourierSystem(FlucsSystem):
                         "only for quadratic nonlinearities."
                     )
                 self.module_options.define_flag("PHASE_SHIFT_POLYHEDRAL")
+
+                dealiasing_radius = 0.666 / np.sqrt(2)
 
             case "spherical":
                 self.module_options.define_flag("PHASE_SHIFT_SPHERICAL")
@@ -653,6 +657,7 @@ class FourierSystem(FlucsSystem):
 
             if self.input[f"hyperdissipation.{component}"] > 0.0:
                 message = f"Hyperdissipation in {component:<5}"
+                modifiers = []
 
                 self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
@@ -667,10 +672,13 @@ class FourierSystem(FlucsSystem):
                     self.module_options.define_flag(
                         f"HYPERDISSIPATION_{component.upper()}_ADAPTIVE"
                     )
-                    message += " (adaptive)"
+                    modifiers.append("adaptive")
 
                 if self.input[f"hyperdissipation.{component}_normalised"]:
-                    message += " (normalised)"
+                    modifiers.append("normalised")
+
+                if modifiers:
+                    message += f" ({', '.join(modifiers)})"
 
                 flucsprint(message)
 
@@ -1574,30 +1582,7 @@ class FourierSystem(FlucsSystem):
 
         # Use restart data if it was read
         if self.restart_manager.data is not None:
-            restart_data = self.restart_manager.data
-
-            if "fields" not in restart_data:
-                raise ValueError("Restart data does not contain 'fields'.")
-
-            field_data = restart_data["fields"]["data"]
-
-            # TODO: remove when allowing for changing of sizes
-            expected_shape = (
-                self.number_of_fields,
-                self.nz,
-                self.nx,
-                self.half_ny,
-            )
-            if field_data.shape != expected_shape:
-                raise ValueError(
-                    f"Restart data has incorrect shape: "
-                    f"{field_data.shape}, "
-                    f"expected: {expected_shape}"
-                )
-
-            # Set initial field data
-            self.fields_initial = np.asarray(field_data)
-
+            self.fields_initial = self.prepare_restart_data()
             return
 
         solved_grid_mask = self.get_solved_grid_mask().astype(bool)
@@ -2259,6 +2244,107 @@ class FourierSystem(FlucsSystem):
                 "dimension_names": ("number_of_fields", "nz", "nx", "half_ny"),
             }
         }
+
+    def prepare_restart_data(self) -> np.ndarray:
+        """
+        Return restart fields prepared for the current Fourier grid.
+
+        Changing the box size is not currently supported. When the resolution 
+        changes, common Fourier modes are copied and all new modes are zeroed.
+        """
+
+        # Validate restart data
+        restart_data = self.restart_manager.data
+        
+        if "fields" not in restart_data:
+            raise InvalidFlucsInputFileError(
+                "Restart data does not contain 'fields'."
+            )
+        if "input_file" not in restart_data:
+            raise InvalidFlucsInputFileError(
+                "Restart data does not contain an input file."
+            )
+
+        # Extract data
+        restart_fields = np.asarray(restart_data["fields"]["data"])
+        restart_input = toml.loads(
+            restart_data["input_file"]["data"].item()
+        )
+
+        # Check whether the box dimensions have changed
+        restart_dimensions = tuple(
+            restart_input["dimensions"][f"L{dimension}"]
+            for dimension in ("z", "x", "y")
+        )
+        current_dimensions = tuple(
+            self.input[f"dimensions.L{dimension}"]
+            for dimension in ("z", "x", "y")
+        )
+        if restart_dimensions != current_dimensions:
+            raise InvalidFlucsInputFileError(
+                "Cannot change any of Lx, Ly, or Lz when restarting."
+            )
+
+        # If the restart fields are the same shape as current fields, return
+        target_shape = (
+            self.number_of_fields,
+            self.nz,
+            self.nx,
+            self.half_ny,
+        )
+        if restart_fields.shape == target_shape:
+            return restart_fields
+
+        # Error if the restart fields are not compatible with the current fields 
+        if restart_fields.shape[0] != self.number_of_fields:
+            raise InvalidFlucsInputFileError(
+                f"Restart contains {restart_fields.shape[0]} fields, "
+                f"but the current system requires {self.number_of_fields}."
+            )
+
+        # Report change in grid
+        flucsprint(
+            f"Modifying restart Fourier grid: "
+            f"{restart_fields.shape[1:]} -> {self.half_tuple}"
+        )
+
+        # Initialise with zeros
+        initial_fields = np.zeros(
+            target_shape,
+            dtype=restart_fields.dtype,
+        )
+
+        # Copy over the nonzero modes
+        def fft_modes(size: int) -> np.ndarray:
+            return np.rint(
+                np.fft.fftfreq(size) * size
+            ).astype(int)
+
+        _, restart_nz, restart_nx, restart_half_ny = restart_fields.shape
+
+        _, restart_iz, current_iz = np.intersect1d(
+            fft_modes(restart_nz),
+            fft_modes(self.nz),
+            return_indices=True,
+        )
+        _, restart_ix, current_ix = np.intersect1d(
+            fft_modes(restart_nx),
+            fft_modes(self.nx),
+            return_indices=True,
+        )
+
+        common_iy = np.arange(
+            min(restart_half_ny, self.half_ny)
+        )
+        field_indices = np.arange(self.number_of_fields)
+
+        initial_fields[
+            np.ix_(field_indices, current_iz, current_ix, common_iy)
+        ] = restart_fields[
+            np.ix_(field_indices, restart_iz, restart_ix, common_iy)
+        ]
+
+        return initial_fields
 
     def get_realspace_fields_gpu(self):
         """

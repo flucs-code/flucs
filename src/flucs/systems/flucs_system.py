@@ -601,6 +601,12 @@ class FlucsSystem(ABC):
         }
         """
 
+    @abstractmethod
+    def prepare_restart_data(self) -> np.ndarray:
+        """
+        Prepares the restart fields for the current simulation.
+        """
+
     def _add_include_dirs(self) -> None:
         """
         Adds the base src folder of the projects of each FlucsSystem in the

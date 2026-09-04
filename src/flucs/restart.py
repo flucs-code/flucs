@@ -100,7 +100,7 @@ class FlucsRestart:
                     "cannot be found."
                 )
 
-        flucsprint(f"Restarting from file: {self.initial_path}")
+        flucsprint(f"Restart file: {self.initial_path}")
 
     def _load_restart_data(self) -> None:
         """
