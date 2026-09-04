@@ -1,5 +1,6 @@
 HORIZONTAL_SEPARATOR = 64 * "*"
 
+
 def flucsprint(*parts, source=None, message_type=None):
     """
     Standard print function for FLUCS.
@@ -43,6 +44,7 @@ def flucsprint(*parts, source=None, message_type=None):
     # Print
     print(message)
 
+
 def format_seconds(seconds: float, verbose: bool = False) -> str:
     """
     Formats a duration in seconds to be human readable
@@ -52,14 +54,13 @@ def format_seconds(seconds: float, verbose: bool = False) -> str:
     hours, remainder = divmod(remainder, 3600)
     minutes, seconds = divmod(remainder, 60)
 
-
     if verbose:
         parts = {
             "days": days,
             "hours": hours,
             "minutes": minutes,
             "seconds": seconds,
-        } 
+        }
 
         # Handles singular and plural
         def format_part_value(part, value):
@@ -75,4 +76,3 @@ def format_seconds(seconds: float, verbose: bool = False) -> str:
         )
 
     return f"{days:02d}:{hours:02d}:{minutes:02d}:{seconds:02d}"
-

@@ -10,10 +10,12 @@ import datetime
 import time
 from typing import ClassVar
 
-import flucs
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint, format_seconds
+from flucs.utilities.messages import (
+    flucsprint,
+    format_seconds,
+)
 
 from .timesteppers.ab3 import FourierAB3Timestepper
 from .timesteppers.rk4 import FourierRK4Timestepper
@@ -60,7 +62,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         flucsprint(
             f"\nTiming {self.system.input['setup.timing_steps']:.3e} steps..."
         )
-        
+
         self.system.ready()
         self.timestepper.ready()
 
@@ -89,7 +91,9 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             f"Finished at time {float(self.system.current_time):.3e}, "
             f"dt {float(self.system.current_dt):.3e}"
         )
-        flucsprint(f"flucs given in {format_seconds(time_taken, verbose=True)}.\n")
+        flucsprint(
+            f"flucs given in {format_seconds(time_taken, verbose=True)}.\n"
+        )
 
     def _not_done(self) -> bool:
         if self.interrupted:
