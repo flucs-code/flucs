@@ -55,8 +55,12 @@ class FlucsSystem(ABC):
     init_time: float
     init_dt: float
 
-    # Variable to estimate time until completion
+    # Variables to estimate wall time until completion
     initial_wallclock_time: datetime.datetime
+    # self.current_time of the last wall-time estimate
+    time_to_finish_last_time: float
+    # self.current_step of the last wall-time estimate
+    time_to_finish_last_step: int
 
     # Restart manager
     restart_manager: FlucsRestart
@@ -247,40 +251,66 @@ class FlucsSystem(ABC):
             self.solver.interrupted = True
             stop_file_location.unlink()
 
-        # Not stopping or interrupted, so print time remaining
-        elif not self.solver.interrupted:
-            if hasattr(self, "initial_wallclock_time"):
-                time_elapsed = (
-                    datetime.datetime.now() - self.initial_wallclock_time
-                )
+        # If interrupted, don't do anything else
+        if self.solver.interrupted:
+            return
 
-                # Approximate time remaining
-                step_rate = time_elapsed.total_seconds() / self.current_step
+        self.print_time_estimate()
 
-                steps_remaining = (
-                    self.final_time - self.current_time
-                ) / self.current_dt
+    def print_time_estimate(self):
+        """Prints an estimate of the remaining wall-clock time."""
+        if not self.input["setup.print_time_estimate"]:
+            return
 
-                remaining_seconds = steps_remaining * step_rate
+        # No initial_wallclock_time means no estimate
+        if not hasattr(self, "initial_wallclock_time"):
+            return
 
-                # Report result and warn if it exceeds 20 days
-                if remaining_seconds > 86400 * 20:
-                    flucsprint(
-                        f"({self.current_step:.3e}) Time remaining exceeds "
-                        f"20 days.",
-                        source=self,
-                        message_type="warning",
-                    )
-                else:
-                    completion_time = (
-                        datetime.datetime.now()
-                        + datetime.timedelta(seconds=float(remaining_seconds))
-                    )
-                    flucsprint(
-                        f"({self.current_step:.3e}) Est. walltime: "
-                        f"{self._format_time_interval(remaining_seconds)} "
-                        f"({completion_time.strftime('%Y-%m-%d %H:%M:%S')})"
-                    )
+        # Check whether it's time to print
+        write_steps = self.input["output.write_steps"]
+        time_estimate_writes = self.input["setup.time_estimate_writes"]
+        if self.current_step % (write_steps * time_estimate_writes) != 0:
+            return
+
+        time_elapsed = (
+            datetime.datetime.now() - self.initial_wallclock_time
+        )
+
+        # Approximate time remaining
+        step_walltime_rate = time_elapsed.total_seconds() / self.current_step
+        sim_time_per_step = (
+            (self.current_time - self.time_to_finish_last_time)
+            / (self.current_step - self.time_to_finish_last_step)
+        )
+
+        # Save the current_time and current_step
+        self.time_to_finish_last_time = self.current_time
+        self.time_to_finish_last_step = self.current_step
+
+        steps_remaining = (
+            self.final_time - self.current_time
+        ) / sim_time_per_step
+
+        remaining_seconds = steps_remaining * step_walltime_rate
+
+        # Report result and warn if it exceeds 20 days
+        if remaining_seconds > 86400 * 20:
+            flucsprint(
+                f"({self.current_step:.3e}) Time remaining exceeds "
+                f"20 days.",
+                source=self,
+                message_type="warning",
+            )
+        else:
+            completion_time = (
+                datetime.datetime.now()
+                + datetime.timedelta(seconds=float(remaining_seconds))
+            )
+            flucsprint(
+                f"({self.current_step:.3e}) Est. walltime: "
+                f"{self._format_time_interval(remaining_seconds)} "
+                f"({completion_time.strftime('%Y-%m-%d %H:%M:%S')})"
+            )
 
     def setup_output(self) -> None:
         """
@@ -551,6 +581,10 @@ class FlucsSystem(ABC):
 
             # Reset heap for the next save
             heapq.heapify(self.output_heap)
+        
+        # Reset wall-time-estimate variables
+        self.time_to_finish_last_step = 0
+        self.time_to_finish_last_time = self.init_time
 
     @abstractmethod
     def _interpret_input(self) -> None:

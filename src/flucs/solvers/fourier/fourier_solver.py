@@ -69,13 +69,13 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             flucsprint("Timing completed. Exiting.\n")
             return
 
-        # Start time for estimating duration
-        self.system.initial_wallclock_time = datetime.datetime.now()
-
         # Reset system and actually run it
         self.state = FlucsSolverState.RUNNING
         self.system.ready()
         self.timestepper.ready()
+
+        # Start time for estimating duration
+        self.system.initial_wallclock_time = datetime.datetime.now()
 
         time_taken = self._solver_loop()
 
