@@ -165,15 +165,13 @@ class FourierSystem(FlucsSystem):
 
         # Check for conflicts in time-stepping input parameters
         if self.input["time.dt_method"] == "discrete":
-            flucsprint("Using discrete time stepping.")
-
+            pass
         elif self.input["time.dt_method"] == "continuous":
             if self.input["timestepping.precompute_linear_matrix"]:
                 raise InvalidFlucsInputFileError(
                     "Cannot have timestepping.precompute_linear_matrix = "
                     "true if time.dt_method = 'continuous'."
                 )
-            flucsprint("Using continuous time stepping.")
         else:
             raise InvalidFlucsInputFileError(
                 f"Invalid time.dt_method: {self.input['time.dt_method']}. "
@@ -208,7 +206,7 @@ class FourierSystem(FlucsSystem):
                 )
 
         # Report dealiasing information
-        message = f"Using dealiasing method: {self.input['dealiasing.method']}"
+        message = f"Dealiasing method: {self.input['dealiasing.method']}"
 
         if self.input["dealiasing.method"] == "phase-shift":
             truncation = self.input["dealiasing.truncation"]
@@ -654,7 +652,7 @@ class FourierSystem(FlucsSystem):
             )
 
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                message = f"Using hyperdissipation in {component:<5}"
+                message = f"Hyperdissipation in {component:<5}"
 
                 self.module_options.define_float(
                     f"HYPERDISSIPATION_{component.upper()}",
@@ -678,7 +676,7 @@ class FourierSystem(FlucsSystem):
 
         # Forcing
         if self.input["forcing.method"]:
-            flucsprint(f"Using forcing method: {self.input['forcing.method']}")
+            flucsprint(f"Forcing method: {self.input['forcing.method']}")
 
             self.module_options.define_flag("FORCING")
             self.module_options.define_flag(

@@ -169,4 +169,5 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
         self.is_nonlinear = not self.system.input["setup.linear"]
 
     def __str__(self):
-        return "Shu-Osher Runge-Kutta 3"
+        dt_method = self.system.input["time.dt_method"]
+        return f"Shu-Osher Runge-Kutta 3 ({dt_method})"
