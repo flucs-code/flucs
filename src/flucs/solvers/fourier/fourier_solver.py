@@ -10,9 +10,10 @@ import datetime
 import time
 from typing import ClassVar
 
+import flucs
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
+from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint, format_seconds
 
 from .timesteppers.ab3 import FourierAB3Timestepper
 from .timesteppers.rk4 import FourierRK4Timestepper
@@ -56,10 +57,15 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.get_memory_usage()
 
         # Timing
+        flucsprint(
+            f"\nTiming {self.system.input['setup.timing_steps']:.3e} steps..."
+        )
+        
         self.system.ready()
         self.timestepper.ready()
 
         time_taken = self._solver_loop()
+
         flucsprint(
             f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
             f"taking  {time_taken:.3e} seconds."
@@ -83,7 +89,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             f"Finished at time {float(self.system.current_time):.3e}, "
             f"dt {float(self.system.current_dt):.3e}"
         )
-        flucsprint(f"flucs given in {time_taken} seconds.\n")
+        flucsprint(f"flucs given in {format_seconds(time_taken, verbose=True)}.\n")
 
     def _not_done(self) -> bool:
         if self.interrupted:
@@ -141,5 +147,4 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
 
-        flucsprint(HORIZONTAL_SEPARATOR)
         return end_time - start_time

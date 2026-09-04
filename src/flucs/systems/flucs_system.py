@@ -23,7 +23,7 @@ from flucs.diagnostic import FlucsDiagnostic
 from flucs.output import FlucsOutput
 from flucs.restart import FlucsRestart
 from flucs.utilities.cupy import KernelCollection, ModuleOptions
-from flucs.utilities.messages import flucsprint
+from flucs.utilities.messages import flucsprint, format_seconds
 
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
@@ -304,8 +304,8 @@ class FlucsSystem(ABC):
                 seconds=float(remaining_seconds)
             )
             flucsprint(
-                f"({self.current_time:.3e}) Est. walltime: "
-                f"{self._format_time_interval(remaining_seconds)} "
+                f"({self.current_time:.3e}) Est. wall time: "
+                f"{format_seconds(remaining_seconds)} "
                 f"({completion_time.strftime('%Y-%m-%d %H:%M:%S')})"
             )
 
@@ -563,8 +563,6 @@ class FlucsSystem(ABC):
                 f"({global_used_gb / global_total_gb * 100:.2f}%)"
             )
 
-        flucsprint()
-
         return device_info
 
     def ready(self) -> None:
@@ -620,17 +618,6 @@ class FlucsSystem(ABC):
             root_src_path = pl.Path(root_mod.__file__).parent.parent
 
             self.module_options.add_compiler_option(f"-I{root_src_path}")
-
-    def _format_time_interval(self, seconds: float) -> str:
-        """
-        Formats a duration in seconds to be human readable
-        """
-        total_seconds = int(seconds)
-        days, remainder = divmod(total_seconds, 86400)
-        hours, remainder = divmod(remainder, 3600)
-        minutes, secs = divmod(remainder, 60)
-
-        return f"{days:02d}:{hours:02d}:{minutes:02d}:{secs:02d}"
 
     def __init__(self, input: FlucsInput) -> None:
         self.input = input

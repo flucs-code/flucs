@@ -1944,9 +1944,10 @@ class FourierSystem(FlucsSystem):
 
         # Print starting message
         flucsprint(
-            f"{HORIZONTAL_SEPARATOR}\n"
+            f"\n{HORIZONTAL_SEPARATOR}\n"
             f"Starting at time {float(self.init_time):.3e}, "
             f"dt {float(self.init_dt):.3e}"
+            f"\n{HORIZONTAL_SEPARATOR}\n"
         )
 
     # -------------------------------------------------------------------------
