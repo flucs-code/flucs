@@ -1,8 +1,4 @@
-import textwrap
-
-FLUCS_LINE_WIDTH = 100
 HORIZONTAL_SEPARATOR = 64 * "*"
-
 
 def flucsprint(*parts, source=None, message_type=None):
     """
@@ -39,14 +35,6 @@ def flucsprint(*parts, source=None, message_type=None):
 
     # Combine with prefix
     message = " ".join(part for part in [prefix, message] if part)
-
-
-    message = "\n".join(textwrap.fill(
-        line,
-        width=FLUCS_LINE_WIDTH,
-        break_long_words=False,
-        break_on_hyphens=False,
-    ) for line in message.split("\n"))
 
     # Warnings get extra spaces for extra attention
     if message_type == "warning":
