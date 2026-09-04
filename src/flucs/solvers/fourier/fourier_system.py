@@ -217,14 +217,10 @@ class FourierSystem(FlucsSystem):
 
             message += f" ({', '.join(modifiers)})"
 
-        if (
-            self.input["dealiasing.method"],
-            self.input["dealiasing.truncation"],
-        ) != ("phase-shift", "polyhedral"):
-            message += (
-                " \nEquivalent unpadded grid (nz, nx, ny) = "
-                f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
-            )
+        message += (
+            " \nEquivalent unpadded grid (nz, nx, ny) = "
+            f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
+        )
 
         flucsprint(message)
 
@@ -318,16 +314,31 @@ class FourierSystem(FlucsSystem):
     def _setup_phase_shift_dealiasing(self):
         self.module_options.define_flag("PHASE_SHIFT_DEALIASING")
 
+        # Quantities to estimate effective radius
+        scale = 1000
+        nonlinear_order = self.input["dealiasing.nonlinear_order"]
+
         match self.input["dealiasing.truncation"]:
             case "polyhedral":
-                if self.input["dealiasing.nonlinear_order"] != 2:
+                if nonlinear_order != 2:
                     raise InvalidFlucsInputFileError(
                         "Polyhedral phase-shift truncation is implemented "
                         "only for quadratic nonlinearities."
                     )
                 self.module_options.define_flag("PHASE_SHIFT_POLYHEDRAL")
 
-                dealiasing_radius = 0.666 / np.sqrt(2)
+                # Set to largest multiple of 1/scale that is strictly below
+                # the theoretical pairwise limit of 2/(nonlinear_order + 1)
+                denominator = nonlinear_order + 1
+                max_sum = ((2 * scale - 1) // denominator) / scale
+
+                self.module_options.define_float(
+                    "DEALIASING_MAX_SUM",
+                    max_sum,
+                )
+
+                # Radius of the largest sphere contained by the polyhedron
+                dealiasing_radius = max_sum / np.sqrt(2)
 
             case "spherical":
                 self.module_options.define_flag("PHASE_SHIFT_SPHERICAL")
@@ -338,11 +349,7 @@ class FourierSystem(FlucsSystem):
                 else:
                     # Set to largest multiple of 1/scale that is strictly below
                     # the theoretical limit of 2/(nonlinear_order + 1)^2
-                    denominator = (
-                        self.input["dealiasing.nonlinear_order"] + 1
-                    ) ** 2
-
-                    scale = 1000
+                    denominator = (nonlinear_order + 1) ** 2
                     radius_squared = ((2 * scale - 1) // denominator) / scale
 
                 self.module_options.define_float(
@@ -365,19 +372,15 @@ class FourierSystem(FlucsSystem):
             setattr(self, f"n{dim}", n)
             setattr(self, f"half_n{dim}", half_n)
 
-            if self.input["dealiasing.truncation"] == "spherical":
-                # Find equivalent unpadded (handle edge case for n=1)
-                half_n_unpadded = max(
-                    1,
-                    int(half_n * (2 * dealiasing_radius)),
-                )
-                n_unpadded = 2 * half_n_unpadded - 1
+            # Find equivalent unpadded grid (handle edge case for n=1)
+            half_n_unpadded = max(
+                1,
+                int(half_n * (2 * dealiasing_radius)),
+            )
+            n_unpadded = 2 * half_n_unpadded - 1
 
-                setattr(self, f"n{dim}_unpadded", n_unpadded)
-                setattr(self, f"half_n{dim}_unpadded", half_n_unpadded)
-            else:
-                setattr(self, f"n{dim}_unpadded", n)
-                setattr(self, f"half_n{dim}_unpadded", half_n)
+            setattr(self, f"n{dim}_unpadded", n_unpadded)
+            setattr(self, f"half_n{dim}_unpadded", half_n_unpadded)
 
     # -------------------------------------------------------------------------
     # Wavenumber grids
