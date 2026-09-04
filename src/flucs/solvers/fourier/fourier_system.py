@@ -20,7 +20,7 @@ from flucs.utilities.dealiasing import (
     dealiased_multiplication_rfft,
     next_smooth_number,
 )
-from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
+from flucs.utilities.messages import flucsprint
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,
@@ -823,7 +823,6 @@ class FourierSystem(FlucsSystem):
                 calculate_cfl: bool,
                 memory_dict: dict,
             ) -> None:
-
                 memory_dict["second_intermediates_real"][:] = (
                     memory_dict["first_intermediates_real"][0, :]
                     * memory_dict["first_intermediates_real"][1, :]
@@ -1395,7 +1394,6 @@ class FourierSystem(FlucsSystem):
         def dealiased_operation(
             current_dt, current_time, current_step, input_array, calculate_cfl
         ):
-
             # First do shifted...
 
             # Input Fourier fields -> first Fourier intermediate quantities
@@ -2252,13 +2250,13 @@ class FourierSystem(FlucsSystem):
         """
         Return restart fields prepared for the current Fourier grid.
 
-        Changing the box size is not currently supported. When the resolution 
+        Changing the box size is not currently supported. When the resolution
         changes, common Fourier modes are copied and all new modes are zeroed.
         """
 
         # Validate restart data
         restart_data = self.restart_manager.data
-        
+
         if "fields" not in restart_data:
             raise InvalidFlucsInputFileError(
                 "Restart data does not contain 'fields'."
@@ -2270,9 +2268,7 @@ class FourierSystem(FlucsSystem):
 
         # Extract data
         restart_fields = np.asarray(restart_data["fields"]["data"])
-        restart_input = toml.loads(
-            restart_data["input_file"]["data"].item()
-        )
+        restart_input = toml.loads(restart_data["input_file"]["data"].item())
 
         # Check whether the box dimensions have changed
         restart_dimensions = tuple(
@@ -2298,7 +2294,7 @@ class FourierSystem(FlucsSystem):
         if restart_fields.shape == target_shape:
             return restart_fields
 
-        # Error if the restart fields are not compatible with the current fields 
+        # Error if the restart fields are not compatible with the current fields
         if restart_fields.shape[0] != self.number_of_fields:
             raise InvalidFlucsInputFileError(
                 f"Restart contains {restart_fields.shape[0]} fields, "
@@ -2319,9 +2315,7 @@ class FourierSystem(FlucsSystem):
 
         # Copy over the nonzero modes
         def fft_modes(size: int) -> np.ndarray:
-            return np.rint(
-                np.fft.fftfreq(size) * size
-            ).astype(int)
+            return np.rint(np.fft.fftfreq(size) * size).astype(int)
 
         _, restart_nz, restart_nx, restart_half_ny = restart_fields.shape
 
@@ -2336,9 +2330,7 @@ class FourierSystem(FlucsSystem):
             return_indices=True,
         )
 
-        common_iy = np.arange(
-            min(restart_half_ny, self.half_ny)
-        )
+        common_iy = np.arange(min(restart_half_ny, self.half_ny))
         field_indices = np.arange(self.number_of_fields)
 
         initial_fields[
