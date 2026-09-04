@@ -68,7 +68,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
 
         flucsprint(
             f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
-            f"taking  {time_taken:.3e} seconds."
+            f"taking  {time_taken:.3e} seconds.\n"
         )
 
         if self.system.input["setup.timing"]:

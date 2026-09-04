@@ -220,8 +220,8 @@ class FourierSystem(FlucsSystem):
             self.input["dealiasing.truncation"],
         ) != ("phase-shift", "polyhedral"):
             message += (
-                " [equivalent unpadded grid (nz, nx, ny) = "
-                f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})]"
+                " \nEquivalent unpadded grid (nz, nx, ny) = "
+                f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
             )
 
         flucsprint(message)
@@ -1740,7 +1740,7 @@ class FourierSystem(FlucsSystem):
                 :, solved_grid_mask_ky0
             ]
         )
-        flucsprint(f"Init. condition reality error: {error:.3e}")
+        flucsprint(f"Inititial condition reality error: {error:.3e}")
 
     # -------------------------------------------------------------------------
     # Health checks
@@ -1813,8 +1813,8 @@ class FourierSystem(FlucsSystem):
         product_dealiased_rfft[solved_modes_mask < 0.5] = 0
 
         print(
-            "Max abs error is ",
-            cp.max(cp.abs(product_operation - product_dealiased_rfft)),
+            "Dealiasing error: "
+            f"{cp.max(cp.abs(product_operation - product_dealiased_rfft)):.3e}"
         )
 
         del self.check_dealiasing_errors_operation
@@ -1854,7 +1854,7 @@ class FourierSystem(FlucsSystem):
         max_real_frequency = np.max(np.abs(eigvals.real))
 
         flucsprint(
-            "Linear rates (max.):          "
+            "Linear rates:          "
             f"(growth, damping, frequency) = "
             f"({max_growth:.3e}, "
             f"{max_damping:.3e}, "
@@ -1862,7 +1862,7 @@ class FourierSystem(FlucsSystem):
         )
 
         flucsprint(
-            "Linear rates (max.): dt_max * "
+            "Linear rates: dt_max * "
             f"(growth, damping, frequency) = "
             f"({self.dt_max * max_growth:.3e}, "
             f"{self.dt_max * max_damping:.3e}, "
@@ -1902,7 +1902,7 @@ class FourierSystem(FlucsSystem):
         )
 
         flucsprint(
-            "Linear error (max.):          "
+            "Linear error:          "
             f"(absolute, relative)         = "
             f"({np.max(abs_errors):.3e}, "
             f"{np.max(rel_errors):.3e})"
@@ -1944,10 +1944,8 @@ class FourierSystem(FlucsSystem):
 
         # Print starting message
         flucsprint(
-            f"\n{HORIZONTAL_SEPARATOR}\n"
             f"Starting at time {float(self.init_time):.3e}, "
             f"dt {float(self.init_dt):.3e}"
-            f"\n{HORIZONTAL_SEPARATOR}\n"
         )
 
     # -------------------------------------------------------------------------
@@ -2080,7 +2078,7 @@ class FourierSystem(FlucsSystem):
 
             flucsprint(
                 f"({self.current_time:.3e}) dt: "
-                f"{self.current_dt:.3e} -> {new_dt:.3e} (-)"
+                f"{self.current_dt:.3e} -> {new_dt:.3e}  (-)"
             )
 
             self.current_dt = new_dt
@@ -2101,7 +2099,7 @@ class FourierSystem(FlucsSystem):
             if new_dt > self.current_dt:
                 flucsprint(
                     f"({self.current_time:.3e}) dt: "
-                    f"{self.current_dt:.3e} -> {new_dt:.3e} (+)"
+                    f"{self.current_dt:.3e} -> {new_dt:.3e}  (+)"
                 )
 
                 self.current_dt = new_dt

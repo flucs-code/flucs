@@ -130,7 +130,6 @@ class FlucsSystem(ABC):
 
             p = pl.Path(importlib.import_module(parent_cls.__module__).__file__)
             defaults_path = p.with_name(f"{p.stem}.toml")
-            # flucsprint(f"Loading SOLVER defaults for {defaults_path}")
             with defaults_path.open("r") as f:
                 contents = f.read()
 
@@ -548,7 +547,6 @@ class FlucsSystem(ABC):
 
         bytes_to_gb = 1024**3
 
-        flucsprint("CUDA devices:")
         # Print device information
         for key, info in device_info.items():
             if not key.startswith("device_"):
@@ -619,11 +617,19 @@ class FlucsSystem(ABC):
 
             self.module_options.add_compiler_option(f"-I{root_src_path}")
 
+    def _print_system_info(self) -> None:
+        """Prints basic info about the system and solver"""
+        flucsprint(
+            f"System: {self.input["setup.system"]}\n"
+            f"Solver: {self.input["setup.solver"]}"
+        )
+
     def __init__(self, input: FlucsInput) -> None:
         self.input = input
         self.temp_arrays = {}
         self.kernels = KernelCollection(self)
         self.module_options = ModuleOptions()
         self._add_include_dirs()
+        self._print_system_info()
         self._set_precision()
         self._interpret_input()

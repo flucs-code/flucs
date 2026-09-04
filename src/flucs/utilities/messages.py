@@ -1,7 +1,7 @@
 import textwrap
 
-FLUCS_LINE_WIDTH = 64
-HORIZONTAL_SEPARATOR = FLUCS_LINE_WIDTH * "*"
+FLUCS_LINE_WIDTH = 100
+HORIZONTAL_SEPARATOR = 64 * "*"
 
 
 def flucsprint(*parts, source=None, message_type=None):
