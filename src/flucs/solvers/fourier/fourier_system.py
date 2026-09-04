@@ -834,6 +834,7 @@ class FourierSystem(FlucsSystem):
     # -------------------------------------------------------------------------
     # Dealiased operations
     # -------------------------------------------------------------------------
+
     def create_dealiased_operation(
         self,
         n_in: int,
@@ -860,12 +861,12 @@ class FourierSystem(FlucsSystem):
             Number of second intermediates
 
         create_first_intermediates : Callable
-            Callable to computes the first intermediates with signature
+            Callable to compute the first intermediates with signature
                 (dt, time, step, input_array, memory_dict)
             where memory_dict is a dictionary of CuPy arrays.
 
         create_second_intermediates : Callable
-            Callable to computes the second intermediates with signature
+            Callable to compute the second intermediates with signature
                 (dt, time, step, calculate_cfl, memory_dict)
             where memory_dict is a dictionary of CuPy arrays.
 
@@ -1017,7 +1018,6 @@ class FourierSystem(FlucsSystem):
         def dealiased_operation(
             current_dt, current_time, current_step, input_array, calculate_cfl
         ):
-
             # Input Fourier fields -> first Fourier intermediate quantities
             create_first_intermediates(
                 current_dt,
@@ -1034,8 +1034,7 @@ class FourierSystem(FlucsSystem):
                 cufft.CUFFT_INVERSE,
             )
 
-            # Real-space first intermediates
-            #   -> real-space second intermediates
+            # Real-space first intermediates -> real-space second intermediates
             create_second_intermediates(
                 current_dt,
                 current_time,
@@ -1220,8 +1219,7 @@ class FourierSystem(FlucsSystem):
                 cufft.CUFFT_INVERSE,
             )
 
-            # Real-space first intermediates
-            #   -> real-space second intermediates
+            # Real-space first intermediates -> real-space second intermediates
 
             # 1. unshifted
             create_second_intermediates(
@@ -1249,8 +1247,7 @@ class FourierSystem(FlucsSystem):
                 cufft.CUFFT_INVERSE,
             )
 
-            # Shifted and unshifted Fourier outputs
-            #   -> dealiased output
+            # Shifted and unshifted Fourier outputs -> dealiased output
             # stored in unshifted_second_intermediates_fourier
             undo_phase_factors_kernel(
                 unshifted_second_intermediates_fourier,
@@ -1413,8 +1410,7 @@ class FourierSystem(FlucsSystem):
                 cufft.CUFFT_INVERSE,
             )
 
-            # Real-space first intermediates
-            #   -> real-space second intermediates
+            # Real-space first intermediates -> real-space second intermediates
             create_second_intermediates(
                 current_dt,
                 current_time,
@@ -1448,8 +1444,7 @@ class FourierSystem(FlucsSystem):
                 cufft.CUFFT_INVERSE,
             )
 
-            # Real-space first intermediates
-            #   -> real-space second intermediates
+            # Real-space first intermediates -> real-space second intermediates
             create_second_intermediates(
                 current_dt,
                 current_time,
@@ -1465,8 +1460,7 @@ class FourierSystem(FlucsSystem):
                 cufft.CUFFT_INVERSE,
             )
 
-            # Shifted and unshifted Fourier outputs
-            #   -> dealiased output
+            # Shifted and unshifted Fourier outputs -> dealiased output
             # stored in second_intermediates_fourier
             undo_phase_factors_kernel(
                 second_intermediates_fourier,
