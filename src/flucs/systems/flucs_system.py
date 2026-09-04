@@ -130,7 +130,7 @@ class FlucsSystem(ABC):
 
             p = pl.Path(importlib.import_module(parent_cls.__module__).__file__)
             defaults_path = p.with_name(f"{p.stem}.toml")
-            flucsprint(f"Loading SOLVER defaults for {defaults_path}")
+            # flucsprint(f"Loading SOLVER defaults for {defaults_path}")
             with defaults_path.open("r") as f:
                 contents = f.read()
 
@@ -156,7 +156,9 @@ class FlucsSystem(ABC):
         self.tolerance = self.float(np.finfo(self.float).eps * 64.0)
 
         # Print precision info
-        flucsprint(f"Using {self.input['setup.precision']} precision")
+        flucsprint(
+            f"{str(self.input['setup.precision']).capitalize()} precision."
+        )
 
     def add_output(self, output: FlucsOutput):
         if self.output_heap is None:
@@ -296,7 +298,7 @@ class FlucsSystem(ABC):
         # Report result and warn if it exceeds 20 days
         if remaining_seconds > 86400 * 20:
             flucsprint(
-                f"({self.current_step:.3e}) Time remaining exceeds "
+                f"({self.current_time:.3e}) Time remaining exceeds "
                 f"20 days.",
                 source=self,
                 message_type="warning",
@@ -307,7 +309,7 @@ class FlucsSystem(ABC):
                 + datetime.timedelta(seconds=float(remaining_seconds))
             )
             flucsprint(
-                f"({self.current_step:.3e}) Est. walltime: "
+                f"({self.current_time:.3e}) Est. walltime: "
                 f"{self._format_time_interval(remaining_seconds)} "
                 f"({completion_time.strftime('%Y-%m-%d %H:%M:%S')})"
             )
@@ -551,6 +553,7 @@ class FlucsSystem(ABC):
 
         bytes_to_gb = 1024**3
 
+        flucsprint("CUDA devices:")
         # Print device information
         for key, info in device_info.items():
             if not key.startswith("device_"):
@@ -564,6 +567,8 @@ class FlucsSystem(ABC):
                 f"{global_total_gb:.3f} GB "
                 f"({global_used_gb / global_total_gb * 100:.2f}%)"
             )
+
+        flucsprint()
 
         return device_info
 

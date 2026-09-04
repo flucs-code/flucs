@@ -19,7 +19,7 @@ from flucs.utilities.dealiasing import (
     dealiased_multiplication_rfft,
     next_smooth_number,
 )
-from flucs.utilities.messages import flucsprint
+from flucs.utilities.messages import flucsprint, HORIZONTAL_SEPARATOR
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,
@@ -1946,6 +1946,7 @@ class FourierSystem(FlucsSystem):
 
         # Print starting message
         flucsprint(
+            f"{HORIZONTAL_SEPARATOR}\n"
             f"Starting at time {float(self.init_time):.3e}, "
             f"dt {float(self.init_dt):.3e}"
         )
@@ -2005,7 +2006,7 @@ class FourierSystem(FlucsSystem):
         dt_changed = self._compute_current_dt()
         if self.current_dt < self.dt_min:
             flucsprint(
-                f"({self.current_step}) Required time step "
+                f"({self.current_time:.3e}) Required time step "
                 f"{self.current_dt:.3e} is below dt_min. Exiting."
             )
             self.solver.interrupted = True
@@ -2079,7 +2080,7 @@ class FourierSystem(FlucsSystem):
             new_dt = self.dt_mult_decrease * self.max_cfl / self.cfl_rate_float
 
             flucsprint(
-                f"({self.current_step:.3e}) dt: "
+                f"({self.current_time:.3e}) dt: "
                 f"{self.current_dt:.3e} -> {new_dt:.3e} (-)"
             )
 
@@ -2100,7 +2101,7 @@ class FourierSystem(FlucsSystem):
 
             if new_dt > self.current_dt:
                 flucsprint(
-                    f"({self.current_step:.3e}) dt: "
+                    f"({self.current_time:.3e}) dt: "
                     f"{self.current_dt:.3e} -> {new_dt:.3e} (+)"
                 )
 

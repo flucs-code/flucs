@@ -1,3 +1,5 @@
+HORIZONTAL_SEPARATOR = "***************************************************"
+
 def flucsprint(*parts, source=None, message_type=None):
     """
     Standard print function for FLUCS.
@@ -31,5 +33,12 @@ def flucsprint(*parts, source=None, message_type=None):
     prefix = " ".join(part for part in [source_prefix, type_prefix] if part)
     message = " ".join(str(part) for part in parts)
 
+    # Combine with prefix
+    message = " ".join(part for part in [prefix, message] if part)
+
+    # Warnings get extra spaces for extra attention
+    if message_type == "warning":
+        message = f"\n{message}\n"
+
     # Print
-    print(" ".join(part for part in [prefix, message] if part))
+    print(message)

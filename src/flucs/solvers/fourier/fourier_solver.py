@@ -12,7 +12,7 @@ from typing import ClassVar
 
 from flucs.solvers import FlucsSolver, FlucsSolverState
 from flucs.solvers.fourier.fourier_system import FourierSystem
-from flucs.utilities.messages import flucsprint
+from flucs.utilities.messages import flucsprint, HORIZONTAL_SEPARATOR
 
 from .timesteppers.ab3 import FourierAB3Timestepper
 from .timesteppers.rk4 import FourierRK4Timestepper
@@ -141,4 +141,5 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.write_output(force=True)
         self.system.restart_manager.write_restart(force=True)
 
+        flucsprint(HORIZONTAL_SEPARATOR)
         return end_time - start_time

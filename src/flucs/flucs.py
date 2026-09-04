@@ -9,7 +9,7 @@ from importlib.metadata import entry_points
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
 from flucs.utilities.log_handler import FlucsLogHandler
-from flucs.utilities.messages import flucsprint
+from flucs.utilities.messages import flucsprint, HORIZONTAL_SEPARATOR
 
 try:
     import cupy as cupy
@@ -24,7 +24,7 @@ else:
     CUPY_IMPORT_ERROR = None
 
 FLUCS_HEADER = rf"""
-***************************************************
+{HORIZONTAL_SEPARATOR}
 
        ██████  ████
       ███░░███░░███
@@ -35,7 +35,7 @@ FLUCS_HEADER = rf"""
      █████     █████ ░░████████░░██████  ██████
     ░░░░░     ░░░░░   ░░░░░░░░  ░░░░░░  ░░░░░░
 
-***************************************************
+{HORIZONTAL_SEPARATOR}
 
 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 Version: {importlib.metadata.version("flucs")}
