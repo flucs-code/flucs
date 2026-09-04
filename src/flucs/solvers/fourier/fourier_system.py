@@ -19,7 +19,7 @@ from flucs.utilities.dealiasing import (
     dealiased_multiplication_rfft,
     next_smooth_number,
 )
-from flucs.utilities.messages import flucsprint, HORIZONTAL_SEPARATOR
+from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
 
 from .fourier_system_diagnostics import (
     FourierDataDiag,

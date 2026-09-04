@@ -1,5 +1,6 @@
 HORIZONTAL_SEPARATOR = "***************************************************"
 
+
 def flucsprint(*parts, source=None, message_type=None):
     """
     Standard print function for FLUCS.

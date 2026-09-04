@@ -274,16 +274,13 @@ class FlucsSystem(ABC):
         if self.current_step % (write_steps * time_estimate_writes) != 0:
             return
 
-        time_elapsed = (
-            datetime.datetime.now() - self.initial_wallclock_time
-        )
+        time_elapsed = datetime.datetime.now() - self.initial_wallclock_time
 
         # Approximate time remaining
         step_walltime_rate = time_elapsed.total_seconds() / self.current_step
         sim_time_per_step = (
-            (self.current_time - self.time_to_finish_last_time)
-            / (self.current_step - self.time_to_finish_last_step)
-        )
+            self.current_time - self.time_to_finish_last_time
+        ) / (self.current_step - self.time_to_finish_last_step)
 
         # Save the current_time and current_step
         self.time_to_finish_last_time = self.current_time
@@ -298,15 +295,13 @@ class FlucsSystem(ABC):
         # Report result and warn if it exceeds 20 days
         if remaining_seconds > 86400 * 20:
             flucsprint(
-                f"({self.current_time:.3e}) Time remaining exceeds "
-                f"20 days.",
+                f"({self.current_time:.3e}) Time remaining exceeds 20 days.",
                 source=self,
                 message_type="warning",
             )
         else:
-            completion_time = (
-                datetime.datetime.now()
-                + datetime.timedelta(seconds=float(remaining_seconds))
+            completion_time = datetime.datetime.now() + datetime.timedelta(
+                seconds=float(remaining_seconds)
             )
             flucsprint(
                 f"({self.current_time:.3e}) Est. walltime: "
@@ -586,7 +581,7 @@ class FlucsSystem(ABC):
 
             # Reset heap for the next save
             heapq.heapify(self.output_heap)
-        
+
         # Reset wall-time-estimate variables
         self.time_to_finish_last_step = 0
         self.time_to_finish_last_time = self.init_time
