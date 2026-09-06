@@ -116,12 +116,11 @@ bool is_mode_padded(const size_t ikz, const size_t ikx, const size_t iky) {
             return true;
     }
 
-    // Anything above max_sum will needs to be dealiased
-    constexpr FLUCS_FLOAT max_sum = 0.666;
+    // Anything above the maximum pairwise sum must be dealiased
     return (
-           (qx_abs + qz_abs > max_sum)
-        || (qy_abs + qz_abs > max_sum)
-        || (qx_abs + qy_abs > max_sum)
+           (qx_abs + qz_abs > DEALIASING_MAX_SUM)
+        || (qy_abs + qz_abs > DEALIASING_MAX_SUM)
+        || (qx_abs + qy_abs > DEALIASING_MAX_SUM)
     );
 #endif // PHASE_SHIFT_POLYHEDRAL
 
