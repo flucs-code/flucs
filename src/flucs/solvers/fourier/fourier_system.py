@@ -611,6 +611,16 @@ class FourierSystem(FlucsSystem):
         Adds any general CUDA definitions. Additional ones may be added after
         executing the initialisation kernels.
         """
+
+        # Kernel parameters (grid, block, shared memory)
+        self.half_cuda_grid_size = (
+            self.half_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
+        self.full_cuda_grid_size = (
+            self.full_size + self.cuda_block_size - 1
+        ) // self.cuda_block_size
+
         # Layouts
         self.module_options.define_int(
             "NUMBER_OF_FIELDS", self.number_of_fields
@@ -721,38 +731,51 @@ class FourierSystem(FlucsSystem):
         constants.
         """
 
+        # Solved grid mask
+        self.compute_solved_grid_mask_kernel = KernelWrapper(
+            system=self,
+            cuda_kernel_name="compute_solved_grid_mask",
+            grid=(self.half_cuda_grid_size,),
+            block=(self.cuda_block_size,),
+        )
+
         # Normalised hyperdissipation
-        if not any(
+        if any(
             self.input[f"hyperdissipation.{component}"] > 0.0
             and self.input[f"hyperdissipation.{component}_normalised"]
             for component in self.hyperdissipation_components
         ):
-            return
-
-        self.compute_hyperdissipation_components_kmax_kernel = KernelWrapper(
-            system=self,
-            cuda_kernel_name="compute_hyperdissipation_components_kmax",
-            grid=(1,),
-            block=(1,),
-        )
+            self.compute_hyperdissipation_components_kmax_kernel = KernelWrapper(
+                system=self,
+                cuda_kernel_name="compute_hyperdissipation_components_kmax",
+                grid=(1,),
+                block=(1,),
+            )
 
     def execute_initialisation_kernels(self) -> None:
         """
         Executes any initialisation kernels
         """
+        # Solved grid mask
+        self.get_solved_grid_mask()
 
-        # Hyperdissipation normalisation
-        hyperdissipation_components_kmax = cp.empty(4, dtype=self.float)
+        if any(
+            self.input[f"hyperdissipation.{component}"] > 0.0
+            and self.input[f"hyperdissipation.{component}_normalised"]
+            for component in self.hyperdissipation_components
+        ):
+            # Hyperdissipation normalisation
+            hyperdissipation_components_kmax = cp.empty(4, dtype=self.float)
 
-        self.compute_hyperdissipation_components_kmax_kernel(
-            hyperdissipation_components_kmax
-        )
-        self.hyperdissipation_components_kmax = (
-            hyperdissipation_components_kmax.get()
-        )
+            self.compute_hyperdissipation_components_kmax_kernel(
+                hyperdissipation_components_kmax
+            )
+            self.hyperdissipation_components_kmax = (
+                hyperdissipation_components_kmax.get()
+            )
 
-        # Cleanup kernels (no longer required after initialisation)
-        del self.compute_hyperdissipation_components_kmax_kernel
+            # Cleanup kernels (no longer required after initialisation)
+            del self.compute_hyperdissipation_components_kmax_kernel
 
     def setup_cuda_definitions_init(self) -> None:
         """
@@ -780,25 +803,9 @@ class FourierSystem(FlucsSystem):
         Registers the CUDA kernels.
         """
 
-        # Setup kernel parameters (grid, block, shared memory)
-        self.half_cuda_grid_size = (
-            self.half_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
-        self.full_cuda_grid_size = (
-            self.full_size + self.cuda_block_size - 1
-        ) // self.cuda_block_size
-
         self.compute_linear_matrix_kernel = KernelWrapper(
             system=self,
             cuda_kernel_name="compute_linear_matrix",
-            grid=(self.half_cuda_grid_size,),
-            block=(self.cuda_block_size,),
-        )
-
-        self.compute_solved_grid_mask_kernel = KernelWrapper(
-            system=self,
-            cuda_kernel_name="compute_solved_grid_mask",
             grid=(self.half_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
@@ -2147,6 +2154,7 @@ class FourierSystem(FlucsSystem):
             )
             self.compute_solved_grid_mask_kernel(solved_grid_mask_gpu)
             self.solved_grid_mask = solved_grid_mask_gpu.get()
+            del solved_grid_mask_gpu
 
         return self.solved_grid_mask
 
