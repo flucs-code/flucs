@@ -1925,9 +1925,7 @@ class FourierSystem(FlucsSystem):
         self.current_cfl = 0.0
 
         # Copy initial condition
-        self.fields[0][:] = cp.array(
-            np.reshape(self.fields_initial, self.fields[0].shape)
-        )
+        self.fields[0].set(self.fields_initial)
 
         # Reset realspace fields
         self.realspace_fields = None
