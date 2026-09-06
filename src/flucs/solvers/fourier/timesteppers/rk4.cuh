@@ -179,8 +179,7 @@ __global__ void finish_stage(
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
-    const FLUCS_COMPLEX previous_stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
-    FLUCS_COMPLEX current_stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
 ){
     constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
@@ -318,7 +317,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_stage_fields_global[i][index] = stage_fields[i];
+            stage_fields_global[i][index] = stage_fields[i];
         }
 
         #pragma unroll
@@ -331,7 +330,7 @@ __global__ void finish_stage(
     else if constexpr (stage == 2) {
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
         get_explicit_terms<stage>(
-            index, dt, current_time + half_dt, current_step, dft_bits_global, previous_stage_fields_global,
+            index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global,
             stage_fields, current_fields, propagator_half_half, propagator_full
         );
 #endif
@@ -353,7 +352,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_stage_fields_global[i][index] = stage_fields[i];
+            stage_fields_global[i][index] = stage_fields[i];
         }
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
@@ -368,7 +367,7 @@ __global__ void finish_stage(
     else if constexpr (stage == 3) {
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
         get_explicit_terms<stage>(
-            index, dt, current_time + half_dt, current_step, dft_bits_global, previous_stage_fields_global,
+            index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global,
             stage_fields, current_fields, propagator_half_half, propagator_full
         );
 #endif
@@ -390,7 +389,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_stage_fields_global[i][index] = stage_fields[i];
+            stage_fields_global[i][index] = stage_fields[i];
         }
 
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
@@ -405,7 +404,7 @@ __global__ void finish_stage(
     else if constexpr (stage == 4) {
 #if defined(NONLINEAR) || defined(FORCING_EXPLICIT)
         get_explicit_terms<stage>(
-            index, dt, current_time + dt, current_step, dft_bits_global, previous_stage_fields_global,
+            index, dt, current_time + dt, current_step, dft_bits_global, stage_fields_global,
             stage_fields, current_fields, propagator_half, propagator_full
         );
 #endif
