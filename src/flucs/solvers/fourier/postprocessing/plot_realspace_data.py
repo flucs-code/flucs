@@ -252,7 +252,9 @@ def plot_3d(axs, data, plot_dims, coord_names=None, downsample_factor=1):
             print("Could not render plot, likely due to missing data.")
 
 
-def plot_realspace_data(post, location, time_to_plot, downsample_factor, groups):
+def plot_realspace_data(
+    post, location, time_to_plot, downsample_factor, groups
+):
     # Parse user input location
     if location is None:
         raise ValueError("No location provided. See --help/-h for details.")
@@ -280,12 +282,11 @@ def plot_realspace_data(post, location, time_to_plot, downsample_factor, groups)
     for index, nc_path in enumerate(nc_paths):
         # Load time and data from netCDF file
         time, boundaries, _ = post.load_netcdf_variable(
-            nc_path,
-            "time",
-            groups=groups
+            nc_path, "time", groups=groups
         )
         data, _, dims_dicts = post.load_netcdf_variable(
-            nc_path, loc_str + "data",
+            nc_path,
+            loc_str + "data",
             groups=groups,
         )
 
@@ -467,4 +468,6 @@ if __name__ == "__main__":
         exit()
 
     # Call function
-    plot_realspace_data(post, args.location, args.time, args.downsample, args.groups)
+    plot_realspace_data(
+        post, args.location, args.time, args.downsample, args.groups
+    )
