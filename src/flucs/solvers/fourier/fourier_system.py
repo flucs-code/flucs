@@ -358,6 +358,12 @@ class FourierSystem(FlucsSystem):
                 )
 
                 dealiasing_radius = np.sqrt(radius_squared)
+            case _:
+                raise InvalidFlucsInputFileError(
+                    f"{self.input['dealiasing.truncation']} is not a valid "
+                    "phase-shift truncation. The available options are "
+                    "'polyhedral' and 'spherical'."
+                )
 
         # Calculate dimensions in each direction
         for dim in ["z", "x", "y"]:
@@ -2271,26 +2277,28 @@ class FourierSystem(FlucsSystem):
         restart_input = toml.loads(restart_data["input_file"]["data"].item())
 
         # Check whether the box dimensions have changed
-        restart_dimensions = tuple(
-            restart_input["dimensions"][f"L{dimension}"]
-            for dimension in ("z", "x", "y")
-        )
-        current_dimensions = tuple(
-            self.input[f"dimensions.L{dimension}"]
-            for dimension in ("z", "x", "y")
-        )
-        if restart_dimensions != current_dimensions:
-            raise InvalidFlucsInputFileError(
-                "Cannot change any of Lx, Ly, or Lz when restarting."
+        # and warn the user if they have
+        changed_dimensions = []
+        for dimension in ("z", "x", "y"):
+            restart_dimension = restart_input["dimensions"][f"L{dimension}"]
+            current_dimension = self.input[f"dimensions.L{dimension}"]
+
+            if not np.isclose(restart_dimension, current_dimension):
+                changed_dimensions.append(
+                    f"L{dimension} = {restart_dimension} -> {current_dimension}"
+                )
+        
+        if changed_dimensions:
+            flucsprint(
+                "Changing the box size can result in unexpected behaviour.\n"
+                "Detected the following changes from the "
+                "restart data to the current input:\n" 
+                + "\n".join(changed_dimensions),
+                message_type="warning",
             )
 
         # If the restart fields are the same shape as current fields, return
-        target_shape = (
-            self.number_of_fields,
-            self.nz,
-            self.nx,
-            self.half_ny,
-        )
+        target_shape = (self.number_of_fields, *self.half_tuple)
         if restart_fields.shape == target_shape:
             return restart_fields
 
