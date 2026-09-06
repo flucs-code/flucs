@@ -107,8 +107,7 @@ __global__ void finish_stage(
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
-    const FLUCS_COMPLEX previous_stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
-    FLUCS_COMPLEX current_stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    FLUCS_COMPLEX stage_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
 ){
     constexpr FLUCS_FLOAT one_over_two = (FLUCS_FLOAT)(1.0 / 2.0);
@@ -141,7 +140,7 @@ __global__ void finish_stage(
         previous_fields[j] = previous_fields_global[j][index];
 
         if constexpr (stage > 1) {
-            stage_fields[j] = previous_stage_fields_global[j][index];
+            stage_fields[j] = stage_fields_global[j][index];
         }
     }
 
@@ -218,7 +217,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_stage_fields_global[i][index] = result[i];
+            stage_fields_global[i][index] = result[i];
         }
     }
 
@@ -228,7 +227,7 @@ __global__ void finish_stage(
         constexpr FLUCS_FLOAT three_over_four = (FLUCS_FLOAT)(3.0 / 4.0);
 
         get_explicit_terms(
-            index, dt, current_time + dt, current_step, dft_bits_global, previous_stage_fields_global, explicit_terms
+            index, dt, current_time + dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
         );
 
         #pragma unroll
@@ -251,7 +250,7 @@ __global__ void finish_stage(
 
         #pragma unroll
         for (int i = 0; i < NUMBER_OF_FIELDS; i++){
-            current_stage_fields_global[i][index] = result[i];
+            stage_fields_global[i][index] = result[i];
         }
     }
 
@@ -261,7 +260,7 @@ __global__ void finish_stage(
         constexpr FLUCS_FLOAT two_over_three = (FLUCS_FLOAT)(2.0 / 3.0);
 
         get_explicit_terms(
-            index, dt, current_time + half_dt, current_step, dft_bits_global, previous_stage_fields_global, explicit_terms
+            index, dt, current_time + half_dt, current_step, dft_bits_global, stage_fields_global, explicit_terms
         );
 
         #pragma unroll

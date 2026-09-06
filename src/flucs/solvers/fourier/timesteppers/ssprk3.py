@@ -23,26 +23,10 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
     def _allocate_memory(self):
         system = self.system
 
-        self.stage_fields = [
-            cp.zeros(
-                (
-                    system.number_of_fields,
-                    system.nz,
-                    system.nx,
-                    system.half_ny,
-                ),
-                dtype=system.complex,
-            ),
-            cp.zeros(
-                (
-                    system.number_of_fields,
-                    system.nz,
-                    system.nx,
-                    system.half_ny,
-                ),
-                dtype=system.complex,
-            ),
-        ]
+        self.stage_fields = cp.zeros(
+            (system.number_of_fields, *system.half_tuple),
+            dtype=system.complex,
+        )
 
     def precompute_iteration_matrices(self):
         self.precompute_iteration_matrices_kernel(
@@ -116,8 +100,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            previous_fields,
-            self.stage_fields[1],
+            self.stage_fields,
             current_fields,
         )
 
@@ -127,7 +110,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
                 system.float(system.current_dt),
                 system.float(system.current_time + system.current_dt),
                 system.int(system.current_step),
-                self.stage_fields[1],
+                self.stage_fields,
                 False,
             )
 
@@ -137,8 +120,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields[1],
-            self.stage_fields[0],
+            self.stage_fields,
             current_fields,
         )
 
@@ -148,7 +130,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
                 system.float(system.current_dt),
                 system.float(system.current_time + 0.5 * system.current_dt),
                 system.int(system.current_step),
-                self.stage_fields[0],
+                self.stage_fields,
                 False,
             )
 
@@ -158,8 +140,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields[0],
-            self.stage_fields[1],
+            self.stage_fields,
             current_fields,
         )
 
