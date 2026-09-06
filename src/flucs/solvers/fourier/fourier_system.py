@@ -31,6 +31,9 @@ from .fourier_system_forcing import FourierSystemForcing
 
 if cp is not None:
     from cupy.cuda import cufft
+    import flucs.utilities.flucs_plan_nd
+    from flucs.utilities.flucs_plan_nd import FlucsPlanNd, allocate_shared_work_area
+    from nvmath.bindings import cufft as nvcufft
 
 
 class FourierSystem(FlucsSystem):
@@ -38,6 +41,8 @@ class FourierSystem(FlucsSystem):
     A generic system of equations solved using pseudospectral Fourier
     methods.
     """
+    # Whether we use CuPy's built-in cuFFT interface or our own
+    use_cupy_fft: bool
 
     # Number of fields that the solver is solving for
     number_of_fields: int
@@ -53,8 +58,8 @@ class FourierSystem(FlucsSystem):
     real_bits: cp.ndarray
 
     # DFT plans for the derivatives and bits
-    plan_derivatives_c2r: cufft.PlanNd
-    plan_bits_r2c: cufft.PlanNd
+    plan_derivatives_c2r: FlucsPlanNd
+    plan_bits_r2c: FlucsPlanNd
 
     # Total number of time steps for which we hold field data in memory
     # This is typically 2 (previous time step +
@@ -107,6 +112,12 @@ class FourierSystem(FlucsSystem):
     # CUDA grids
     half_cuda_grid_size: int
     full_cuda_grid_size: int
+
+    # CUFFT
+    fft_c2r_plan_type: int
+    fft_r2c_plan_type: int
+    CUFFT_FORWARD: int
+    CUFFT_INVERSE: int
 
     # Initial conditions, always in CPU memory
     fields_initial: np.ndarray
@@ -527,6 +538,9 @@ class FourierSystem(FlucsSystem):
         # Base FlucsSystem setup
         super().setup()
 
+        # Sets up standard FFT types
+        self._setup_cufft()
+
         # Initialise shell grids for diagnostics
         self._compute_kperp_shells()
 
@@ -558,6 +572,48 @@ class FourierSystem(FlucsSystem):
         return not self.input["setup.linear"] or (
             bool(self.input["forcing.method"]) and self.forcing_object.explicit
         )
+
+    def _setup_cufft(self) -> None:
+        fft_wrapper = self.input["setup.fft_wrapper"] 
+        
+        if fft_wrapper not in ("flucs", "cupy"):
+            raise InvalidFlucsInputFileError(
+                f"'{fft_wrapper}' is not a valid "
+                "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
+            )
+
+
+        self.use_cupy_fft = fft_wrapper == "cupy"
+
+        if self.use_cupy_fft:
+            self.CUFFT_FORWARD = cufft.CUFFT_FORWARD
+            self.CUFFT_INVERSE = cufft.CUFFT_INVERSE
+            if self.input["setup.precision"] == "single":
+                self.fft_c2r_plan_type = cufft.CUFFT_C2R
+                self.fft_r2c_plan_type = cufft.CUFFT_R2C
+            else:
+                self.fft_c2r_plan_type = cufft.CUFFT_D2Z
+                self.fft_c2r_plan_type = cufft.CUFFT_Z2D
+
+            message = (
+                "Using CuPy's built-in cuFFT interface."
+            )
+        else:
+            self.CUFFT_FORWARD = flucs.utilities.flucs_plan_nd.CUFFT_FORWARD
+            self.CUFFT_INVERSE = flucs.utilities.flucs_plan_nd.CUFFT_INVERSE
+            if self.input["setup.precision"] == "single":
+                self.fft_c2r_plan_type = nvcufft.Type.C2R
+                self.fft_r2c_plan_type = nvcufft.Type.R2C
+            else:
+                self.fft_c2r_plan_type = nvcufft.Type.D2Z
+                self.fft_c2r_plan_type = nvcufft.Type.Z2D
+
+            message = (
+                "Using the custom flucs cuFFT wrapper."
+            )
+        
+        flucsprint(message)
+
 
     def _allocate_memory(self) -> None:
         """
@@ -968,6 +1024,7 @@ class FourierSystem(FlucsSystem):
             fft_type="r2c",
             batch_size=n_out,
         )
+        allocate_shared_work_area([plan_c2r, plan_r2c])
 
         # Allocate the memory required by the intermediates
         if combine_first_and_second_intermediates:
@@ -1052,7 +1109,7 @@ class FourierSystem(FlucsSystem):
             plan_c2r.fft(
                 first_intermediates_fourier,
                 first_intermediates_real,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_INVERSE,
             )
 
             # Real-space first intermediates -> real-space second intermediates
@@ -1068,7 +1125,7 @@ class FourierSystem(FlucsSystem):
             plan_r2c.fft(
                 second_intermediates_real,
                 second_intermediates_fourier,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_FORWARD,
             )
 
         return dealiased_operation, second_intermediates_fourier
@@ -1106,6 +1163,8 @@ class FourierSystem(FlucsSystem):
             fft_type="r2c",
             batch_size=2 * n_out,
         )
+
+        allocate_shared_work_area([plan_c2r, plan_r2c])
 
         # Allocate memory for batched FFTs for both shifted and unshifted data
         first_intermediates_fourier = cp.zeros(
@@ -1237,7 +1296,7 @@ class FourierSystem(FlucsSystem):
             plan_c2r.fft(
                 first_intermediates_fourier,
                 first_intermediates_real,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_INVERSE,
             )
 
             # Real-space first intermediates -> real-space second intermediates
@@ -1265,7 +1324,7 @@ class FourierSystem(FlucsSystem):
             plan_r2c.fft(
                 second_intermediates_real,
                 second_intermediates_fourier,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_FORWARD,
             )
 
             # Shifted and unshifted Fourier outputs -> dealiased output
@@ -1308,6 +1367,7 @@ class FourierSystem(FlucsSystem):
             fft_type="r2c",
             batch_size=n_out,
         )
+        allocate_shared_work_area([plan_c2r, plan_r2c])
 
         # Allocate the memory required by the intermediates
         if combine_first_and_second_intermediates:
@@ -1427,7 +1487,7 @@ class FourierSystem(FlucsSystem):
             plan_c2r.fft(
                 first_intermediates_fourier,
                 first_intermediates_real,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_INVERSE,
             )
 
             # Real-space first intermediates -> real-space second intermediates
@@ -1443,7 +1503,7 @@ class FourierSystem(FlucsSystem):
             plan_r2c.fft(
                 second_intermediates_real,
                 shifted_second_intermediates_fourier,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_FORWARD,
             )
 
             # ... then unshifted
@@ -1461,7 +1521,7 @@ class FourierSystem(FlucsSystem):
             plan_c2r.fft(
                 first_intermediates_fourier,
                 first_intermediates_real,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_INVERSE,
             )
 
             # Real-space first intermediates -> real-space second intermediates
@@ -1477,7 +1537,7 @@ class FourierSystem(FlucsSystem):
             plan_r2c.fft(
                 second_intermediates_real,
                 second_intermediates_fourier,
-                cufft.CUFFT_INVERSE,
+                self.CUFFT_FORWARD,
             )
 
             # Shifted and unshifted Fourier outputs -> dealiased output
@@ -1550,7 +1610,7 @@ class FourierSystem(FlucsSystem):
             raise ValueError("fft_type must be c2r or r2c.")
 
         # Create plan
-        return cufft.PlanNd(
+        return FlucsPlanNd(
             shape=shape,
             istride=istride,
             ostride=ostride,
@@ -1563,6 +1623,7 @@ class FourierSystem(FlucsSystem):
             order="C",
             last_axis=3,
             last_size=last_size,
+            use_cupy=self.use_cupy_fft,
         )
 
     # -------------------------------------------------------------------------
