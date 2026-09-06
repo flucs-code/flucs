@@ -222,8 +222,8 @@ class FlucsRestart:
         ):
             raise InvalidFlucsInputFileError(
                 "You must remove existing 'restart.nc' manually if "
-                "write_restart_file is 'True' but both restart_if_exists "
-                "and restart_from are 'False'."
+                "write_restart_file is 'True' but restart_if_exists is 'False' "
+                "and restart_from is not specified."
             )
 
     def write_restart(self, force: bool = False) -> None:
