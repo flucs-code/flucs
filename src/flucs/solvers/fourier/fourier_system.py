@@ -2287,12 +2287,12 @@ class FourierSystem(FlucsSystem):
                 changed_dimensions.append(
                     f"L{dimension} = {restart_dimension} -> {current_dimension}"
                 )
-        
+
         if changed_dimensions:
             flucsprint(
                 "Changing the box size can result in unexpected behaviour.\n"
                 "Detected the following changes from the "
-                "restart data to the current input:\n" 
+                "restart data to the current input:\n"
                 + "\n".join(changed_dimensions),
                 message_type="warning",
             )
