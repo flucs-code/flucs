@@ -8,6 +8,8 @@ extern "C" {
 // Multistep explicit terms stored in global memory
 __device__ FLUCS_COMPLEX multistep_explicit_terms_global[3][NUMBER_OF_FIELDS][HALFSIZE];
 
+
+#ifdef PRECOMPUTE_LINEAR_MATRIX
 // Precomputed linear propagator stored in global memory
 __device__ FLUCS_COMPLEX propagator_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
 
@@ -35,6 +37,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 }
+#endif // PRECOMPUTE_LINEAR_MATRIX
 
 // Adds the explicit terms to the rhs and updates the AB3 history
 __device__ void add_explicit_terms(

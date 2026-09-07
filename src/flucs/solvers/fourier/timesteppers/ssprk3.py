@@ -46,12 +46,13 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             self.system.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
     def register_kernels(self) -> None:
-        self.precompute_iteration_matrices_kernel = KernelWrapper(
-            system=self.system,
-            cuda_kernel_name="precompute_iteration_matrices",
-            grid=(self.system.half_cuda_grid_size,),
-            block=(self.system.cuda_block_size,),
-        )
+        if self.system.input["timestepping.precompute_linear_matrix"]:
+            self.precompute_iteration_matrices_kernel = KernelWrapper(
+                system=self.system,
+                cuda_kernel_name="precompute_iteration_matrices",
+                grid=(self.system.half_cuda_grid_size,),
+                block=(self.system.cuda_block_size,),
+            )
 
         self.finish_stage1_kernel = KernelWrapper(
             system=self.system,

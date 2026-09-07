@@ -7,6 +7,7 @@
 // Precomputed linear propagator stored in global memory
 extern "C" {
 
+#ifdef PRECOMPUTE_LINEAR_MATRIX
 __device__ FLUCS_COMPLEX propagator_half_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
 __device__ FLUCS_COMPLEX propagator_full_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
 
@@ -49,6 +50,8 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
         }
     }
 }
+
+#endif // PRECOMPUTE_LINEAR_MATRIX
 
 } // extern "C"
 
