@@ -13,6 +13,12 @@ precision = "double"  # floating-point precision
 timing = false
 timing_steps = 1000
 
+# If true, an estimate for the remaining wall time is
+# printed every time_estimate_writes * output.write_steps,
+# i.e., every time_estimate_writes writes
+print_time_estimate = true
+time_estimate_writes = 10
+
 [timestepping]
 method = "ab3"
 

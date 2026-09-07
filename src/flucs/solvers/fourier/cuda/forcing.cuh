@@ -36,7 +36,7 @@ bool forcing_range_mask(const size_t index)
 __device__ __forceinline__
 void get_forcing_fields(
     const size_t index,
-    const FLUCS_COMPLEX fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX fields_forcing[NUMBER_OF_FIELDS]
 ) {
     #pragma unroll

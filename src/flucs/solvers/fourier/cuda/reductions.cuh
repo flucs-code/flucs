@@ -92,6 +92,7 @@ struct Abs2_Functor {
 template <typename T>
 struct ConstMultiplier_Functor {
     const T* __restrict__ array;
+    const T multiplier;
     __device__ __forceinline__ T operator()(size_t index) const {
         return multiplier * array[index];
     }

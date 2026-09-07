@@ -21,6 +21,8 @@ class FourierSystemForcing(ABC):
     explicit: bool
     forced_mode_count: int
     forcing_range_mask: np.ndarray
+    below_forcing_range_mask: np.ndarray
+    above_forcing_range_mask: np.ndarray
 
     def __init__(self, system: FourierSystem):
         self.system = system
@@ -35,7 +37,7 @@ class FourierSystemForcing(ABC):
         """
 
         # Get ky wavenumbers
-        ky = self.system.get_broadcast_wavenumbers()[1]
+        _, _, ky = self.system.get_broadcast_wavenumbers()
 
         # Number of ky=0 modes
         ky0_modes = ky < 0.5 * ky[0, 0, 1]
@@ -99,7 +101,7 @@ class FourierSystemForcing(ABC):
 
         # Determine forcing range
         system._precompute_wavenumbers()
-        kx, ky, kz = system.get_broadcast_wavenumbers()
+        kz, kx, ky = system.get_broadcast_wavenumbers()
         kperp2 = kx**2 + ky**2
         kz_abs = np.abs(kz)
 
@@ -110,6 +112,11 @@ class FourierSystemForcing(ABC):
             & (kz_abs < kz_max)
         )
 
+        # Other useful masks
+        self.below_forcing_range_mask = kperp2 >= kperp_max**2
+        self.above_forcing_range_mask = kperp2 <= kperp_min**2
+
+        # Calculate the number of forced modes
         self._calculate_forced_mode_count()
 
         flucsprint(

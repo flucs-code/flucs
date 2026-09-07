@@ -71,7 +71,7 @@ class FlucsSolver(Generic[T_System], ABC):
         timestepper = self._supported_timesteppers[timestepping_method]
         self.timestepper = timestepper(self)
 
-        flucsprint(f"Using timestepping method: {self.timestepper!s}")
+        flucsprint(f"Timestepping method: {self.timestepper!s}")
 
     def __init__(self, flucs_input: FlucsInput, flucs_system: T_System) -> None:
         self.input = flucs_input

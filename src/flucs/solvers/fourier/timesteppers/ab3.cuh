@@ -6,17 +6,17 @@
 
 extern "C" {
 // Multistep explicit terms stored in global memory
-__device__ FLUCS_COMPLEX multistep_explicit_terms_global[3][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
+__device__ FLUCS_COMPLEX multistep_explicit_terms_global[3][NUMBER_OF_FIELDS][HALFSIZE];
 
 // Precomputed linear propagator stored in global memory
-__device__ FLUCS_COMPLEX propagator_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFUNPADDEDSIZE];
+__device__ FLUCS_COMPLEX propagator_precomp_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE];
 
 // Precomputes the propagator.
 __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
-    if (!(index < HALFUNPADDEDSIZE))
+    if (!(index < HALFSIZE))
         return;
 
     // This will first holds rhs then the propagator = lhs^-1 rhs
@@ -45,8 +45,8 @@ __device__ void add_explicit_terms(
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
-    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX result[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
 )
@@ -134,16 +134,24 @@ __global__ void finish_step(
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
     const FLUCS_FLOAT AB2,
-    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE],
-    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFPADDEDSIZE],
-    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFUNPADDEDSIZE]
+    const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
+    const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
+    FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
 ){
 
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     // Check if we are within bounds
-    if (!(index < HALFUNPADDEDSIZE))
+    if (!(index < HALFSIZE))
         return;
+
+    if (is_mode_padded(index)) {
+        #pragma unroll
+        for (int i = 0; i < NUMBER_OF_FIELDS; i++){
+            current_fields_global[i][index] = 0;
+        }
+        return;
+    }
 
 
     FLUCS_COMPLEX previous_fields[NUMBER_OF_FIELDS];
