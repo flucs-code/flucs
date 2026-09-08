@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
@@ -169,3 +169,165 @@ class FreeEnergyDiag(FlucsDiagnostic):
             "dWdt_error",
             dWdt - dWdt_nonlinear - dWdt_forcing - dWdt_hyperdissipation_total,
         )
+
+
+class FreeEnergyDiag1D(FlucsDiagnostic):
+    """
+    Computes 1D spectra of free-energy quantities and budget terms.
+    """
+
+    name = "free_energy_1d"
+    system: TestFourierSystem
+    option_defaults: ClassVar[dict[str, object]] = {
+        "spectra": ["kmod"],
+        "save_contributions": False,
+    }
+
+    get_W: dict[str, Callable[..., cp.ndarray]]
+    get_dWdt_forcing: dict[str, Callable[..., cp.ndarray]]
+    get_dWdt_hyperdissipation: dict[str, Callable[..., cp.ndarray]]
+
+    get_W_contribution: dict[str, Callable[..., cp.ndarray]]
+
+    def init_vars(self) -> None:
+        reductions = FourierReductions(self.system)
+
+        # Parse valid spectra (enforce 1D)
+        valid_spectra = ("kz", "kx", "ky", "kperp", "kmod")
+        spectra = self.spectra
+        if isinstance(spectra, str):
+            spectra = [spectra]
+        spectra = tuple(dict.fromkeys(spectra))
+
+        invalid_spectra = set(spectra) - set(valid_spectra)
+        if invalid_spectra:
+            raise ValueError(
+                f"{self.name} only supports 1D spectra {valid_spectra}."
+            )
+
+        # Initialise dicts
+        self.get_W = {}
+        self.get_dWdt_forcing = {}
+        self.get_dWdt_hyperdissipation = {}
+
+        self.get_W_contribution = {}
+
+        # Iterate over spectra types and initialise variables
+        for spectrum in spectra:
+            dimensions = reductions.get_dimensions(spectrum)
+            shape = tuple(dimensions)
+
+            for name in ["W", "dWdt_forcing", "dWdt_hyperdissipation"]:
+                self.add_var(
+                    FlucsDiagnosticVariable(
+                        name=f"{spectrum}_spectra/{name}",
+                        shape=shape,
+                        dimensions=dimensions,
+                        is_complex=False,
+                    )
+                )
+
+            self.get_W[spectrum] = reductions.get_reduction(
+                reduction_output=spectrum,
+                functor="FreeEnergy_Functor",
+                input_args="const FLUCS_COMPLEX*",
+                complex_output=False,
+            )
+            self.get_dWdt_forcing[spectrum] = reductions.get_reduction(
+                reduction_output=spectrum,
+                functor="FreeEnergyForcing_Functor",
+                input_args=(
+                    "const FLUCS_COMPLEX (*)[HALFSIZE],FLUCS_FLOAT,"
+                    "FLUCS_FLOAT,long long"
+                ),
+                complex_output=False,
+            )
+            self.get_dWdt_hyperdissipation[spectrum] = (
+                reductions.get_reduction(
+                    reduction_output=spectrum,
+                    functor="FreeEnergyHyperdissipation_Functor",
+                    input_args="const FLUCS_COMPLEX*,FLUCS_FLOAT",
+                    complex_output=False,
+                )
+            )
+
+            # Save contributions if required
+            if self.save_contributions:
+                for name in ["W_uz", "W_ux", "W_uy"]:
+                    self.add_var(
+                        FlucsDiagnosticVariable(
+                            name=f"{spectrum}_spectra/{name}",
+                            shape=shape,
+                            dimensions=dimensions,
+                            is_complex=False,
+                        )
+                    )
+
+                self.get_W_contribution[spectrum] = reductions.get_reduction(
+                    reduction_output=spectrum,
+                    functor="Abs2_Functor",
+                    input_args="const FLUCS_COMPLEX*,FLUCS_FLOAT",
+                    complex_output=False,
+                )
+
+    def ready(self) -> None:
+        pass
+
+    def execute(self) -> None:
+        # Useful aliases
+        current_dt = self.system.float(self.system.current_dt)
+        current_time = self.system.float(self.system.current_time)
+        current_step = self.system.int(self.system.current_step)
+        adaptive_rate = self.system.float(self.system.adaptive_rate)
+        half = self.system.float(0.5)
+        fields = self.system.get_fields()
+
+        # Iterate over spectra to save
+        for spectrum in self.get_W:
+
+            # Free energy
+            W = self.get_W[spectrum](fields).get()
+
+            self.save_data(
+                f"{spectrum}_spectra/W",
+                W,
+            )
+
+            # Forcing contribution
+            dWdt_forcing = self.get_dWdt_forcing[spectrum](
+                fields,
+                current_dt,
+                current_time,
+                current_step,
+            ).get()
+
+            self.save_data(
+                f"{spectrum}_spectra/dWdt_forcing",
+                dWdt_forcing,
+            )
+
+            # Hyperdissipation contribution
+            dWdt_hyperdissipation = -self.get_dWdt_hyperdissipation[spectrum](
+                fields,
+                adaptive_rate,
+            ).get()
+
+            self.save_data(
+                f"{spectrum}_spectra/dWdt_hyperdissipation",
+                dWdt_hyperdissipation,
+            )
+
+            # Free-energy contributions
+            if self.save_contributions:
+                self.save_data(
+                    f"{spectrum}_spectra/W_uz",
+                    self.get_W_contribution[spectrum](fields[0], half).get(),
+                )
+                self.save_data(
+                    f"{spectrum}_spectra/W_ux",
+                    self.get_W_contribution[spectrum](fields[1], half).get(),
+                )
+                self.save_data(
+                    f"{spectrum}_spectra/W_uy",
+                    self.get_W_contribution[spectrum](fields[2], half).get(),
+                )
