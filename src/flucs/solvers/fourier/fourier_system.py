@@ -550,7 +550,9 @@ class FourierSystem(FlucsSystem):
         self.shell_nkmod = nkmod
         self.shell_kmod = kmod
         self.shell_kmod_last_complete_bin = int(
-            (min(kz_max, kx_max, ky_max) - kmod_min) * nkmod / (kmod_max - kmod_min)
+            (min(kz_max, kx_max, ky_max) - kmod_min)
+            * nkmod
+            / (kmod_max - kmod_min)
         )
 
     # -------------------------------------------------------------------------

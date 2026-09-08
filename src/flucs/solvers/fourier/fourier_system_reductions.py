@@ -806,9 +806,7 @@ class FourierReductions:
         kperp_max: float | None = None,
     ):
         self.system._compute_kperp_shells()
-        nkperp = (
-            self.system.shell_nkperp if nkperp is None else int(nkperp)
-        )
+        nkperp = self.system.shell_nkperp if nkperp is None else int(nkperp)
         kperp_min = (
             self.system.shell_kperp_min
             if kperp_min is None
@@ -841,9 +839,7 @@ class FourierReductions:
         kperp_max: float | None = None,
     ):
         self.system._compute_kperp_shells()
-        nkperp = (
-            self.system.shell_nkperp if nkperp is None else int(nkperp)
-        )
+        nkperp = self.system.shell_nkperp if nkperp is None else int(nkperp)
         kperp_min = (
             self.system.shell_kperp_min
             if kperp_min is None
