@@ -1831,6 +1831,7 @@ class FourierSystem(FlucsSystem):
             if not np.allclose(
                 matrix_reference[..., solved_grid_mask],
                 matrix_solver[..., solved_grid_mask],
+                atol=self.tolerance 
             ):
                 raise ValueError(
                     "The linear matrix computed by CUDA disagrees "
