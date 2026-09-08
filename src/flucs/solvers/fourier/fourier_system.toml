@@ -65,6 +65,9 @@ radius_squared = -1.0
 # Save memory at the expense of speed when using phase-shift dealiasing
 low_memory = false
 
+# In-place FFTs can save even more memory
+in_place_fft = false
+
 # Check errors
 check_errors = false
 

@@ -474,6 +474,7 @@ class FlucsPlanNd:
 def allocate_shared_work_area(
     plans: Iterable[FlucsPlanNd | cp.cuda.cufft.PlanNd],
     allocator: Callable[[int], Any] | None = None,
+    min_size: int = 0,
 ) -> Any | None:
     """Allocate one work area for the supplied custom-backend plans.
 
@@ -484,6 +485,9 @@ def allocate_shared_work_area(
     Participating plans must belong to the same CUDA device. The default allocator is
     ``cupy.cuda.Memory``, which makes a direct CUDA device allocation.  Keep the
     returned object alive until all plans are closed or rebound.
+
+    Allocates at least min_size bytes. Returns the memory object of the allocator.
+
     """
 
     participating = []
@@ -503,6 +507,9 @@ def allocate_shared_work_area(
         raise ValueError("all plans sharing a work area must be on one device")
     device_id = device_ids.pop()
     required_size = max(plan.work_size for plan in plans)
+
+    # Consider min_size
+    required_size = max(required_size, min_size)
 
     if required_size == 0:
         for plan in plans:

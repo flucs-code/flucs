@@ -145,3 +145,43 @@ bool is_mode_padded(const size_t index) {
 
     return is_mode_padded(ikz, ikx, iky);
 }
+
+template<size_t N, size_t M>
+__global__ void inplace_padded_to_contiguous_real(
+    const FLUCS_FLOAT* __restrict__ in_place_memory,
+    FLUCS_FLOAT* __restrict__ contiguous_memory
+) {
+    constexpr size_t HALF_M = M / 2 + 1;
+    constexpr size_t PADDED_M = 2 * HALF_M;
+
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (!(index < N * M))
+        return;
+
+    const size_t row = index / M;
+    const size_t column = index % M;
+
+    contiguous_memory[index] =
+        in_place_memory[row * PADDED_M + column];
+}
+
+template<size_t N, size_t M>
+__global__ void contiguous_to_inplace_padded_real(
+    const FLUCS_FLOAT* __restrict__ contiguous_memory,
+    FLUCS_FLOAT* __restrict__ in_place_memory
+) {
+    constexpr size_t HALF_M = M / 2 + 1;
+    constexpr size_t PADDED_M = 2 * HALF_M;
+
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (!(index < N * M))
+        return;
+
+    const size_t row = index / M;
+    const size_t column = index % M;
+
+    in_place_memory[row * PADDED_M + column] =
+        contiguous_memory[index];
+}
