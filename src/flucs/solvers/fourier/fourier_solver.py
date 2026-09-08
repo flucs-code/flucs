@@ -92,7 +92,8 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             f"dt {float(self.system.current_dt):.3e}"
         )
         flucsprint(
-            f"flucs given in {format_seconds(time_taken, verbose=True)}.\n"
+            f"flucs given in {format_seconds(time_taken, verbose=True)} "
+            f"({self.system.current_step} steps).\n"
         )
 
     def _not_done(self) -> bool:
