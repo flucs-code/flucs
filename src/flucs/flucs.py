@@ -13,6 +13,7 @@ from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
 
 try:
     import cupy as cupy
+    from cupy.cuda.memory_hooks import LineProfileHook
 
     cupy.fft.fft(cupy.zeros(1))  # quickly test if CuPy actually works
 except Exception as exc:
@@ -206,6 +207,17 @@ def main():
     )
 
     operation_modes.add_argument(
+        "--memory-profile",
+        action="store_true",
+        default=False,
+        required=False,
+        help=(
+            "If specified, --run will execute with CuPy's LineProfileHook. "
+            "Used to profile GPU memory allocations."
+        )
+    )
+
+    operation_modes.add_argument(
         "--list",
         "-l",
         action="store_true",
@@ -278,6 +290,15 @@ def main():
         if not input_path.exists():
             raise FileNotFoundError(f"Input file not found in {io_path} ")
 
+        if args.memory_profile:
+            hook = LineProfileHook()
+            with hook:
+                run_flucs(input_path, args.override)
+            cupy.cuda.get_current_stream().synchronize()
+            flucsprint("Memory report from CuPy's LineProfileHook:")
+            hook.print_report()
+            return
+        
         run_flucs(input_path, args.override)
         return
 
