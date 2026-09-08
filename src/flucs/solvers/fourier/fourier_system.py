@@ -592,8 +592,8 @@ class FourierSystem(FlucsSystem):
                 self.fft_c2r_plan_type = cufft.CUFFT_C2R
                 self.fft_r2c_plan_type = cufft.CUFFT_R2C
             else:
-                self.fft_c2r_plan_type = cufft.CUFFT_D2Z
                 self.fft_c2r_plan_type = cufft.CUFFT_Z2D
+                self.fft_r2c_plan_type = cufft.CUFFT_D2Z
 
             message = (
                 "Using CuPy's built-in cuFFT interface."
@@ -605,8 +605,8 @@ class FourierSystem(FlucsSystem):
                 self.fft_c2r_plan_type = nvcufft.Type.C2R
                 self.fft_r2c_plan_type = nvcufft.Type.R2C
             else:
-                self.fft_c2r_plan_type = nvcufft.Type.D2Z
                 self.fft_c2r_plan_type = nvcufft.Type.Z2D
+                self.fft_r2c_plan_type = nvcufft.Type.D2Z
 
             message = (
                 "Using the custom flucs cuFFT wrapper."
