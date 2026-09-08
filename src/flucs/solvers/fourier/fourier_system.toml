@@ -41,19 +41,32 @@ padded_primes = [2, 3]
 #
 # There are two options:
 # 1. "spherical" for a truncation at |q|^2 < radius_squared
-# 2. "polyhedral" for a truncation at |q_i| + |q_j| < 2/3,
-#    valid only for nonlinear_order = 2
-truncation = "polyhedral"
+# 2. "polyhedral" for a truncation at
+#    |q_i| + |q_j| < 2/(nonlinear_order + 1)
+#
+# For two-thirds dealiasing, the only option is "rectangular".
+# 
+# Set to empty string, "", to select the default truncation,
+# which is spherical for phase-shift and rectangular for two-thirds.
+truncation = ""
 
 # Dealiasing radius^2 for the spherical truncation.
 # The optimal value is 2/9 ~ 0.222
 radius_squared = -1.0
 
-# Save memory at the expense of speed when using phase-shift dealiasing
-low_memory = false
-
-# In-place FFTs can save even more memory
-in_place_fft = false
+# Memory model for the dealiasing scheme.
+#
+# Two-thirds accepts only "standard".
+#
+# Phase shifting has three options
+# 1. standard
+# 2. low_memory
+# 3. in_place
+# 
+# The above are listed in decreasing memory requirements and
+# decreasing performance. The default is "standard", but "low_memory"
+# is likely to be just as fast while saving a lot of memory.
+memory = "standard"
 
 # Check errors
 check_errors = false

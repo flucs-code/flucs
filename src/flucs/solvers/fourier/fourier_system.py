@@ -44,6 +44,9 @@ class FourierSystem(FlucsSystem):
     # Whether we use CuPy's built-in cuFFT interface or our own
     use_cupy_fft: bool
 
+    # Effective truncation after resolving the method-dependent default
+    dealiasing_truncation: str
+
     # Number of fields that the solver is solving for
     number_of_fields: int
 
@@ -201,33 +204,49 @@ class FourierSystem(FlucsSystem):
                 "Use either kperp or kx/ky. "
             )
 
-        # Check for the dialiasing method
-        match self.input["dealiasing.method"]:
+        # Resolve and validate the dealiasing options before setup
+        dealiasing_method = self.input["dealiasing.method"]
+        match dealiasing_method:
             case "two-thirds":
-                if self.input["dealiasing.low_memory"]:
-                    raise InvalidFlucsInputFileError(
-                        "Low memory is not available for two-thirds dealiasing."
-                    )
-                self._setup_two_thirds_dealiasing()
+                truncations = ("rectangular",)
+                memory_models = ("standard",)
             case "phase-shift":
-                self._setup_phase_shift_dealiasing()
+                truncations = ("spherical", "polyhedral")
+                memory_models = ("standard", "low_memory", "in_place")
             case _:
                 raise InvalidFlucsInputFileError(
-                    "Invalid dealiasing method: "
-                    f"{self.input['dealiasing.method']}"
+                    f"Invalid dealiasing.method: {dealiasing_method}. "
+                    "Must be either 'two-thirds' or 'phase-shift'."
                 )
 
+        self.dealiasing_truncation = (
+            self.input["dealiasing.truncation"] or truncations[0]
+        )
+        if self.dealiasing_truncation not in truncations:
+            raise InvalidFlucsInputFileError(
+                "Invalid dealiasing.truncation: "
+                f"{self.dealiasing_truncation!r} for {dealiasing_method!r}. "
+                f"Allowed options: {', '.join(truncations)}."
+            )
+
+        memory_model = self.input["dealiasing.memory"]
+        if memory_model not in memory_models:
+            raise InvalidFlucsInputFileError(
+                f"Invalid dealiasing.memory: {memory_model!r} "
+                f"for {dealiasing_method!r}. "
+                f"Allowed options: {', '.join(memory_models)}."
+            )
+
+        if dealiasing_method == "two-thirds":
+            self._setup_two_thirds_dealiasing()
+        else:
+            self._setup_phase_shift_dealiasing()
+
         # Report dealiasing information
-        message = f"Dealiasing method: {self.input['dealiasing.method']}"
-
-        if self.input["dealiasing.method"] == "phase-shift":
-            modifiers = [self.input["dealiasing.truncation"]]
-
-            if self.input["dealiasing.low_memory"]:
-                modifiers.append("low memory")
-
-            message += f" ({', '.join(modifiers)})"
-
+        message = (
+            f"Dealiasing method: {dealiasing_method} "
+            f"({self.dealiasing_truncation}, {memory_model})"
+        )
         message += (
             " \nEquivalent unpadded grid (nz, nx, ny) = "
             f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
@@ -329,13 +348,8 @@ class FourierSystem(FlucsSystem):
         scale = 1000
         nonlinear_order = self.input["dealiasing.nonlinear_order"]
 
-        match self.input["dealiasing.truncation"]:
+        match self.dealiasing_truncation:
             case "polyhedral":
-                if nonlinear_order != 2:
-                    raise InvalidFlucsInputFileError(
-                        "Polyhedral phase-shift truncation is implemented "
-                        "only for quadratic nonlinearities."
-                    )
                 self.module_options.define_flag("PHASE_SHIFT_POLYHEDRAL")
 
                 # Set to largest multiple of 1/scale that is strictly below
@@ -371,7 +385,7 @@ class FourierSystem(FlucsSystem):
                 dealiasing_radius = np.sqrt(radius_squared)
             case _:
                 raise InvalidFlucsInputFileError(
-                    f"{self.input['dealiasing.truncation']} is not a valid "
+                    f"{self.dealiasing_truncation} is not a valid "
                     "phase-shift truncation. The available options are "
                     "'polyhedral' and 'spherical'."
                 )
@@ -967,35 +981,28 @@ class FourierSystem(FlucsSystem):
 
         """
 
-        # Despatch to the correct version of create_dealiased_operation
+        # Dispatch to the selected dealiasing implementation
         if self.input["dealiasing.method"] == "two-thirds":
-            return self.create_dealiased_operation_two_thirds(
-                n_in=n_in,
-                n_out=n_out,
-                create_first_intermediates=create_first_intermediates,
-                create_second_intermediates=create_second_intermediates,
-                allocate_additional_memory=allocate_additional_memory,
-                combine_first_and_second_intermediates=combine_first_and_second_intermediates,
-            )
+            builder = self.create_dealiased_operation_two_thirds
         else:
-            if self.input["dealiasing.low_memory"]:
-                return self.create_dealiased_operation_phase_shift_low_memory(
-                    n_in=n_in,
-                    n_out=n_out,
-                    create_first_intermediates=create_first_intermediates,
-                    create_second_intermediates=create_second_intermediates,
-                    allocate_additional_memory=allocate_additional_memory,
-                    combine_first_and_second_intermediates=combine_first_and_second_intermediates,
-                )
-            else:
-                return self.create_dealiased_operation_phase_shift_in_place(
-                    n_in=n_in,
-                    n_out=n_out,
-                    create_first_intermediates=create_first_intermediates,
-                    create_second_intermediates=create_second_intermediates,
-                    allocate_additional_memory=allocate_additional_memory,
-                    combine_first_and_second_intermediates=combine_first_and_second_intermediates,
-                )
+            builder = {
+                "standard": self.create_dealiased_operation_phase_shift,
+                "low_memory": (
+                    self.create_dealiased_operation_phase_shift_low_memory
+                ),
+                "in_place": (
+                    self.create_dealiased_operation_phase_shift_in_place
+                ),
+            }[self.input["dealiasing.memory"]]
+
+        return builder(
+            n_in=n_in,
+            n_out=n_out,
+            create_first_intermediates=create_first_intermediates,
+            create_second_intermediates=create_second_intermediates,
+            allocate_additional_memory=allocate_additional_memory,
+            combine_first_and_second_intermediates=combine_first_and_second_intermediates,
+        )
 
     def create_dealiased_operation_two_thirds(
         self,
