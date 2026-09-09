@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cupy/complex.cuh>
+#include <curand_kernel.h>
 
 // Deal with float types
 #ifdef DOUBLE_PRECISION
@@ -10,6 +11,7 @@
     #define flucs_fmax(x, y) fmax(x, y)
     #define flucs_sin(x) sin(x)
     #define flucs_cos(x) cos(x)
+    #define flucs_normal2(x) curand_normal2_double(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
     #define FLUCS_PI ((FLUCS_FLOAT)3.141592653589793115997963468544185161590576171875)
@@ -20,6 +22,7 @@
     #define flucs_fmax(x, y) fmaxf(x, y)
     #define flucs_sin(x) sinf(x)
     #define flucs_cos(x) cosf(x)
+    #define flucs_normal2(x) curand_normal2(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
     #define FLUCS_PI ((FLUCS_FLOAT)3.1415927410125732421875)

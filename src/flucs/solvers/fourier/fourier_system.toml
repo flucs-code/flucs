@@ -130,6 +130,14 @@ kz_normalised = false
 [forcing]
 method = ""
 
+# Ornstein--Uhlenbeck forcing
+amplitude = []     # RMS amplitude for each field
+corr_time = 1.0    # Correlation time
+rand_seed = 314    # Random seed for stochastic forcing
+range_kmod = []    # Isotropic forcing range; takes precedence when non-empty
+range_kperp = []   # Generic anisotropic forcing range
+range_kz = []
+
 [output]
 
 [output.0d]
