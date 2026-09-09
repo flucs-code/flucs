@@ -59,7 +59,7 @@ def _low_mode_fields(shape):
         pytest.param((5, 7, 9), {}, id="inferred-3d"),
         pytest.param(
             (1, 8, 10),
-            {"nz": 1, "nx": 8, "ny": 10}, # 2D field
+            {"nz": 1, "nx": 8, "ny": 10},
             id="explicit-2d-even",
         ),
     ],
@@ -81,8 +81,9 @@ def test_dealiased_multiplication_numpy(monkeypatch, shape, dimensions):
         **dimensions,
     )
 
-    # Check
-    npt.assert_allclose(result, expected, atol=1e-12)
+    # Check the returned backend and numerical result
+    assert isinstance(result, np.ndarray)
+    npt.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
 
 
 @pytest.mark.gpu
@@ -98,5 +99,11 @@ def test_dealiased_multiplication_cupy():
     # Compute using the GPU implementation
     result = dealiased_multiplication_rfft(first_gpu, second_gpu)
 
-    # Check
-    npt.assert_allclose(cp.asnumpy(result), expected, atol=1e-12)
+    # Check the returned backend and numerical result
+    assert isinstance(result, cp.ndarray)
+    npt.assert_allclose(
+        cp.asnumpy(result),
+        expected,
+        rtol=1e-12,
+        atol=1e-12,
+    )

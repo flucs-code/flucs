@@ -22,7 +22,7 @@ def test_log_handler_redirects_and_restores_streams(capsys):
 
     # Check that output is redirected and that exception handling works
     with pytest.raises(RuntimeError, match="sentinel"):
-        with FlucsLogHandler(log): # Temporarily redirect stdout and stderr
+        with FlucsLogHandler(log):  # Temporarily redirect stdout and stderr
             print("standard output")
             print("standard error", file=sys.stderr)
             raise RuntimeError("sentinel")
@@ -34,10 +34,9 @@ def test_log_handler_redirects_and_restores_streams(capsys):
     # Returns output captured during the test
     captured = capsys.readouterr()
 
-    # Check that the correct messages were captured
-    assert "standard output" in captured.out
-    assert "standard error" in captured.out
-    assert "RuntimeError: sentinel" not in captured.out
+    # Check that only the redirected messages reached standard output
+    assert captured.out == "standard output\nstandard error\n"
+    assert captured.err == ""
 
     # Check that the log contains the expected output
     assert "standard output" in log.getvalue()

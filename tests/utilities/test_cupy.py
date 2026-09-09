@@ -36,7 +36,7 @@ def test_module_options_public_workflow():
     )
 
     # Create a second instance and verify that modifying the first instance does
-    # not alter the global defaults. 
+    # not alter the global defaults.
     assert "--fmad=false" not in ModuleOptions().get_options()
 
 
@@ -47,7 +47,7 @@ def test_kernel_collection_lifecycle():
 
     # Make a mock cupy.RawModule and associated kernel
     cuda_kernel = Mock()
-    system.cupy_module = Mock()
+    system.cupy_module = Mock(spec_set=["get_function"])
     system.cupy_module.get_function.return_value = cuda_kernel
 
     # Create KernelWrapper

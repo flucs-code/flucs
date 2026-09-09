@@ -4,7 +4,7 @@ Tests for the top-level FLUCS command-line module.
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import create_autospec, sentinel
 
 import pytest
 
@@ -133,13 +133,20 @@ def test_run_flucs_orchestrates_solver(monkeypatch, tmp_path):
     input_path = tmp_path / "input.toml"
     override = ["time.dt_max", "0.1"]
 
-    # Mock input and solver
-    flucs_input = Mock()
-    solver = Mock()
+    # Mock input and solver using their real interfaces
+    input_constructor = create_autospec(
+        flucs_module.FlucsInput,
+        spec_set=True,
+    )
+    flucs_input = input_constructor.return_value
+    solver = create_autospec(
+        FlucsSolver,
+        instance=True,
+        spec_set=True,
+    )
 
     # Construct solver/system pair
-    flucs_input.create_solver_system.return_value = (solver, Mock())
-    input_constructor = Mock(return_value=flucs_input)
+    flucs_input.create_solver_system.return_value = (solver, sentinel.system)
     monkeypatch.setattr(flucs_module, "FlucsInput", input_constructor)
 
     # Run through the public helper
@@ -169,8 +176,11 @@ def test_main_defaults_to_run(monkeypatch, tmp_path):
     input_path = tmp_path / "input.toml"
     input_path.touch()
 
-    # Mock run parameters
-    run_flucs = Mock()
+    # Mock run parameters using the real function signature
+    run_flucs = create_autospec(
+        flucs_module.run_flucs,
+        spec_set=True,
+    )
     monkeypatch.setattr(flucs_module, "run_flucs", run_flucs)
     monkeypatch.setattr(
         sys,
