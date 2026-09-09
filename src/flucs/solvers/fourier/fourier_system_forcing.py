@@ -194,11 +194,11 @@ class FourierSystemForcing(ABC):
 
 class FourierOrnsteinUhlenbeckForcing(FourierSystemForcing):
     """
-    Additive finite-correlation-time forcing for Fourier systems. This advances 
+    Additive finite-correlation-time forcing for Fourier systems. This advances
     the fields via the standard Ornstein-Uhlenbeck process:
 
-        X_{n+1} = X_n * exp(-dt / corr_time) 
-                  + sqrt(1 - exp(- dt / corr_time)**2) 
+        X_{n+1} = X_n * exp(-dt / corr_time)
+                  + sqrt(1 - exp(- dt / corr_time)**2)
                   * (amplitude) * (unit varianvce Gaussian random number)
 
     Parameters
@@ -232,7 +232,7 @@ class FourierOrnsteinUhlenbeckForcing(FourierSystemForcing):
 
         # Set ranges and number of forced modes
         if system.input["forcing.range_kmod"]:
-            self.setup_forcing_range_kmod() # Take precendence over kzkperp
+            self.setup_forcing_range_kmod()  # Take precendence over kzkperp
         else:
             self.setup_forcing_range_kzkperp()
 
@@ -298,8 +298,6 @@ class FourierOrnsteinUhlenbeckForcing(FourierSystemForcing):
         """
         Advances the forcing state using the current timestep.
         """
-        system = self.system
-
         decay = self.system.float(
             np.exp(-float(self.system.current_dt) / float(self.corr_time))
         )
