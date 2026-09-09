@@ -35,7 +35,7 @@ from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.solvers.fourier.fourier_system_forcing import FourierSystemForcing
 from flucs.utilities.cupy import KernelWrapper
 
-from .fourier_diagnostics import FreeEnergyDiag
+from .fourier_diagnostics import FreeEnergyDiag, FreeEnergyDiag1D
 from .fourier_forcing import TestFourierNegativeDampingForcing
 
 
@@ -61,7 +61,10 @@ class TestFourierSystem(FourierSystem):
     find_nonlinear_bits_kernel: KernelWrapper
 
     # Supported diagnostics
-    diags: ClassVar[set[type[FlucsDiagnostic]]] = {FreeEnergyDiag}
+    diags: ClassVar[set[type[FlucsDiagnostic]]] = {
+        FreeEnergyDiag,
+        FreeEnergyDiag1D
+    }
 
     # Supported forcing
     system_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {
