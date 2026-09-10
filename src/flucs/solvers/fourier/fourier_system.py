@@ -1162,10 +1162,15 @@ class FourierSystem(FlucsSystem):
         between them.
 
         This version batches the FFTs of both shifted and unshifted
-        intermediates for best performance but worst memory impact.
+        intermediates, alternating between two allocations:
+        Fourier inputs in A -> real inputs in B -> real products in A
+        -> Fourier products in B. Each allocation holds both phase branches.
 
-        combine_first_and_second_intermediates is ignored as it is not
-        possible when batching the FFTs unless n_in = n_out.
+        combine_first_and_second_intermediates is ignored here: real inputs
+        and products always occupy separate allocations, even for equal field
+        counts. Callbacks must fully write their outputs and must not read
+        first Fourier intermediates after the inverse FFT, or first real
+        intermediates after the forward FFT. Calls must execute serially.
 
         """
         # Create the cuFFT plans for the forward and backward transforms
@@ -1181,14 +1186,37 @@ class FourierSystem(FlucsSystem):
 
         allocate_shared_work_area([plan_c2r, plan_r2c])
 
-        # Allocate memory for batched FFTs for both shifted and unshifted data
-        first_intermediates_fourier = cp.zeros(
-            (2 * n_in, *self.half_tuple),
-            dtype=self.complex,
+        # Reuse storage only after its previous contents have been consumed.
+        # FFTs and nonlinear callbacks retain distinct input/output buffers.
+        fourier_field_bytes = self.half_size * np.dtype(self.complex).itemsize
+        real_field_bytes = self.full_size * np.dtype(self.float).itemsize
+        storage_a = cp.zeros(
+            max(2 * n_in * fourier_field_bytes, 2 * n_out * real_field_bytes),
+            dtype=cp.uint8,
         )
-        first_intermediates_real = cp.zeros(
-            (2 * n_in, *self.full_tuple),
+        storage_b = cp.zeros(
+            max(2 * n_in * real_field_bytes, 2 * n_out * fourier_field_bytes),
+            dtype=cp.uint8,
+        )
+        first_intermediates_fourier = cp.ndarray(
+            shape=(2 * n_in, *self.half_tuple),
+            dtype=self.complex,
+            memptr=storage_a.data,
+        )
+        first_intermediates_real = cp.ndarray(
+            shape=(2 * n_in, *self.full_tuple),
             dtype=self.float,
+            memptr=storage_b.data,
+        )
+        second_intermediates_fourier = cp.ndarray(
+            shape=(2 * n_out, *self.half_tuple),
+            dtype=self.complex,
+            memptr=storage_b.data,
+        )
+        second_intermediates_real = cp.ndarray(
+            shape=(2 * n_out, *self.full_tuple),
+            dtype=self.float,
+            memptr=storage_a.data,
         )
 
         # Assign subarrays accordingly
@@ -1213,20 +1241,6 @@ class FourierSystem(FlucsSystem):
             dtype=self.float,
             memptr=first_intermediates_real[n_in].data,
         )
-
-        # Can combine and keep the FFTs batched iff n_in = n_out
-        if combine_first_and_second_intermediates and n_in == n_out:
-            second_intermediates_fourier = first_intermediates_fourier
-            second_intermediates_real = first_intermediates_real
-        else:
-            second_intermediates_fourier = cp.zeros(
-                (2 * n_out, *self.half_tuple),
-                dtype=self.complex,
-            )
-            second_intermediates_real = cp.zeros(
-                (2 * n_out, *self.full_tuple),
-                dtype=self.float,
-            )
 
         unshifted_second_intermediates_fourier = cp.ndarray(
             shape=(n_out, *self.half_tuple),
