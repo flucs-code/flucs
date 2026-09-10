@@ -176,7 +176,18 @@ class FourierSystem(FlucsSystem):
     ###########################################################################
 
     def _interpret_input(self):
-        """Validates inputs and sets up the number of lattice points."""
+        """
+        Validates inputs including box dimensions, timestepping, 
+        hyperdissipation, and dealiasing options. 
+        """
+        # Check that box dimensions are positive
+        dimensions = [
+            self.input[f"dimensions.L{dim}"] for dim in ["x", "y", "z"]
+        ]
+        if any(dimension <= 0.0 for dimension in dimensions):
+            raise InvalidFlucsInputFileError(
+                "All dimensions Lx, Ly, and Lz must be positive."
+            )
 
         # Check for conflicts in time-stepping input parameters
         if self.input["time.dt_method"] == "discrete":
