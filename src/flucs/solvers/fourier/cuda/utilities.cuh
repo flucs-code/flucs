@@ -85,35 +85,49 @@ double atomicMaxNonnegativeFloat(double* addr, double value) {
 }
 
 
-// Updates the global cfl_rate with the max(cfl) across the entire block
-// This needs to be called by every thread in the block, thus any out-of-bounds
-// check must be done after calling this function.
+// Reduce a contiguous prefix of a warp, returning its maximum in lane zero.
+// Every lane in the prefix must participate, including for partial warps.
+__device__ __forceinline__
+FLUCS_FLOAT cfl_warp_max(FLUCS_FLOAT value, int lanes) {
+    const int lane = threadIdx.x & 31;
+    const unsigned int mask = 0xffffffffu >> (32 - lanes);
+
+    #pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        const FLUCS_FLOAT other = __shfl_down_sync(mask, value, offset);
+        if (lane + offset < lanes)
+            value = flucs_fmax(value, other);
+    }
+    return value;
+}
+
+// Updates the global cfl_rate with max(cfl) across a one-dimensional block.
+// All threads must call this before returning; out-of-bounds threads supply zero.
+// CFL values and the global accumulator must be nonnegative (and not NaN).
+// No dynamic shared memory is needed. Synchronize the block before reusing
+// this function's shared storage in a subsequent call within the same kernel.
 __device__ __forceinline__
 void update_cfl(FLUCS_FLOAT cfl, FLUCS_FLOAT* cfl_rate_global) {
-    extern __shared__ FLUCS_FLOAT cfl_shared[];
+    __shared__ FLUCS_FLOAT warp_maxima[32];
+    const int lane = threadIdx.x & 31;
+    const int warp = threadIdx.x >> 5;
+    const int warp_count = (blockDim.x + 31) / 32;
+    const int remaining = blockDim.x - warp * 32;
+    const int lanes = remaining < 32 ? remaining : 32;
 
-    // Find max CFL using shared memory
-    cfl_shared[threadIdx.x] = cfl;
+    cfl = cfl_warp_max(cfl, lanes);
+    if (lane == 0)
+        warp_maxima[warp] = cfl;
     __syncthreads();
 
-    // Parallel reduction in shared memory
-    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-        if (threadIdx.x < stride) {
-            cfl_shared[threadIdx.x] = flucs_fmax(cfl_shared[threadIdx.x], cfl_shared[threadIdx.x + stride]);
-        }
-        __syncthreads();
-    }
-
-    // First thread in block writes to global max via atomic
-    if (threadIdx.x == 0) {
-        const FLUCS_FLOAT block_cfl = cfl_shared[0];
-
-        if (block_cfl > *cfl_rate_global) {
+    // The first warp reduces the per-warp maxima and issues one global atomic.
+    if (warp == 0) {
+        FLUCS_FLOAT block_cfl = lane < warp_count
+            ? warp_maxima[lane] : (FLUCS_FLOAT)0;
+        block_cfl = cfl_warp_max(block_cfl, lanes);
+        if (lane == 0)
             atomicMaxNonnegativeFloat(cfl_rate_global, block_cfl);
-        }
-
     }
-
 }
 
 
@@ -323,4 +337,3 @@ void small_matmul(const T A[N][K], const T B[K][M], T C[N][M]) {
         }
     }
 }
-
