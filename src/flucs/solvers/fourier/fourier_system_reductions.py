@@ -1063,7 +1063,7 @@ class FourierReductions:
         complex_output: bool,
         **shell_kwargs,
     ):
-        base_reduction = self._reduce_to_k(
+        base_reduction = self._reduce_to_kmod(
             functor,
             input_args,
             complex_output,
