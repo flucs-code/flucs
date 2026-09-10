@@ -51,6 +51,10 @@ class FourierReductions:
                 return self._reduce_to_kperp(
                     functor, input_args, complex_output, **kwargs
                 )
+            case "kmod":
+                return self._reduce_to_kmod(
+                    functor, input_args, complex_output, **kwargs
+                )
             case "kzkx":
                 return self._reduce_to_kzkx(
                     functor, input_args, complex_output, **kwargs
@@ -83,6 +87,10 @@ class FourierReductions:
                 return self._reduce_to_kperp_cumulative(
                     functor, input_args, complex_output, **kwargs
                 )
+            case "kmod_cumulative":
+                return self._reduce_to_kmod_cumulative(
+                    functor, input_args, complex_output, **kwargs
+                )
             case _:
                 raise ValueError(
                     f"Unknown reduction output {reduction_output!r}."
@@ -108,6 +116,9 @@ class FourierReductions:
 
             case "kperp":
                 return {"kperp": self.system.shell_kperp}
+
+            case "kmod":
+                return {"kmod": self.system.shell_kmod}
 
             case "kzkx":
                 return {
@@ -151,6 +162,11 @@ class FourierReductions:
             case "kperp_cumulative":
                 return {
                     "kperp": self.system.shell_kperp,
+                }
+
+            case "kmod_cumulative":
+                return {
+                    "kmod": self.system.shell_kmod,
                 }
 
             case _:
@@ -651,32 +667,33 @@ class FourierReductions:
         functor: str,
         input_args: str,
         complex_output: bool,
+        isotropic: bool,
+        nshells: int,
+        shell_min: float,
+        shell_max: float,
         reduce_kz: bool = False,
-        nkperp: int | None = None,
-        kperp_min: float | None = None,
-        kperp_max: float | None = None,
     ) -> Callable[..., cp.ndarray]:
         """
-        Creates a kperp shell-reduction function, typically used for diagnostics
-        that constructs an implicit Fourier-space array using
-        a functor with arbitrary parameters.
+        Creates a shell-reduction function, typically used for diagnostics that
+        constructs an implicit Fourier-space array using a functor with
+        arbitrary parameters.
 
         The shell reduction itself is a function that can be called as
         reduction(*args), where *args are passed onto the functor constructor,
         and returns the shell sum as a CuPy array.
 
-        The CUDA shell-sum kernel bins the Fourier grid in kperp,
-        where kperp = sqrt(kx**2 + ky**2). It uses uniform half-open bins,
+        The CUDA shell-sum kernel bins the Fourier grid in kperp or isotropic k,
+        depending on the value of isotropic. It uses uniform half-open bins,
 
-            [kperp_min, kperp_max),
+            [shell_min, shell_max),
 
         with bin index
 
-            floor((kperp - kperp_min) * nkperp / (kperp_max - kperp_min)).
+            floor((k - shell_min) * nshells / (shell_max - shell_min)).
 
         If reduce_kz is False, the returned array is flattened data with shape
-        (nz, nkperp). If reduce_kz is True, the intermediate shell sum is also
-        reduced over kz, and the returned array has shape (nkperp,).
+        (nz, nshells). If reduce_kz is True, the intermediate shell sum is also
+        reduced over kz, and the returned array has shape (nshells,).
 
         Parameters
         ----------
@@ -687,16 +704,16 @@ class FourierReductions:
         complex_output : bool
             True if the functor returns FLUCS_COMPLEX. Otherwise,
             FLUCS_FLOAT is assumed.
+        isotropic : bool
+            Whether to use isotropic k rather than kperp for the shell radius.
+        nshells : int
+            Number of shells.
+        shell_min : float
+            Lower edge of the shell range.
+        shell_max : float
+            Upper edge of the shell range.
         reduce_kz : bool
-            Whether to reduce the kperp shell sums over kz.
-        nkperp : int, optional
-            Number of kperp bins. If not provided, system.shell_nkperp is used.
-        kperp_min : float, optional
-            Lower edge of the shell range. If not provided,
-            system.shell_kperp_min is used.
-        kperp_max : float, optional
-            Upper edge of the shell range. If not provided,
-            system.shell_kperp_max is used.
+            Whether to reduce the shell sums over kz.
 
         Returns
         -------
@@ -705,12 +722,91 @@ class FourierReductions:
 
         """
 
-        # Precompute shells if not already done
+        # Validate parameters
+        if nshells < 1:
+            raise ValueError("nshells must be positive.")
+
+        if nshells > self.system.cuda_block_size:
+            raise ValueError("nshells must not exceed system.cuda_block_size.")
+
+        if not shell_max > shell_min:
+            raise ValueError("shell_max must be larger than shell_min.")
+
+        # Output type
+        if complex_output:
+            output_type = "FLUCS_COMPLEX"
+            item_nbytes = self.system.complex().nbytes
+        else:
+            output_type = "FLUCS_FLOAT"
+            item_nbytes = self.system.float().nbytes
+
+        # Shell sum kernel
+        shell_kernel_name = (
+            "simple_isotropic_shell_sum" if isotropic else "simple_shell_sum"
+        )
+        shell_kernel = KernelWrapper(
+            system=self.system,
+            cuda_kernel_name=(
+                f"{shell_kernel_name}<{output_type},{functor},{input_args}>"
+            ),
+            grid=(self.system.nz,),
+            block=(self.system.cuda_block_size,),
+            shared_mem=nshells * item_nbytes,
+        )
+
+        temp_2d = self.system.get_temp_array(
+            self.system.nz * nshells,
+            is_complex=complex_output,
+        )
+
+        # (kz, shell) data
+        if not reduce_kz:
+
+            def reduction(*args):
+                shell_kernel(nshells, shell_min, shell_max, temp_2d, *args)
+                return temp_2d
+
+            return reduction
+
+        # Temporary array for holding shell data
+        temp_shell = self.system.get_temp_array(
+            nshells, is_complex=complex_output
+        )
+
+        reduce_kz_kernel = KernelWrapper(
+            system=self.system,
+            cuda_kernel_name=(
+                f"simple_middle_axis_sum<{self.system.nz},{nshells},"
+                f"{output_type},NOP_Functor<{output_type}>,{output_type}*>"
+            ),
+            grid=(
+                (nshells + self.system.cuda_block_size - 1)
+                // self.system.cuda_block_size,
+                1,
+            ),
+            block=(self.system.cuda_block_size,),
+            shared_mem=0,
+        )
+
+        # (shell) data
+        def reduction(*args):
+            shell_kernel(nshells, shell_min, shell_max, temp_2d, *args)
+            reduce_kz_kernel(temp_shell, temp_2d)
+            return temp_shell
+
+        return reduction
+
+    def _reduce_to_kzkperp(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        nkperp: int | None = None,
+        kperp_min: float | None = None,
+        kperp_max: float | None = None,
+    ):
         self.system._compute_kperp_shells()
-
-        # Overwrite defaults if specified
         nkperp = self.system.shell_nkperp if nkperp is None else int(nkperp)
-
         kperp_min = (
             self.system.shell_kperp_min
             if kperp_min is None
@@ -722,90 +818,15 @@ class FourierReductions:
             else self.system.float(kperp_max)
         )
 
-        # Validate parameters
-        if nkperp < 1:
-            raise ValueError("nkperp must be positive.")
-
-        if nkperp > self.system.cuda_block_size:
-            raise ValueError("nkperp must not exceed system.cuda_block_size.")
-
-        if not kperp_max > kperp_min:
-            raise ValueError("kperp_max must be larger than kperp_min.")
-
-        # Output type
-        if complex_output:
-            output_type = "FLUCS_COMPLEX"
-            item_nbytes = self.system.complex().nbytes
-        else:
-            output_type = "FLUCS_FLOAT"
-            item_nbytes = self.system.float().nbytes
-
-        # Shell averaging kernel
-        shell_kernel = KernelWrapper(
-            system=self.system,
-            cuda_kernel_name=(
-                f"simple_shell_sum<{output_type},{functor},{input_args}>"
-            ),
-            grid=(self.system.nz,),
-            block=(self.system.cuda_block_size,),
-            shared_mem=nkperp * item_nbytes,
-        )
-
-        temp_2d = self.system.get_temp_array(
-            self.system.nz * nkperp,
-            is_complex=complex_output,
-        )
-
-        # (kz, kperp) data
-        if not reduce_kz:
-
-            def reduction(*args):
-                shell_kernel(nkperp, kperp_min, kperp_max, temp_2d, *args)
-                return temp_2d
-
-            return reduction
-
-        # Temporary array for holding kperp data
-        temp_kperp = self.system.get_temp_array(
-            nkperp, is_complex=complex_output
-        )
-
-        reduce_kz_kernel = KernelWrapper(
-            system=self.system,
-            cuda_kernel_name=(
-                f"simple_middle_axis_sum<{self.system.nz},{nkperp},"
-                f"{output_type},NOP_Functor<{output_type}>,{output_type}*>"
-            ),
-            grid=(
-                (nkperp + self.system.cuda_block_size - 1)
-                // self.system.cuda_block_size,
-                1,
-            ),
-            block=(self.system.cuda_block_size,),
-            shared_mem=0,
-        )
-
-        # (kperp) data
-        def reduction(*args):
-            shell_kernel(nkperp, kperp_min, kperp_max, temp_2d, *args)
-            reduce_kz_kernel(temp_kperp, temp_2d)
-            return temp_kperp
-
-        return reduction
-
-    def _reduce_to_kzkperp(
-        self,
-        functor: str,
-        input_args: str,
-        complex_output: bool,
-        **shell_kwargs,
-    ):
         return self._create_shell_reduction(
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
+            isotropic=False,
+            nshells=nkperp,
+            shell_min=kperp_min,
+            shell_max=kperp_max,
             reduce_kz=False,
-            **shell_kwargs,
         )
 
     def _reduce_to_kperp(
@@ -813,14 +834,65 @@ class FourierReductions:
         functor: str,
         input_args: str,
         complex_output: bool,
-        **shell_kwargs,
+        nkperp: int | None = None,
+        kperp_min: float | None = None,
+        kperp_max: float | None = None,
     ):
+        self.system._compute_kperp_shells()
+        nkperp = self.system.shell_nkperp if nkperp is None else int(nkperp)
+        kperp_min = (
+            self.system.shell_kperp_min
+            if kperp_min is None
+            else self.system.float(kperp_min)
+        )
+        kperp_max = (
+            self.system.shell_kperp_max
+            if kperp_max is None
+            else self.system.float(kperp_max)
+        )
+
         return self._create_shell_reduction(
             functor=functor,
             input_args=input_args,
             complex_output=complex_output,
+            isotropic=False,
+            nshells=nkperp,
+            shell_min=kperp_min,
+            shell_max=kperp_max,
             reduce_kz=True,
-            **shell_kwargs,
+        )
+
+    def _reduce_to_kmod(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        nkmod: int | None = None,
+        kmod_min: float | None = None,
+        kmod_max: float | None = None,
+    ):
+        self.system._compute_kmod_shells()
+        nkmod = self.system.shell_nkmod if nkmod is None else int(nkmod)
+        kmod_min = (
+            self.system.shell_kmod_min
+            if kmod_min is None
+            else self.system.float(kmod_min)
+        )
+        kmod_max = (
+            self.system.shell_kmod_max
+            if kmod_max is None
+            else self.system.float(kmod_max)
+        )
+
+        return self._create_shell_reduction(
+            functor=functor,
+            input_args=input_args,
+            complex_output=complex_output,
+            isotropic=True,
+            nshells=nkmod,
+            shell_min=kmod_min,
+            shell_max=kmod_max,
+            reduce_kz=True,
         )
 
     def _create_cumulative_reduction(
@@ -880,8 +952,8 @@ class FourierReductions:
                     cp.cumsum(cumulative, out=cumulative)
                     return cumulative
 
-            case "kperp":
-                # kperp is already an absolute value
+            case "kperp" | "kmod":
+                # kperp and kmod are already absolute values
                 def reduction(*args):
                     spectrum = base_reduction(*args)
                     cp.cumsum(spectrum, out=cumulative)
@@ -980,6 +1052,31 @@ class FourierReductions:
         return self._create_cumulative_reduction(
             base_reduction=base_reduction,
             dimension="kperp",
+            output_size=output_size,
+            complex_output=complex_output,
+        )
+
+    def _reduce_to_kmod_cumulative(
+        self,
+        functor: str,
+        input_args: str,
+        complex_output: bool,
+        **shell_kwargs,
+    ):
+        base_reduction = self._reduce_to_kmod(
+            functor,
+            input_args,
+            complex_output,
+            **shell_kwargs,
+        )
+
+        self.system._compute_kmod_shells()
+        nkmod = shell_kwargs.get("nkmod")
+        output_size = self.system.shell_nkmod if nkmod is None else int(nkmod)
+
+        return self._create_cumulative_reduction(
+            base_reduction=base_reduction,
+            dimension="kmod",
             output_size=output_size,
             complex_output=complex_output,
         )

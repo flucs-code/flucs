@@ -338,33 +338,31 @@ void add_and_shell_sum(
  
 }
 
-template <typename T, typename... Functors>
+template <bool isotropic, typename T, typename... Functors>
 __device__ __forceinline__
 void multiply_and_shell_sum(
-    const size_t nkperp,
-    const FLUCS_FLOAT kperp_min,
-    const FLUCS_FLOAT kperp_max,
+    const size_t nk,
+    const FLUCS_FLOAT k_min,
+    const FLUCS_FLOAT k_max,
     const T multiplier,
     T* __restrict__ output,
     Functors... array_functors)
 {
-    // kperp bins are stored in shared memory
-    T* kperp_bins = templated_shared_memory<T>();
+    // k bins are stored in shared memory
+    T* k_bins = templated_shared_memory<T>();
 
-    const FLUCS_FLOAT inv_dkperp = ((FLUCS_FLOAT)nkperp) / (kperp_max - kperp_min);
+    const FLUCS_FLOAT inv_dk = ((FLUCS_FLOAT)nk) / (k_max - k_min);
 
     // One block per kz
-    const size_t ikz  = blockIdx.x;
-
+    const size_t ikz = blockIdx.x;
     const size_t tid = threadIdx.x;
 
     // First, zero out shared mem
-    for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
-        kperp_bins[bin_index] = 0;
+    for (size_t bin_index = tid; bin_index < nk; bin_index += blockDim.x) {
+        k_bins[bin_index] = 0;
     }
 
     __syncthreads();
-
 
     // Each thread reads data from global memory in a contiguous way
     for (size_t perp_index = tid; perp_index < NX*HALF_NY; perp_index += blockDim.x) {
@@ -374,30 +372,33 @@ void multiply_and_shell_sum(
         const size_t ikx = indices.ikx;
         const size_t iky = indices.iky;
 
+        const FLUCS_FLOAT kz = kz_from_ikz(ikz);
         const FLUCS_FLOAT kx = kx_from_ikx(ikx);
         const FLUCS_FLOAT ky = ky_from_iky(iky);
-        const FLUCS_FLOAT kperp = flucs_sqrt(kx*kx + ky*ky);
-        const FLUCS_FLOAT bin_index_float = (kperp - kperp_min) * inv_dkperp;
+        const FLUCS_FLOAT k_squared = (
+            (isotropic ? kz*kz : (FLUCS_FLOAT)0.0) + kx*kx + ky*ky
+        );
+        const FLUCS_FLOAT k = flucs_sqrt(k_squared);
+        const FLUCS_FLOAT bin_index_float = (k - k_min) * inv_dk;
 
-        // Evaluates true if kperp < KPERP_MIN
+        // Evaluates true if k < k_min
         // Need to compare the float index as casting negative floats to ints
         // rounds up rather than down
         if (bin_index_float < 0)
             continue;
 
         // Now can safely cast to int, which rounds down
-        // and we can check if kperp > KPERP_MAX
+        // and we can check if k > k_max
         const int bin_index = (int)(bin_index_float);
-        if (bin_index >= nkperp)
+        if (bin_index >= nk)
             continue;
-
 
         // Construct full indices
         const size_t mode_index = index_from_3d<NZ, NX, HALF_NY>(ikz, ikx, iky);
         const T mode = multiply_at<T>(mode_index, array_functors...);
 
         // Add mode to shared-memory bin
-        atomicAdd(&kperp_bins[bin_index], mode);
+        atomicAdd(&k_bins[bin_index], mode);
 
         // If ky > 0, need to add the missing conjugate mode
         if (iky > 0) {
@@ -407,18 +408,15 @@ void multiply_and_shell_sum(
                 iky
             );
             const T conj_mode = multiply_at<T>(conj_mode_index, array_functors...);
-            atomicAdd(&kperp_bins[bin_index], conj(conj_mode));
+            atomicAdd(&k_bins[bin_index], conj(conj_mode));
         }
-
-        
+     
     }
-
     __syncthreads();
 
-
     // Finally, write the output from shared into global memory contiguously
-    for (size_t bin_index = tid; bin_index < nkperp; bin_index += blockDim.x) {
-        output[bin_index + ikz*nkperp] = kperp_bins[bin_index] * multiplier;
+    for (size_t bin_index = tid; bin_index < nk; bin_index += blockDim.x) {
+        output[bin_index + ikz*nk] = k_bins[bin_index] * multiplier;
     }
  
 }
@@ -508,10 +506,29 @@ void simple_shell_sum(
     T_output* __restrict__ output,
     InputArgs... input_args
 ) {
-    multiply_and_shell_sum<T_output>(
+    multiply_and_shell_sum<false, T_output>(
         nkperp,
         kperp_min,
         kperp_max,
+        (T_output)FLOAT_ONE,
+        output,
+        Functor{input_args...}
+    );
+}
+
+template <typename T_output, typename Functor, typename... InputArgs>
+__global__
+void simple_isotropic_shell_sum(
+    const size_t nk,
+    const FLUCS_FLOAT k_min,
+    const FLUCS_FLOAT k_max,
+    T_output* __restrict__ output,
+    InputArgs... input_args
+) {
+    multiply_and_shell_sum<true, T_output>(
+        nk,
+        k_min,
+        k_max,
         (T_output)FLOAT_ONE,
         output,
         Functor{input_args...}

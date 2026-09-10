@@ -141,6 +141,14 @@ class FourierSystem(FlucsSystem):
     shell_kperp_max: float
     shell_nkperp: int
     shell_kperp: np.ndarray
+    shell_kperp_last_complete_bin: int
+
+    # kmod shells
+    shell_kmod_min: float
+    shell_kmod_max: float
+    shell_nkmod: int
+    shell_kmod: np.ndarray
+    shell_kmod_last_complete_bin: int
 
     # Solved-grid mask
     solved_grid_mask: np.ndarray
@@ -438,11 +446,6 @@ class FourierSystem(FlucsSystem):
         so that summing all bins includes all resolved modes.
         """
 
-        # TODO: if adding NS/isotropic systems, either add to this or add a
-        # separate method for isotropic systems (_precompute_shells_isotropic)
-        # alongside the appropriate kernels to do the isotropic shell calcs, as
-        # well as create_shell_reduction_isotropic
-
         # Check if we have already done this
         if hasattr(self, "shell_kperp"):
             return
@@ -484,8 +487,72 @@ class FourierSystem(FlucsSystem):
         self.shell_kperp_max = kperp_max
         self.shell_nkperp = nkperp
         self.shell_kperp = kperp
-        self.shell_last_complete_bin = int(
+        self.shell_kperp_last_complete_bin = int(
             (min(kx_max, ky_max) - kperp_min) * nkperp / (kperp_max - kperp_min)
+        )
+
+    def _compute_kmod_shells(self):
+        """
+        Sets the default isotropic kmod shell grid used.
+
+        The CUDA shell-sum kernels use uniform half-open bins,
+
+            [kmod_min, kmod_max),
+
+        with bin index
+
+            floor((kmod - kmod_min) * nkmod / (kmod_max - kmod_min)).
+
+        The default kmod_max is padded above the largest resolved diagonal mode
+        so that summing all bins includes all resolved modes.
+        """
+
+        # Check if we have already done this
+        if hasattr(self, "shell_kmod"):
+            return
+
+        # kmod grid spacing
+        dkmod = min(
+            (k[1] for k in (self.kz, self.kx, self.ky) if k.size > 1),
+            default=self.float(1.0),
+        )
+
+        # Minimum kmod
+        kmod_min = self.float(0.0)
+
+        # Maximum kmod
+        kz_max = abs(self.kz[self.half_nz - 1])
+        kx_max = abs(self.kx[self.half_nx - 1])
+        ky_max = abs(self.ky[self.half_ny - 1])
+
+        kmod_max = np.sqrt(kz_max**2 + kx_max**2 + ky_max**2)
+        kmod_max += dkmod  # Adding padding for diagonal
+
+        # Number of kmod shells
+        nkmod_from_dkmod = int(np.ceil((kmod_max - kmod_min) / dkmod))
+        nkmod = min(nkmod_from_dkmod, self.cuda_block_size)
+
+        # Maximum kmod from bin width
+        bin_width = (
+            dkmod
+            if nkmod_from_dkmod <= self.cuda_block_size
+            else (kmod_max - kmod_min) / nkmod
+        )
+
+        kmod_max = self.float(kmod_min + nkmod * bin_width)
+
+        # kmod grid
+        kmod = kmod_min + bin_width * np.arange(nkmod, dtype=self.float)
+
+        # Assign attributes
+        self.shell_kmod_min = kmod_min
+        self.shell_kmod_max = kmod_max
+        self.shell_nkmod = nkmod
+        self.shell_kmod = kmod
+        self.shell_kmod_last_complete_bin = int(
+            (min(kz_max, kx_max, ky_max) - kmod_min)
+            * nkmod
+            / (kmod_max - kmod_min)
         )
 
     # -------------------------------------------------------------------------
@@ -529,6 +596,7 @@ class FourierSystem(FlucsSystem):
 
         # Initialise shell grids for diagnostics
         self._compute_kperp_shells()
+        self._compute_kmod_shells()
 
         # Timestep setup
         self.dt_max = self.input["time.dt_max"]
