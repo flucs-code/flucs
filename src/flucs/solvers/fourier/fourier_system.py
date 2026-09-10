@@ -69,6 +69,12 @@ class FourierSystem(FlucsSystem):
     # the current one we are solving for)
     fields_history_size = 2
 
+    # Flag that signals to the timestepper whether it needs to keep
+    # data from the previous stage alive throughout the stage
+    # Set to False to save some memory if the system does not rely
+    # on this data.
+    keep_previous_stage_alive = True
+
     # This will hold all the fields. Should be a list of CuPy arrays.
     # It's a list in order to store fields at previous time steps, as required
     # by the algorithm.

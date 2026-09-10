@@ -25,10 +25,25 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
     def _allocate_memory(self):
         # RK4 needs one temporary field array for intermediate stages.
         system = self.system
-        self.stage_fields = cp.zeros(
+
+        self.stage_fields = []
+
+        # Need at least one array of stage fields
+        self.stage_fields.append(cp.zeros(
             (system.number_of_fields, *system.half_tuple),
             dtype=system.complex,
-        )
+        ))
+
+        # Allocate a second one if the system requires
+        # the previous-stage fields throughout the calculation
+        # of a stage. Otherwise, reuse the first one to save memory.
+        if system.keep_previous_stage_alive:
+            self.stage_fields.append(cp.zeros(
+                (system.number_of_fields, *system.half_tuple),
+                dtype=system.complex,
+            ))
+        else:
+            self.stage_fields.append(self.stage_fields[0])
 
     def precompute_iteration_matrices(self):
         """
@@ -116,7 +131,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            self.stage_fields[0],
+            self.stage_fields[1],
             current_fields,
         )
 
@@ -126,7 +142,7 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
                 system.float(system.current_dt),
                 system.float(system.current_time + 0.5 * system.current_dt),
                 system.int(system.current_step),
-                self.stage_fields,
+                self.stage_fields[1],
                 False,
             )
 
@@ -136,7 +152,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            self.stage_fields[1],
+            self.stage_fields[0],
             current_fields,
         )
 
@@ -146,7 +163,7 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
                 system.float(system.current_dt),
                 system.float(system.current_time + 0.5 * system.current_dt),
                 system.int(system.current_step),
-                self.stage_fields,
+                self.stage_fields[0],
                 False,
             )
 
@@ -156,7 +173,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            self.stage_fields[0],
+            self.stage_fields[1],
             current_fields,
         )
 
@@ -166,7 +184,7 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
                 system.float(system.current_dt),
                 system.float(system.current_time + system.current_dt),
                 system.int(system.current_step),
-                self.stage_fields,
+                self.stage_fields[1],
                 False,
             )
 
@@ -176,7 +194,8 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            self.stage_fields,
+            self.stage_fields[1],
+            self.stage_fields[0],
             current_fields,
         )
 
