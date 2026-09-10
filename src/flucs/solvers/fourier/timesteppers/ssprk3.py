@@ -110,6 +110,8 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             if system._update_dt():
                 self.precompute_iteration_matrices()
 
+        system.prepare_forcing()
+
         self.finish_stage1_kernel(
             system.float(system.current_dt),
             system.float(system.current_time),

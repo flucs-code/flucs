@@ -18,8 +18,7 @@ try:
 except Exception as exc:
     cupy = None
     CUPY_IMPORT_ERROR = exc
-    print("CuPy not found.")
-    print(CUPY_IMPORT_ERROR)
+    print(f"CuPy not found! {CUPY_IMPORT_ERROR}")
 else:
     CUPY_IMPORT_ERROR = None
 

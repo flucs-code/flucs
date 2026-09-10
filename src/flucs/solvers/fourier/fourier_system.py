@@ -27,7 +27,10 @@ from .fourier_system_diagnostics import (
     LinearEigensystemDiag,
     RealspaceDataDiag,
 )
-from .fourier_system_forcing import FourierSystemForcing
+from .fourier_system_forcing import (
+    FourierOrnsteinUhlenbeckForcing,
+    FourierSystemForcing,
+)
 
 if cp is not None:
     from cupy.cuda import cufft
@@ -162,7 +165,9 @@ class FourierSystem(FlucsSystem):
 
     # Forcing methods
     forcing_object: FourierSystemForcing
-    solver_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
+    solver_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {
+        "ornstein_uhlenbeck": FourierOrnsteinUhlenbeckForcing,
+    }
     system_forcing_methods: ClassVar[dict[str, type[FourierSystemForcing]]] = {}
 
     ###########################################################################
@@ -877,6 +882,10 @@ class FourierSystem(FlucsSystem):
             grid=(self.half_cuda_grid_size,),
             block=(self.cuda_block_size,),
         )
+
+        # Forcing kernels
+        if self.input["forcing.method"]:
+            self.forcing_object.register_kernels()
 
         # Dealiasing error-checking
         if self.input["dealiasing.check_errors"]:
@@ -2002,6 +2011,10 @@ class FourierSystem(FlucsSystem):
 
         super().ready()
 
+        # Reset forcing state
+        if self.input["forcing.method"]:
+            self.forcing_object.ready()
+
         # Print starting message
         flucsprint(
             f"Starting at time {float(self.init_time):.3e}, "
@@ -2021,6 +2034,14 @@ class FourierSystem(FlucsSystem):
         # Set this to None so that get_realspace_fields_*() knows
         # whether it has already been called. Saves some time.
         self.realspace_fields = None
+
+    def prepare_forcing(self) -> None:
+        """
+        Updates forcing after selecting the timestep and before its first
+        stage.
+        """
+        if self.input["forcing.method"]:
+            self.forcing_object.prepare_time_step()
 
     @abstractmethod
     def compute_nonlinear_terms(
