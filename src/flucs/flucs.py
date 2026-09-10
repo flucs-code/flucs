@@ -208,12 +208,13 @@ def main():
 
     operation_modes.add_argument(
         "--memory-profile",
+        "-m",
         action="store_true",
         default=False,
         required=False,
         help=(
             "If specified, --run will execute with CuPy's LineProfileHook. "
-            "Used to profile GPU memory allocations."
+            "This can be used to profile GPU memory allocations."
         )
     )
 

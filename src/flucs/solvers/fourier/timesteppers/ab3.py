@@ -65,7 +65,9 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             self.precompute_iteration_matrices()
 
     def precompute_iteration_matrices(self):
-        """Precomputes the linear matrix."""
+        """
+        Precomputes the linear matrix.
+        """
         self.precompute_iteration_matrices_kernel(
             self.system.float(self.system.current_dt)
         )
@@ -83,7 +85,9 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             self.system.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
     def register_kernels(self) -> None:
-        """Registers the CUDA kernels."""
+        """
+        Registers the CUDA kernels.
+        """
         if self.system.input["timestepping.precompute_linear_matrix"]:
             self.precompute_iteration_matrices_kernel = KernelWrapper(
                 system=self.system,

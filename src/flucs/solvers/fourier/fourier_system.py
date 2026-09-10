@@ -384,6 +384,7 @@ class FourierSystem(FlucsSystem):
 
                 dealiasing_radius = np.sqrt(radius_squared)
             case _:
+                # Should never really get here.
                 raise InvalidFlucsInputFileError(
                     f"{self.dealiasing_truncation} is not a valid "
                     "phase-shift truncation. The available options are "
@@ -462,11 +463,6 @@ class FourierSystem(FlucsSystem):
         The default kperp_max is padded above the largest resolved diagonal mode
         so that summing all bins includes all resolved modes.
         """
-
-        # TODO: if adding NS/isotropic systems, either add to this or add a
-        # separate method for isotropic systems (_precompute_shells_isotropic)
-        # alongside the appropriate kernels to do the isotropic shell calcs, as
-        # well as create_shell_reduction_isotropic
 
         # Check if we have already done this
         if hasattr(self, "shell_kperp"):
@@ -588,6 +584,7 @@ class FourierSystem(FlucsSystem):
         )
 
     def _setup_cufft(self) -> None:
+        # Parse and validate the selected FFT wrapper
         fft_wrapper = self.input["setup.fft_wrapper"] 
         
         if fft_wrapper not in ("flucs", "cupy"):
@@ -596,37 +593,32 @@ class FourierSystem(FlucsSystem):
                 "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
             )
 
-
         self.use_cupy_fft = fft_wrapper == "cupy"
 
         if self.use_cupy_fft:
+            # Use CuPy's built-in cuFFT interface
             self.CUFFT_FORWARD = cufft.CUFFT_FORWARD
             self.CUFFT_INVERSE = cufft.CUFFT_INVERSE
+
             if self.input["setup.precision"] == "single":
                 self.fft_c2r_plan_type = cufft.CUFFT_C2R
                 self.fft_r2c_plan_type = cufft.CUFFT_R2C
             else:
                 self.fft_c2r_plan_type = cufft.CUFFT_Z2D
                 self.fft_r2c_plan_type = cufft.CUFFT_D2Z
-
-            message = (
-                "Using CuPy's built-in cuFFT interface."
-            )
         else:
+            # Use the native flucs cuFFT wrapper
             self.CUFFT_FORWARD = flucs.utilities.flucs_plan_nd.CUFFT_FORWARD
             self.CUFFT_INVERSE = flucs.utilities.flucs_plan_nd.CUFFT_INVERSE
+
             if self.input["setup.precision"] == "single":
                 self.fft_c2r_plan_type = nvcufft.Type.C2R
                 self.fft_r2c_plan_type = nvcufft.Type.R2C
             else:
                 self.fft_c2r_plan_type = nvcufft.Type.Z2D
                 self.fft_r2c_plan_type = nvcufft.Type.D2Z
-
-            message = (
-                "Using the custom flucs cuFFT wrapper."
-            )
         
-        flucsprint(message)
+        flucsprint(f"cuFFT wrapper: {fft_wrapper}")
 
 
     def _allocate_memory(self) -> None:
@@ -1016,9 +1008,8 @@ class FourierSystem(FlucsSystem):
         """
         See create_dealiased_operation.
 
-        This sets up operations for two-thirds dealiasing where
-        the intermediates are created once in arrays with
-        appropriate zero padding.
+        This sets up operations for two-thirds dealiasing where the 
+        intermediates are created once in arrays with appropriate zero padding.
 
         """
         # Create the cuFFT plans for the forward and backward transforms
@@ -1182,6 +1173,7 @@ class FourierSystem(FlucsSystem):
             (2 * n_in, *self.full_tuple),
             dtype=self.float,
         )
+
         # Assign subarrays accordingly
         unshifted_first_intermediates_fourier = cp.ndarray(
             shape=(n_in, *self.half_tuple),
@@ -1361,7 +1353,7 @@ class FourierSystem(FlucsSystem):
 
         This version calculates the shifted and unshifted consecutively
         and reuses memory to reduce its memory footprint for the cost
-        of a small performance hit.
+        of a small performance hit (~3-5%).
 
         """
         # Create the cuFFT plans for the forward and backward transforms
@@ -1563,7 +1555,7 @@ class FourierSystem(FlucsSystem):
         create_first_intermediates: Callable,
         create_second_intermediates: Callable,
         allocate_additional_memory: Callable,
-        combine_first_and_second_intermediates: bool = True,  # ignored, always true here
+        combine_first_and_second_intermediates: bool = True,  # always true here
     ) -> tuple[Callable, cp.ndarray]:
         """
         See create_dealiased_operation.
@@ -1574,7 +1566,7 @@ class FourierSystem(FlucsSystem):
 
         This version calculates the shifted and unshifted consecutively
         and reuses memory to reduce its memory footprint for the cost
-        of a small performance hit.
+        of a modest performance hit (larger than low_memory).
 
         """
         # Create the cuFFT plans for the forward and backward transforms
@@ -1841,7 +1833,12 @@ class FourierSystem(FlucsSystem):
 
         return dealiased_operation, second_intermediates_fourier
 
-    def create_standard_real_cufft_plan(self, fft_type: str, batch_size: int, in_place: bool = False):
+    def create_standard_real_cufft_plan(
+        self, 
+        fft_type: str, 
+        batch_size: int, 
+        in_place: bool = False
+    ) -> FlucsPlanNd:
         """
         Create a reusable batched 3D real cuFFT plan for the FourierSystem grid.
 

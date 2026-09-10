@@ -65,7 +65,7 @@ radius_squared = -1.0
 # 
 # The above are listed in decreasing memory requirements and
 # decreasing performance. The default is "standard", but "low_memory"
-# is likely to be just as fast while saving a lot of memory.
+# is likely to be comparably fast while saving a lot of memory.
 memory = "standard"
 
 # Check errors

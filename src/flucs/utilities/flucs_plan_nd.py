@@ -1,17 +1,16 @@
-"""A cuFFT ``PlanNd``-like wrapper with a caller-managed work area.
+"""
+A cuFFT PlanNd-like wrapper with a caller-managed work area.
 
 This module keeps CuPy as the array/memory layer and uses the low-level
-``nvmath.bindings.cufft`` API for plan creation and execution by default.
-Pass ``use_cupy=True`` to delegate to CuPy's ``PlanNd`` with private workspace.
+nvmath.bindings.cufft API for plan creation and execution by default.
+Pass use_cupy=True to delegate to CuPy's PlanNd with private workspace.
 
-The important difference from :class:`cupy.cuda.cufft.PlanNd` is that plan
-creation and work-area allocation are separate operations.  Several plans can
+The important difference from cupy.cuda.cufft.PlanNd is that plan
+creation and work-area allocation are separate operations. Several plans can
 therefore be created first and then bound to one allocation whose size is the
-maximum of their individual requirements.
+maximum of their individual requirements, which allows for significant memory 
+savings when multiple plans are used in a single simulation.
 
-This is not a subclass of CuPy's ``PlanNd``.  It supports direct
-``plan.fft(a, out, direction)`` calls, but CuPy's high-level FFT functions will
-not accept it through their ``plan=`` argument or plan context-manager API.
 """
 
 from __future__ import annotations
@@ -23,13 +22,16 @@ import operator
 import cupy as cp
 from nvmath.bindings import cufft as nvcufft
 
-
+# cuFFT direction constants used by complex transforms.
 CUFFT_FORWARD = -1
 CUFFT_INVERSE = 1
 
+# Limits used to select the matching cuFFT planning interface.
 _INT32_MIN = -(1 << 31)
 _INT32_MAX = (1 << 31) - 1
 
+# Convert nvmath enum values once so they can be compared with the integer
+# fft_type values also accepted by CuPy's PlanNd interface.
 _C2C = int(nvcufft.Type.C2C)
 _R2C = int(nvcufft.Type.R2C)
 _C2R = int(nvcufft.Type.C2R)
@@ -49,40 +51,41 @@ _TYPE_NAMES = {
 
 
 class FlucsPlanNd:
-    """An N-dimensional, batched cuFFT plan with an external work area.
+    """
+    An N-dimensional, batched cuFFT plan with an external work area.
 
     Parameters are the same advanced-layout parameters used by
-    ``cupy.cuda.cufft.PlanNd``.  ``order``, ``last_axis``, and ``last_size``
-    are retained as compatibility metadata; cuFFT's ``cufftMakePlanMany`` does
+    cupy.cuda.cufft.PlanNd. The parameters order, last_axis, and last_size
+    are retained as compatibility metadata; cuFFT's cufftMakePlanMany does
     not consume them.
 
     Parameters
     ----------
     shape, inembed, istride, idist, onembed, ostride, odist, fft_type, batch
-        Parameters forwarded to ``cufftMakePlanMany`` (or its 64-bit form).
+        Parameters forwarded to cufftMakePlanMany (or its 64-bit form).
     order, last_axis, last_size
         CuPy-compatible plan metadata.
     work_area
         An optional workspace object or raw integer device pointer.  Accepted
-        objects include ``cupy.cuda.Memory``, ``cupy.cuda.MemoryPointer``, and
-        contiguous CuPy arrays.  A raw pointer requires ``work_area_size``.
+        objects include cupy.cuda.Memory, cupy.cuda.MemoryPointer, and
+        contiguous CuPy arrays.  A raw pointer requires work_area_size.
     work_area_size
-        Number of accessible bytes starting at ``work_area``.  It is inferred
+        Number of accessible bytes starting at work_area.  It is inferred
         for supported CuPy objects and mandatory for a raw pointer.
     work_area_owner
         Optional object retained to keep a raw-pointer allocation alive.
     auto_allocate
         If true, allocate and bind a workspace using CuPy's current allocator.
-        It cannot be combined with ``work_area``.  The default is false so
+        It cannot be combined with work_area.  The default is false so
         several plans can be constructed before allocating shared storage.
         Applies only to the custom backend; CuPy always allocates privately.
     use_64bit
-        Select ``cufftMakePlanMany64``.  If ``None``, it is selected whenever
+        Select cufftMakePlanMany64.  If None, it is selected whenever
         an advanced-layout integer is outside the signed 32-bit range.
     use_cupy
-        If true, wrap a ``cupy.cuda.cufft.PlanNd`` instead of creating a custom
+        If true, wrap a cupy.cuda.cufft.PlanNd instead of creating a custom
         plan. External workspace arguments and 64-bit planning are unsupported.
-        ``work_size`` reports CuPy's allocated capacity, which may include
+        work_size reports CuPy's allocated capacity, which may include
         allocator rounding, rather than the exact cuFFT workspace requirement.
 
     Notes
@@ -91,13 +94,15 @@ class FlucsPlanNd:
     the GPU.  Enqueuing all such FFTs on one CUDA stream is sufficient.  If
     different streams are used, the caller must establish event dependencies
     that prevent overlap.
+
     The caller must keep arrays and streams alive until execution completes,
     and finish queued FFTs before rebinding workspace or closing a plan.
     Calls on a given plan must be serialized by the host as well. This class
     is not thread-safe. Both backends require CUFFT_FORWARD for R2C/D2Z and
     CUFFT_INVERSE for C2R/Z2D, rejecting directions cuFFT would silently ignore.
-    Padded in-place real transforms require explicit
-    embeddings in real/complex element units respectively.
+
+    Padded in-place real transforms require explicit embeddings in real/complex 
+    element units respectively.
     """
 
     def __init__(
@@ -122,12 +127,16 @@ class FlucsPlanNd:
         use_64bit: bool | None = None,
         use_cupy: bool = False,
     ) -> None:
+        # Initialise resource state before any operation that may fail. This
+        # allows the exception cleanup path to safely handle partial setup.
         self.handle = 0
         self._cupy_plan = None
         self._use_cupy = bool(use_cupy)
         self.gpus = None
         self.device_id = int(cp.cuda.runtime.getDevice())
 
+        # Materialise and validate the advanced layout. In particular, this
+        # prevents one-shot iterables from being consumed more than once.
         self.shape = _positive_int_tuple("shape", shape)
         self.inembed = _optional_positive_int_tuple(
             "inembed", inembed, len(self.shape)
@@ -145,6 +154,8 @@ class FlucsPlanNd:
         self.last_axis = int(last_axis)
         self.last_size = None if last_size is None else int(last_size)
 
+        # Check the relationships between layout, backend, and workspace
+        # options before creating a GPU resource.
         if self.fft_type not in _SUPPORTED_TYPES:
             raise ValueError(f"unsupported cuFFT type: {fft_type!r}")
         if self.batch < 0:
@@ -186,6 +197,8 @@ class FlucsPlanNd:
             self.last_size,
         )
 
+        # Use the 64-bit planning API only when requested or required by an
+        # advanced-layout value. The transform data type is unaffected.
         layout_ints = (
             *self.shape,
             *(self.inembed or ()),
@@ -202,12 +215,16 @@ class FlucsPlanNd:
             else bool(use_64bit)
         )
         if not self.use_64bit and any(x > _INT32_MAX for x in layout_ints):
-            raise ValueError("layout exceeds signed 32-bit range; use use_64bit=True")
+            raise ValueError(
+                "layout exceeds signed 32-bit range; use use_64bit=True"
+            )
         if any(x > (1 << 63) - 1 for x in layout_ints):
             raise ValueError("layout exceeds signed 64-bit range")
         if self.use_cupy and self.use_64bit:
             raise ValueError("use_cupy=True does not support 64-bit planning")
 
+        # Track both the pointer passed to cuFFT and a Python owner that keeps
+        # the underlying device allocation alive for the plan's lifetime.
         self.work_size = 0
         self.work_area: Any | int | None = None
         self.work_area_ptr = 0
@@ -217,6 +234,8 @@ class FlucsPlanNd:
 
         try:
             if self.use_cupy:
+                # CuPy creates the plan and privately allocates its workspace.
+                # Retain the PlanNd object because it owns both resources.
                 self._cupy_plan = cp.cuda.cufft.PlanNd(*self.plan_key)
                 self.handle = int(self._cupy_plan.handle)
                 self.work_area = self._cupy_plan.work_area
@@ -227,10 +246,15 @@ class FlucsPlanNd:
                 self.work_size = self.work_area_size
                 self._work_area_bound = True
                 return
+
+            # Disable cuFFT's automatic allocation so planning reports the
+            # required size without reserving a private workspace.
             self.handle = int(nvcufft.create())
             nvcufft.set_auto_allocation(self.handle, 0)
 
             if self.batch != 0:
+                # cufftMakePlanMany configures the handle and returns the exact
+                # temporary storage required by this layout.
                 make_plan = (
                     nvcufft.make_plan_many64
                     if self.use_64bit
@@ -254,6 +278,8 @@ class FlucsPlanNd:
                 if self.work_size == 0:
                     self._work_area_bound = True
 
+            # Workspace binding is deliberately separate from plan creation,
+            # allowing the caller to share one allocation between plans.
             if work_area is not None:
                 self.set_work_area(
                     work_area,
@@ -263,24 +289,30 @@ class FlucsPlanNd:
             elif auto_allocate:
                 self.allocate_work_area()
         except BaseException:
+            # Do not leak a handle if validation or backend setup fails after
+            # cufftCreate has succeeded.
             self._destroy_after_failed_init()
             raise
 
     @property
     def use_cupy(self) -> bool:
-        """Whether this wrapper delegates to CuPy's privately allocated plan."""
+        """
+        Whether this wrapper delegates to CuPy's privately allocated plan.
+        """
         return self._use_cupy
 
     @property
     def closed(self) -> bool:
-        """Whether the underlying cuFFT handle has been destroyed."""
-
+        """
+        Whether the underlying cuFFT handle has been destroyed.
+        """
         return self.handle == 0
 
     @property
     def required_work_area_size(self) -> int:
-        """cuFFT workspace requirement, or allocated capacity in CuPy mode."""
-
+        """
+        cuFFT workspace requirement, or allocated capacity in CuPy mode.
+        """
         return self.work_size
 
     def set_work_area(
@@ -290,35 +322,46 @@ class FlucsPlanNd:
         *,
         owner: Any | None = None,
     ) -> None:
-        """Bind caller-owned device memory as this plan's work area.
+        """
+        Bind caller-owned device memory as this plan's work area.
 
         The caller must finish earlier FFTs before rebinding.
-        When ``work_area`` is a raw integer pointer, the caller is responsible
-        for keeping the allocation alive; passing ``owner`` lets this object
+        When work_area is a raw integer pointer, the caller is responsible
+        for keeping the allocation alive; passing owner lets this object
         retain that lifetime reference.
         """
 
         self._require_open()
         if self.use_cupy:
-            raise RuntimeError("CuPy manages this plan's workspace; it cannot be rebound")
+            raise RuntimeError(
+                "CuPy manages this plan's workspace; it cannot be rebound"
+            )
+
+        # Accept raw pointers, CuPy memory objects, and contiguous arrays while
+        # reducing them to the pointer and accessible capacity cuFFT needs.
         ptr, capacity, retained_object = _workspace_pointer_and_size(
             work_area, work_area_size
         )
 
+        # Check capacity before binding; cuFFT receives only a pointer and
+        # cannot verify that the allocation is large enough.
         if capacity < self.work_size:
             raise ValueError(
-                f"work area has {capacity} bytes, but this plan requires "
+                f"Work area has {capacity} bytes, but this plan requires "
                 f"{self.work_size} bytes"
             )
         if self.work_size and ptr == 0:
-            raise ValueError("a non-zero work-area pointer is required")
+            raise ValueError("A non-zero work-area pointer is required")
 
         workspace_device = _object_device_id(retained_object)
         owner_device = _object_device_id(owner)
+
+        # A pointer from another device may be numerically valid but is not a
+        # usable workspace for this plan.
         for candidate in (workspace_device, owner_device):
             if candidate is not None and candidate != self.device_id:
                 raise ValueError(
-                    f"work area is on device {candidate}, but the plan is on "
+                    f"Work area is on device {candidate}, but the plan is on "
                     f"device {self.device_id}"
                 )
 
@@ -336,21 +379,26 @@ class FlucsPlanNd:
         self,
         allocator: Callable[[int], Any] | None = None,
     ) -> Any | None:
-        """Allocate and bind a private work area, returning its owner object.
+        """
+        Allocate and bind a private work area, returning its owner object.
 
-        The default is ``cupy.cuda.alloc``, matching CuPy's use of the current
-        allocator.  Pass ``cupy.cuda.Memory`` to force a direct device-memory
-        allocation outside the configured CuPy memory pool.
-        Finish earlier FFTs before replacing an existing work area.
+        The default is cupy.cuda.alloc, matching CuPy's use of the current
+        allocator. Pass cupy.cuda.Memory to force a direct device-memory
+        allocation outside the configured CuPy memory pool. Finish earlier FFTs 
+        before replacing an existing work area.
         """
 
         self._require_open()
         if self.use_cupy:
-            raise RuntimeError("CuPy has already allocated this plan's private workspace")
+            raise RuntimeError(
+                "CuPy has already allocated this plan's private workspace"
+            )
         if self.work_size == 0:
             self._work_area_bound = True
             return None
 
+        # Allocate on the device where the plan was created, irrespective of
+        # the device that happens to be current at the call site.
         if allocator is None:
             allocator = cp.cuda.alloc
         with cp.cuda.Device(self.device_id):
@@ -359,38 +407,55 @@ class FlucsPlanNd:
         return work_area
 
     def fft(self, a: cp.ndarray, out: cp.ndarray, direction: int) -> None:
-        """Execute the plan on CuPy arrays using the current CUDA stream.
+        """
+        Execute the plan on CuPy arrays using the current CUDA stream.
 
-        Like CuPy's low-level ``PlanNd.fft``, this operation is unnormalised
-        and enqueues work asynchronously. The caller supplies arrays with the
-        correct dtype, device, layout and allocation size for the plan.
-        The caller manages array/stream lifetimes and serializes executions
-        that use the same plan or shared workspace. No events or waits are
-        inserted by this wrapper.
+        Like CuPy's low-level PlanNd.fft, this operation is unnormalised and 
+        enqueues work asynchronously. The caller supplies arrays with the
+        correct dtype, device, layout and allocation size for the plan. The 
+        caller manages array/stream lifetimes and serializes executions that use 
+        the same plan or shared workspace. No events or waits are inserted by 
+        this wrapper.
         """
 
         self._require_open()
         direction = operator.index(direction)
+
+        # Real transforms have only one valid direction. Validate it here
+        # because the corresponding cuFFT execution routines ignore the flag.
         if self.fft_type in {_R2C, _D2Z}:
             if direction != CUFFT_FORWARD:
-                raise ValueError("real-to-complex transforms require CUFFT_FORWARD (-1)")
+                raise ValueError(
+                    "Real-to-complex transforms require CUFFT_FORWARD (-1)"
+                )
         elif self.fft_type in {_C2R, _Z2D}:
             if direction != CUFFT_INVERSE:
-                raise ValueError("complex-to-real transforms require CUFFT_INVERSE (1)")
+                raise ValueError(
+                    "Complex-to-real transforms require CUFFT_INVERSE (1)"
+                )
         elif direction not in {CUFFT_FORWARD, CUFFT_INVERSE}:
-            raise ValueError("direction must be CUFFT_FORWARD (-1) or CUFFT_INVERSE (1)")
+            raise ValueError(
+                "Direction must be CUFFT_FORWARD (-1) or CUFFT_INVERSE (1)"
+                )
         if self.batch == 0:
             return
         if not self._work_area_bound:
             raise RuntimeError(
-                "no work area is bound; call set_work_area() or "
+                "No work area is bound; call set_work_area() or "
                 "allocate_work_area() first"
             )
+
+        # The CuPy backend already owns the handle, workspace, and dispatch.
         if self.use_cupy:
             self._cupy_plan.fft(a, out, direction)
             return
+
+        # Associate this execution with the caller's current stream. This is
+        # also what serialises plans sharing one workspace in normal FLUCS use.
         nvcufft.set_stream(self.handle, int(cp.cuda.get_current_stream().ptr))
 
+        # nvmath's low-level bindings operate on raw device pointers. Select
+        # the execution routine matching the transform precision and direction.
         input_ptr = int(a.data.ptr)
         output_ptr = int(out.data.ptr)
         if self.fft_type == _C2C:
@@ -409,13 +474,18 @@ class FlucsPlanNd:
             raise RuntimeError(f"unsupported cuFFT type: {self.fft_type}")
 
     def close(self) -> None:
-        """Destroy the cuFFT handle.
+        """
+        Destroy the cuFFT handle.
 
         The caller must finish queued FFTs before closing the plan.
         """
 
         if self.handle == 0:
             return
+
+        # Destruction must occur with the plan's device active. CuPy plans are
+        # released through their Python owner; custom handles are destroyed
+        # directly through nvmath.
         handle = self.handle
         with cp.cuda.Device(self.device_id):
             if self.use_cupy:
@@ -423,6 +493,9 @@ class FlucsPlanNd:
                 self._cupy_plan = None
             else:
                 nvcufft.destroy(handle)
+
+        # Drop every allocation reference after the handle can no longer use
+        # the workspace.
         self.handle = 0
         self.work_area = None
         self.work_area_ptr = 0
@@ -476,39 +549,49 @@ def allocate_shared_work_area(
     allocator: Callable[[int], Any] | None = None,
     min_size: int = 0,
 ) -> Any | None:
-    """Allocate one work area for the supplied custom-backend plans.
+    """
+    Allocate one work area for the supplied custom-backend plans.
 
-    Native CuPy plans and wrappers with ``use_cupy=True`` are silently skipped.
-    Return ``None`` without allocating if no custom plans remain, including
-    for an empty iterable. Unrelated object types are rejected.
+    Native CuPy plans and wrappers with use_cupy=True are silently skipped.
+    Return None without allocating if no custom plans remain, including for an 
+    empty iterable. Unrelated object types are rejected.
 
-    Participating plans must belong to the same CUDA device. The default allocator is
-    ``cupy.cuda.Memory``, which makes a direct CUDA device allocation.  Keep the
-    returned object alive until all plans are closed or rebound.
+    Participating plans must belong to the same CUDA device. The default 
+    allocator is cupy.cuda.Memory, which makes a direct CUDA device allocation. 
+    Keep the returned object alive until all plans are closed or rebound.
 
-    Allocates at least min_size bytes. Returns the memory object of the allocator.
+    Allocates at least min_size bytes. Returns the memory object of the 
+    allocator.
 
     """
 
     participating = []
+
+    # Only custom plans can accept an external workspace. Native CuPy plans and
+    # wrappers using the CuPy backend already own private allocations.
     for plan in plans:
         if isinstance(plan, FlucsPlanNd):
             if not plan.use_cupy:
                 plan._require_open()
                 participating.append(plan)
         elif not isinstance(plan, cp.cuda.cufft.PlanNd):
-            raise TypeError("all entries must be FlucsPlanNd or cupy.cuda.cufft.PlanNd instances")
+            raise TypeError(
+                "All entries must be FlucsPlanNd or cupy.cuda.cufft.PlanNd "
+                "instances"
+                )
     plans = tuple(participating)
     if not plans:
         return None
 
+    # One device allocation cannot be shared by plans on different GPUs.
     device_ids = {plan.device_id for plan in plans}
     if len(device_ids) != 1:
-        raise ValueError("all plans sharing a work area must be on one device")
+        raise ValueError("All plans sharing a work area must be on one device")
     device_id = device_ids.pop()
     required_size = max(plan.work_size for plan in plans)
 
-    # Consider min_size
+    # Permit callers to reserve more than cuFFT currently requires, for example
+    # when the allocation is also reused by another sequential operation.
     required_size = max(required_size, min_size)
 
     if required_size == 0:
@@ -518,6 +601,9 @@ def allocate_shared_work_area(
 
     if allocator is None:
         allocator = cp.cuda.Memory
+
+    # Allocate only the largest requirement because participating executions
+    # are serialised, then bind the same allocation to every plan.
     with cp.cuda.Device(device_id):
         work_area = allocator(required_size)
         for plan in plans:
@@ -537,7 +623,7 @@ def _positive_int_tuple(name: str, values: Iterable[int]) -> tuple[int, ...]:
     if not result:
         raise ValueError(f"{name} must not be empty")
     if any(value < 1 for value in result):
-        raise ValueError(f"all entries of {name} must be positive")
+        raise ValueError(f"All entries of {name} must be positive")
     return result
 
 
@@ -558,6 +644,7 @@ def _workspace_pointer_and_size(
     work_area: Any | int,
     explicit_size: int | None,
 ) -> tuple[int, int, Any | None]:
+    # A raw pointer has no Python object whose lifetime or size can be inferred.
     raw_pointer = isinstance(work_area, int)
     retained_object = None if raw_pointer else work_area
 
@@ -573,6 +660,8 @@ def _workspace_pointer_and_size(
             ".ptr or .data.ptr"
         )
 
+    # Prefer the object's accessible capacity, but permit an explicit smaller
+    # region. Raw pointers always require an explicit byte count.
     inferred_size = _object_available_bytes(work_area, ptr)
     if explicit_size is None:
         if inferred_size is None:
@@ -600,12 +689,14 @@ def _object_available_bytes(obj: Any, ptr: int) -> int | None:
 
     nbytes = getattr(obj, "nbytes", None)
     if nbytes is not None:
+        # An array can be used as untyped workspace only when its bytes occupy
+        # one contiguous region.
         flags = getattr(obj, "flags", None)
         if flags is not None:
             c_contiguous = bool(getattr(flags, "c_contiguous", False))
             f_contiguous = bool(getattr(flags, "f_contiguous", False))
             if not (c_contiguous or f_contiguous):
-                raise ValueError("a CuPy-array work area must be contiguous")
+                raise ValueError("A CuPy-array work area must be contiguous")
         return int(nbytes)
 
     # A CuPy MemoryPointer exposes its allocation as .mem.  Account for a
@@ -620,6 +711,7 @@ def _object_available_bytes(obj: Any, ptr: int) -> int | None:
 
     size = getattr(obj, "size", None)
     if size is not None:
+        # Bare CuPy Memory objects expose their capacity directly as size.
         return int(size)
     return None
 
@@ -630,14 +722,17 @@ def _object_device_id(obj: Any | None) -> int | None:
 
     device = getattr(obj, "device", None)
     if device is not None and hasattr(device, "id"):
+        # CuPy arrays expose a Device object.
         return int(device.id)
 
     device_id = getattr(obj, "device_id", None)
     if device_id is not None:
+        # CuPy Memory allocations expose the integer directly.
         return int(device_id)
 
     memory = getattr(obj, "mem", None)
     if memory is not None:
+        # MemoryPointer objects expose the device through their base allocation.
         device_id = getattr(memory, "device_id", None)
         if device_id is not None:
             return int(device_id)
