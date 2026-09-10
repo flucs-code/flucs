@@ -233,6 +233,10 @@ __device__ void add_forcing_explicit(
     (void)previous_fields_forcing;
 
 #ifdef FORCING_METHOD_ORNSTEIN_UHLENBECK
+    // Return if the mode is not forced
+    if (!forcing_range_mask(index))
+        return;
+
     #pragma unroll
     for (int field = 0; field < NUMBER_OF_FIELDS; field++) {
         // Explicit terms are stored on the left-hand side of the equation.
