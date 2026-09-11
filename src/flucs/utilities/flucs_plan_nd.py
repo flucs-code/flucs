@@ -8,16 +8,16 @@ Pass use_cupy=True to delegate to CuPy's PlanNd with private workspace.
 The important difference from cupy.cuda.cufft.PlanNd is that plan
 creation and work-area allocation are separate operations. Several plans can
 therefore be created first and then bound to one allocation whose size is the
-maximum of their individual requirements, which allows for significant memory 
+maximum of their individual requirements, which allows for significant memory
 savings when multiple plans are used in a single simulation.
 
 """
 
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable, Iterable
 from typing import Any
-import operator
 
 import cupy as cp
 from nvmath.bindings import cufft as nvcufft
@@ -101,7 +101,7 @@ class FlucsPlanNd:
     is not thread-safe. Both backends require CUFFT_FORWARD for R2C/D2Z and
     CUFFT_INVERSE for C2R/Z2D, rejecting directions cuFFT would silently ignore.
 
-    Padded in-place real transforms require explicit embeddings in real/complex 
+    Padded in-place real transforms require explicit embeddings in real/complex
     element units respectively.
     """
 
@@ -166,12 +166,17 @@ class FlucsPlanNd:
             raise ValueError("order must be 'C' or 'F'")
         if self.last_size is not None and self.last_size < 1:
             raise ValueError("last_size must be positive or None")
-        if self.use_cupy and any(value is not None for value in (
-            work_area, work_area_size, work_area_owner
-        )):
-            raise ValueError("use_cupy=True does not support external workspace arguments")
+        if self.use_cupy and any(
+            value is not None
+            for value in (work_area, work_area_size, work_area_owner)
+        ):
+            raise ValueError(
+                "use_cupy=True does not support external workspace arguments"
+            )
         if auto_allocate and work_area is not None:
-            raise ValueError("auto_allocate and work_area are mutually exclusive")
+            raise ValueError(
+                "auto_allocate and work_area are mutually exclusive"
+            )
         if work_area is None and work_area_size is not None:
             raise ValueError("work_area_size was supplied without work_area")
         if work_area is None and work_area_owner is not None:
@@ -240,9 +245,12 @@ class FlucsPlanNd:
                 self.handle = int(self._cupy_plan.handle)
                 self.work_area = self._cupy_plan.work_area
                 if self.work_area is not None:
-                    self.work_area_ptr, self.work_area_size, self._work_area_owner = (
-                        _workspace_pointer_and_size(self.work_area, None)
-                    )
+                    (
+                        self.work_area_ptr,
+                        self.work_area_size,
+                        self._work_area_owner,
+                    ) = _workspace_pointer_and_size(self.work_area, None)
+
                 self.work_size = self.work_area_size
                 self._work_area_bound = True
                 return
@@ -384,7 +392,7 @@ class FlucsPlanNd:
 
         The default is cupy.cuda.alloc, matching CuPy's use of the current
         allocator. Pass cupy.cuda.Memory to force a direct device-memory
-        allocation outside the configured CuPy memory pool. Finish earlier FFTs 
+        allocation outside the configured CuPy memory pool. Finish earlier FFTs
         before replacing an existing work area.
         """
 
@@ -410,11 +418,11 @@ class FlucsPlanNd:
         """
         Execute the plan on CuPy arrays using the current CUDA stream.
 
-        Like CuPy's low-level PlanNd.fft, this operation is unnormalised and 
+        Like CuPy's low-level PlanNd.fft, this operation is unnormalised and
         enqueues work asynchronously. The caller supplies arrays with the
-        correct dtype, device, layout and allocation size for the plan. The 
-        caller manages array/stream lifetimes and serializes executions that use 
-        the same plan or shared workspace. No events or waits are inserted by 
+        correct dtype, device, layout and allocation size for the plan. The
+        caller manages array/stream lifetimes and serializes executions that use
+        the same plan or shared workspace. No events or waits are inserted by
         this wrapper.
         """
 
@@ -436,7 +444,7 @@ class FlucsPlanNd:
         elif direction not in {CUFFT_FORWARD, CUFFT_INVERSE}:
             raise ValueError(
                 "Direction must be CUFFT_FORWARD (-1) or CUFFT_INVERSE (1)"
-                )
+            )
         if self.batch == 0:
             return
         if not self._work_area_bound:
@@ -553,14 +561,14 @@ def allocate_shared_work_area(
     Allocate one work area for the supplied custom-backend plans.
 
     Native CuPy plans and wrappers with use_cupy=True are silently skipped.
-    Return None without allocating if no custom plans remain, including for an 
+    Return None without allocating if no custom plans remain, including for an
     empty iterable. Unrelated object types are rejected.
 
-    Participating plans must belong to the same CUDA device. The default 
-    allocator is cupy.cuda.Memory, which makes a direct CUDA device allocation. 
+    Participating plans must belong to the same CUDA device. The default
+    allocator is cupy.cuda.Memory, which makes a direct CUDA device allocation.
     Keep the returned object alive until all plans are closed or rebound.
 
-    Allocates at least min_size bytes. Returns the memory object of the 
+    Allocates at least min_size bytes. Returns the memory object of the
     allocator.
 
     """
@@ -578,7 +586,7 @@ def allocate_shared_work_area(
             raise TypeError(
                 "All entries must be FlucsPlanNd or cupy.cuda.cufft.PlanNd "
                 "instances"
-                )
+            )
     plans = tuple(participating)
     if not plans:
         return None
@@ -702,7 +710,11 @@ def _object_available_bytes(obj: Any, ptr: int) -> int | None:
     # A CuPy MemoryPointer exposes its allocation as .mem.  Account for a
     # pointer that starts partway through that allocation.
     memory = getattr(obj, "mem", None)
-    if memory is not None and hasattr(memory, "ptr") and hasattr(memory, "size"):
+    if (
+        memory is not None
+        and hasattr(memory, "ptr")
+        and hasattr(memory, "size")
+    ):
         offset = ptr - int(memory.ptr)
         available = int(memory.size) - offset
         if offset < 0 or available < 0:

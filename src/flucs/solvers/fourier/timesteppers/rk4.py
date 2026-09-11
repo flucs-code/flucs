@@ -29,19 +29,23 @@ class FourierRK4Timestepper(FlucsTimestepper[FourierSystem]):
         self.stage_fields = []
 
         # Need at least one array of stage fields
-        self.stage_fields.append(cp.zeros(
-            (system.number_of_fields, *system.half_tuple),
-            dtype=system.complex,
-        ))
+        self.stage_fields.append(
+            cp.zeros(
+                (system.number_of_fields, *system.half_tuple),
+                dtype=system.complex,
+            )
+        )
 
         # Allocate a second one if the system requires
         # the previous-stage fields throughout the calculation
         # of a stage. Otherwise, reuse the first one to save memory.
         if system.keep_previous_stage_alive:
-            self.stage_fields.append(cp.zeros(
-                (system.number_of_fields, *system.half_tuple),
-                dtype=system.complex,
-            ))
+            self.stage_fields.append(
+                cp.zeros(
+                    (system.number_of_fields, *system.half_tuple),
+                    dtype=system.complex,
+                )
+            )
         else:
             self.stage_fields.append(self.stage_fields[0])
 

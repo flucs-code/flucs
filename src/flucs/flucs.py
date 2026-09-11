@@ -215,7 +215,7 @@ def main():
         help=(
             "If specified, --run will execute with CuPy's LineProfileHook. "
             "This can be used to profile GPU memory allocations."
-        )
+        ),
     )
 
     operation_modes.add_argument(
@@ -299,7 +299,7 @@ def main():
             flucsprint("Memory report from CuPy's LineProfileHook:")
             hook.print_report()
             return
-        
+
         run_flucs(input_path, args.override)
         return
 
