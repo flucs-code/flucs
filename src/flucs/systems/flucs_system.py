@@ -28,9 +28,6 @@ from flucs.utilities.messages import flucsprint, format_seconds
 if TYPE_CHECKING:
     from flucs.solvers import FlucsSolver
 
-if cp is not None:
-    from cupy.cuda import cufft
-
 
 class FlucsSystem(ABC):
     """A generic system of equations for flucs."""
@@ -77,10 +74,6 @@ class FlucsSystem(ABC):
 
     # CUDA kernels
     kernels: KernelCollection
-
-    # CUFFT plan types
-    fft_c2r_plan_type: int
-    fft_r2c_plan_type: int
 
     # A priority queue of outputs
     output_heap: list[FlucsOutput] | None = None
@@ -226,13 +219,6 @@ class FlucsSystem(ABC):
         self.final_time = self.float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestart(self)
-
-        if self.input["setup.precision"] == "single":
-            self.fft_c2r_plan_type = cufft.CUFFT_C2R
-            self.fft_r2c_plan_type = cufft.CUFFT_R2C
-        else:
-            self.fft_c2r_plan_type = cufft.CUFFT_Z2D
-            self.fft_r2c_plan_type = cufft.CUFFT_D2Z
 
     def write_output(self, force=False):
         self.steps_until_next_write -= 1

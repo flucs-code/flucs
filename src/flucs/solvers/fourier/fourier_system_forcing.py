@@ -209,8 +209,8 @@ class FourierOrnsteinUhlenbeckForcing(FourierSystemForcing):
     corr_time : float
         Temporal correlation time of the forcing.
     range_kmod : list[float, float]
-        Range of total wavenumbers to force. If non-empty, this takes
-        precedence over range_kz and range_kperp.
+        Range of total wavenumbers to force. This cannot be specified alongside
+        range_kz or range_kperp.
     range_kperp : list[float, float]
         Range of perpendicular wavenumbers to force when range_kmod is empty.
     range_kz : list[float, float]
@@ -231,8 +231,18 @@ class FourierOrnsteinUhlenbeckForcing(FourierSystemForcing):
         system = self.system
 
         # Set ranges and number of forced modes
-        if system.input["forcing.range_kmod"]:
-            self.setup_forcing_range_kmod()  # Take precendence over kzkperp
+        range_kmod = system.input["forcing.range_kmod"]
+        range_kperp = system.input["forcing.range_kperp"]
+        range_kz = system.input["forcing.range_kz"]
+
+        if range_kmod and (range_kperp or range_kz):
+            raise InvalidFlucsInputFileError(
+                "forcing.range_kmod cannot be specified alongside "
+                "forcing.range_kperp or forcing.range_kz."
+            )
+
+        if range_kmod:
+            self.setup_forcing_range_kmod()
         else:
             self.setup_forcing_range_kzkperp()
 

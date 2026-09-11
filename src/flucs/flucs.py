@@ -16,6 +16,8 @@ from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
 
 try:
     import cupy as cupy
+    from cupy.cuda.memory_hooks import LineProfileHook
+
     cupy.fft.fft(cupy.zeros(1))  # quickly test if CuPy actually works
 except Exception as exc:
     cupy = None
@@ -198,6 +200,7 @@ def main():
         "--override",
         "-o",
         nargs="+",
+        action="extend",
         required=False,
         help="Additional arguments to override input-file parameters. Must be "
         "specified in TOML grouping format: e.g., to override the value "
@@ -212,6 +215,18 @@ def main():
         default=False,
         required=False,
         help="Runs the appropriate solver using input.toml from --io_path.",
+    )
+
+    operation_modes.add_argument(
+        "--memory-profile",
+        "-m",
+        action="store_true",
+        default=False,
+        required=False,
+        help=(
+            "If specified, --run will execute with CuPy's LineProfileHook. "
+            "This can be used to profile GPU memory allocations."
+        ),
     )
 
     operation_modes.add_argument(
@@ -286,6 +301,15 @@ def main():
 
         if not input_path.exists():
             raise FileNotFoundError(f"Input file not found in {io_path} ")
+
+        if args.memory_profile:
+            hook = LineProfileHook()
+            with hook:
+                run_flucs(input_path, args.override)
+            cupy.cuda.get_current_stream().synchronize()
+            flucsprint("Memory report from CuPy's LineProfileHook:")
+            hook.print_report()
+            return
 
         run_flucs(input_path, args.override)
         return

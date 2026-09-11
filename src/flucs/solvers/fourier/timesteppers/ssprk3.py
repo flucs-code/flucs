@@ -23,26 +23,28 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
     def _allocate_memory(self):
         system = self.system
 
-        self.stage_fields = [
+        self.stage_fields = []
+
+        # Need at least one array of stage fields
+        self.stage_fields.append(
             cp.zeros(
-                (
-                    system.number_of_fields,
-                    system.nz,
-                    system.nx,
-                    system.half_ny,
-                ),
+                (system.number_of_fields, *system.half_tuple),
                 dtype=system.complex,
-            ),
-            cp.zeros(
-                (
-                    system.number_of_fields,
-                    system.nz,
-                    system.nx,
-                    system.half_ny,
-                ),
-                dtype=system.complex,
-            ),
-        ]
+            )
+        )
+
+        # Allocate a second one if the system requires
+        # the previous-stage fields throughout the calculation
+        # of a stage. Otherwise, reuse the first one to save memory.
+        if system.keep_previous_stage_alive:
+            self.stage_fields.append(
+                cp.zeros(
+                    (system.number_of_fields, *system.half_tuple),
+                    dtype=system.complex,
+                )
+            )
+        else:
+            self.stage_fields.append(self.stage_fields[0])
 
     def precompute_iteration_matrices(self):
         self.precompute_iteration_matrices_kernel(
@@ -62,12 +64,13 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             self.system.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
     def register_kernels(self) -> None:
-        self.precompute_iteration_matrices_kernel = KernelWrapper(
-            system=self.system,
-            cuda_kernel_name="precompute_iteration_matrices",
-            grid=(self.system.half_cuda_grid_size,),
-            block=(self.system.cuda_block_size,),
-        )
+        if self.system.input["timestepping.precompute_linear_matrix"]:
+            self.precompute_iteration_matrices_kernel = KernelWrapper(
+                system=self.system,
+                cuda_kernel_name="precompute_iteration_matrices",
+                grid=(self.system.half_cuda_grid_size,),
+                block=(self.system.cuda_block_size,),
+            )
 
         self.finish_stage1_kernel = KernelWrapper(
             system=self.system,
@@ -118,7 +121,7 @@ class FourierSSPRK3Timestepper(FlucsTimestepper[FourierSystem]):
             system.int(system.current_step),
             previous_fields,
             system.dft_bits,
-            previous_fields,
+            self.stage_fields[0],
             self.stage_fields[1],
             current_fields,
         )
