@@ -44,6 +44,17 @@ docs = [
 [tool.ruff]
 line-length = 80
 
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+filterwarnings = [
+  "ignore:numpy[.]ndarray size changed, may indicate binary incompatibility[.] Expected 16 from C header, got 96 from PyObject:RuntimeWarning",
+]
+markers = [
+  "core: shared FLUCS core functionality",
+  "gpu: requires a working CUDA device",
+  "solver(name): functionality owned by a named solver entry point",
+]
+
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
@@ -57,9 +68,6 @@ fallback_version = "0.0"
 
 [project.entry-points."flucs.solvers"]
 FourierSolver = "flucs.solvers.fourier.fourier_solver:FourierSolver"
-
-# [project.entry-points."flucs.systems"]
-# ColdITG2DFourier = "flucs.systems.cold_itg_2d_fourier.cold_itg_2d_fourier:ColdITG2DFourier"
 
 [project.entry-points."flucs.output"]
 netcdf4 = "flucs.output:FlucsOutputNC"

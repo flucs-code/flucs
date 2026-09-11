@@ -1,0 +1,22 @@
+[dimensions]
+Lx = 6.283185307179586
+Ly = 6.283185307179586
+Lz = 6.283185307179586
+
+[parameters]
+# Uniform-advection velocity
+advection = [0.3, 0.2, -0.1]
+
+# Rotation vector
+rotation = [0.2, 0.1, 0.2]
+
+[init]
+# Smooth, deterministic three-dimensional development initial condition.
+method = "deterministic"
+
+[forcing]
+# Total free-energy injection rate for explicit negative damping.
+method = "negative_damping"
+rate = 0.02
+range_kperp = [0.5, 1.5]
+range_kz = [0.5, 1.5]

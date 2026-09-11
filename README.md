@@ -104,7 +104,7 @@ To format a specific file:
 $ ruff format <path to file>
 ```
 
-To lint the a specific file:
+To lint a specific file:
 
 ```console
 $ ruff check <path to file> [--fix]
@@ -113,3 +113,11 @@ $ ruff check <path to file> [--fix]
 The `--fix` flag is optional, and will automatically correct many issues. Note that 
 both the `format` and `check` commands will also apply recursively if run on a directory 
 (such as `flucs/src`). 
+
+[Pytest](https://docs.pytest.org/en/stable/) is used to test the project. Tests can be run by calling:
+
+```console
+pytest <path to file>
+```
+
+Simply calling `pytest` in the top-level directory will run all tests.
