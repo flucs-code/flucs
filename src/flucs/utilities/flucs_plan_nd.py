@@ -196,7 +196,8 @@ class FlucsPlanNd:
             self.fft_type,
             self.batch,
         )
-        self.plan_key = self.backend_plan_key + (
+        self.plan_key = (
+            *self.backend_plan_key,
             self.order,
             self.last_axis,
             self.last_size,
