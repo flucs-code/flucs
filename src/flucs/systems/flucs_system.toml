@@ -19,6 +19,9 @@ timing_steps = 1000
 print_time_estimate = true
 time_estimate_writes = 10
 
+# cuFFT wrapper. Supported values are 'cupy' or 'flucs'
+fft_wrapper = "flucs"
+
 [timestepping]
 method = "ab3"
 

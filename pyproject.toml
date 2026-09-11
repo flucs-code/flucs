@@ -18,8 +18,8 @@ dynamic = ["version"]
 # Must install with one of these
 [project.optional-dependencies]
 cuda11 = ["cupy-cuda11x"]
-cuda12 = ["cupy-cuda12x"]
-cuda13 = ["cupy-cuda13x"]
+cuda12 = ["cupy-cuda12x", "nvmath-python[cu12]"]
+cuda13 = ["cupy-cuda13x", "nvmath-python[cu13]"]
 
 # Developer dependencies
 # Install with `pip install . --group dev`
