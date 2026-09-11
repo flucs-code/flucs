@@ -190,6 +190,7 @@ def main():
         "--override",
         "-o",
         nargs="+",
+        action="extend",
         required=False,
         help="Additional arguments to override input-file parameters. Must be "
         "specified in TOML grouping format: e.g., to override the value "
