@@ -167,9 +167,9 @@ def test_run_flucs_orchestrates_solver(monkeypatch, tmp_path):
     assert flucs_module.FLUCS_HEADER in log_contents
 
 
-def test_main_defaults_to_run(monkeypatch, tmp_path):
+def test_main_defaults_to_run_and_combines_overrides(monkeypatch, tmp_path):
     """
-    Calling the CLI without an operation defaults to running FLUCS.
+    The CLI defaults to running and combines repeated override options.
     """
 
     # Supply the input file required by the default run mode
@@ -192,6 +192,9 @@ def test_main_defaults_to_run(monkeypatch, tmp_path):
             "--override",
             "time.dt_max",
             "0.1",
+            "-o",
+            "setup.precision",
+            "double",
         ],
     )
 
@@ -201,5 +204,55 @@ def test_main_defaults_to_run(monkeypatch, tmp_path):
     # Check that the default operation and overrides were forwarded
     run_flucs.assert_called_once_with(
         input_path,
-        ["time.dt_max", "0.1"],
+        [
+            "time.dt_max",
+            "0.1",
+            "setup.precision",
+            "double",
+        ],
     )
+
+
+@pytest.mark.gpu
+def test_main_profiles_memory(monkeypatch, tmp_path, capfd):
+    """
+    Memory profiling records a real GPU allocation and prints its report.
+    """
+
+    # Supply the input file required by the profiling run
+    input_path = tmp_path / "input.toml"
+    input_path.touch()
+
+    # Replace the full solver run with one small, persistent GPU allocation
+    profiled_arrays = []
+    run_flucs = create_autospec(flucs_module.run_flucs, spec_set=True)
+    run_flucs.side_effect = lambda *_: profiled_arrays.append(
+        flucs_module.cupy.zeros(1024)
+    )
+    monkeypatch.setattr(flucs_module, "run_flucs", run_flucs)
+
+    # Request memory profiling from the command-line entry point
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["flucs", "--io_path", str(tmp_path), "--memory-profile"],
+    )
+
+    # Empty the pool so that the hook observes a fresh device allocation
+    memory_pool = flucs_module.cupy.get_default_memory_pool()
+    memory_pool.free_all_blocks()
+    try:
+        flucs_module.main()
+    finally:
+        profiled_arrays.clear()
+        memory_pool.free_all_blocks()
+
+    # Check that the profiled operation ran and produced a nonempty report
+    run_flucs.assert_called_once_with(input_path, None)
+    output = capfd.readouterr().out
+    
+    assert "Memory report from CuPy's LineProfileHook:" in output
+    root_report = next(
+        line for line in output.splitlines() if line.startswith("_root (")
+    )
+    assert root_report != "_root (0.00B, 0.00B)"

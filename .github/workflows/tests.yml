@@ -1,4 +1,4 @@
-name: Tests
+name: tests
 
 # Does not run GPU tests -- these should be run manually on a GPU machine.
 

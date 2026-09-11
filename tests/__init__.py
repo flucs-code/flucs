@@ -1,1 +1,3 @@
-"""FLUCS test suite and test-support packages."""
+"""
+FLUCS test suite and test-support packages.
+"""
