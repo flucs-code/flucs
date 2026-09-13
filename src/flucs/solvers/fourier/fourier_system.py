@@ -2788,7 +2788,7 @@ class FourierSystem(FlucsSystem):
         # If the restart fields are the same shape as current fields, return
         target_shape = (self.number_of_fields, *self.half_tuple)
         if restart_fields.shape == target_shape:
-            return restart_fields
+            return restart_fields.astype(self.complex, copy=False)
 
         # Error if the restart fields are not compatible with the current fields
         if restart_fields.shape[0] != self.number_of_fields:
@@ -2806,7 +2806,7 @@ class FourierSystem(FlucsSystem):
         # Initialise with zeros
         initial_fields = np.zeros(
             target_shape,
-            dtype=restart_fields.dtype,
+            dtype=self.complex,
         )
 
         # Copy over the nonzero modes
