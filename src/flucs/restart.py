@@ -152,7 +152,7 @@ class FlucsRestart:
 
                 # Complex arrays stored as <base>_real and <base>_imag
                 if name.endswith("_real"):
-                    base_name = name.rstrip("_real")
+                    base_name = name.removesuffix("_real")
                     imag_name = base_name + "_imag"
 
                     v_r = ds.variables[name]
