@@ -11,7 +11,6 @@ from netCDF4 import Dataset
 
 import flucs
 from flucs.postprocessing import FlucsPostProcessing
-from tests.support.support import DOUBLE_PRECISION
 
 pytestmark = pytest.mark.core
 
@@ -21,19 +20,14 @@ def _write_input(io_path, test_system):
     Write the plugin selection needed by post-processing discovery.
     """
 
-    input_data = {
-        "setup": {
-            "solver": test_system.solver_name,
-            "system": test_system.system_name,
-        }
-    }
+    input_data = test_system.create_input_data()
     (io_path / "input.toml").write_text(
         toml.dumps(input_data),
         encoding="utf-8",
     )
 
 
-def _write_output(nc_path, test_system):
+def _write_output(nc_path, test_system, precision):
     """
     Write two output groups with one deliberately absent variable.
     """
@@ -42,19 +36,21 @@ def _write_output(nc_path, test_system):
         for group_number, times in ((0, [0.0, 0.5]), (1, [1.0])):
             group = dataset.createGroup(str(group_number))
             group.createDimension("time", None)
-            group.createVariable("time", "f8", ("time",))[:] = times
-            group.createVariable("dt", "f8", ("time",))[:] = 0.5
+            group.createVariable(
+                "time",
+                precision.netcdf_precision,
+                ("time",),
+            )[:] = times
+            group.createVariable(
+                "dt",
+                precision.netcdf_precision,
+                ("time",),
+            )[:] = 0.5
 
             input_file = group.createVariable("input_file", str)
-            input_file[...] = toml.dumps(
-                {
-                    "setup": {
-                        "solver": test_system.solver_name,
-                        "system": test_system.system_name,
-                    },
-                    "run": {"number": group_number},
-                }
-            )
+            input_data = test_system.create_input_data()
+            input_data["run"] = {"number": group_number}
+            input_file[...] = toml.dumps(input_data)
 
             diagnostic = group.createGroup("diagnostic")
             grid = diagnostic.createGroup("grid")
@@ -62,12 +58,12 @@ def _write_output(nc_path, test_system):
             grid.createDimension("component", 3)
             grid.createVariable(
                 "position",
-                "f8",
+                precision.netcdf_precision,
                 ("position",),
             )[:] = [-1.0, 1.0]
             grid.createVariable(
                 "component",
-                "f8",
+                precision.netcdf_precision,
                 ("component",),
             )[:] = np.arange(3)
 
@@ -75,7 +71,7 @@ def _write_output(nc_path, test_system):
             if group_number == 0:
                 grid.createVariable(
                     "value",
-                    "f8",
+                    precision.netcdf_precision,
                     ("time", "position", "component"),
                 )[:] = np.arange(1.0, 13.0).reshape(2, 2, 3)
 
@@ -88,12 +84,12 @@ def _write_output(nc_path, test_system):
             complex_values = real_values + 1j * (real_values + 20.0)
             grid.createVariable(
                 "state_real",
-                "f8",
+                precision.netcdf_precision,
                 ("time", "position", "component"),
             )[:] = complex_values.real
             grid.createVariable(
                 "state_imag",
-                "f8",
+                precision.netcdf_precision,
                 ("time", "position", "component"),
             )[:] = complex_values.imag
 
@@ -101,19 +97,19 @@ def _write_output(nc_path, test_system):
 def test_postprocessing_discovers_and_loads_netcdf_data(
     test_system,
     tmp_path,
+    precision,
 ):
     """
     Post-processing resolves plugins and combines numbered output groups.
     """
 
     # Build one ordinary i/o directory and use overlapping output patterns
-    tolerance = DOUBLE_PRECISION.tolerance
     io_path = tmp_path / "run"
     io_path.mkdir()
     _write_input(io_path, test_system)
 
     nc_path = io_path / "output.data.nc"
-    _write_output(nc_path, test_system)
+    _write_output(nc_path, test_system, precision)
 
     post = FlucsPostProcessing(
         io_path,
@@ -165,17 +161,20 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
                 -np.ones((1, 2, 3)),
             ]
         ),
-        rtol=tolerance,
-        atol=tolerance,
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
     )
+    assert values.dtype == np.dtype(precision.float_type)
     assert boundaries == [2]
     npt.assert_allclose(
         dimensions[0]["position"],
         [-1.0, 1.0],
-        rtol=tolerance,
-        atol=tolerance,
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
     )
+    assert dimensions[0]["position"].dtype == np.dtype(precision.float_type)
     npt.assert_array_equal(dimensions[0]["component"], np.arange(3))
+    assert dimensions[0]["component"].dtype == np.dtype(precision.float_type)
     assert dimensions[1] == {}
 
     # The complex wrapper and group selectors share the same loading rules
@@ -192,9 +191,10 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     npt.assert_allclose(
         complex_values,
         expected_real + 1j * (expected_real + 20.0),
-        rtol=tolerance,
-        atol=tolerance,
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
     )
+    assert complex_values.dtype == np.dtype(precision.complex_type)
     assert complex_boundaries == [2]
 
     latest, latest_boundaries, _ = post.load_netcdf_variable(
@@ -205,9 +205,10 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     npt.assert_allclose(
         latest,
         np.arange(1.0, 7.0).reshape(1, 2, 3),
-        rtol=tolerance,
-        atol=tolerance,
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
     )
+    assert latest.dtype == np.dtype(precision.float_type)
     assert latest_boundaries == []
 
     # Stored inputs are returned in the same selected group order

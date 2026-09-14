@@ -18,7 +18,7 @@ from flucs.output import (
     get_output_type,
 )
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION, TEST_PRECISIONS
+from tests.support.support import DOUBLE_PRECISION
 
 pytestmark = pytest.mark.core
 
@@ -233,11 +233,6 @@ def test_text_output_runs_the_diagnostic_and_writes_rows(tmp_path):
         output.format_data([1.0])
 
 
-@pytest.mark.parametrize(
-    "precision",
-    TEST_PRECISIONS,
-    ids=lambda precision: precision.name,
-)
 def test_netcdf_output_round_trip_preserves_layout_and_values(
     tmp_path,
     precision,

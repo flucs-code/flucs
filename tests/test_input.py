@@ -7,7 +7,7 @@ import toml
 
 import flucs
 from flucs.input import FlucsInput
-from tests.support.support import SINGLE_PRECISION, TEST_PRECISIONS
+from tests.support.support import SINGLE_PRECISION
 
 pytestmark = pytest.mark.core
 
@@ -30,11 +30,6 @@ def _write_input(
     input_path.write_text(toml.dumps(input_data), encoding="utf-8")
 
 
-@pytest.mark.parametrize(
-    "precision",
-    TEST_PRECISIONS,
-    ids=lambda precision: precision.name,
-)
 def test_input_resolves_defaults_and_constructs_selected_system(
     test_system,
     tmp_path,

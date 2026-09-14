@@ -8,7 +8,11 @@ import importlib
 
 import pytest
 
-from tests.support.test_systems import TEST_SYSTEMS, registered_test_systems
+from tests.support.support import (
+    TEST_PRECISIONS,
+    TEST_SYSTEMS,
+    registered_test_systems,
+)
 
 
 def pytest_addoption(parser):
@@ -42,7 +46,7 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_cmdline_main(config): # Has to be called this for pytest discovery
+def pytest_cmdline_main(config):  # Has to be called this for pytest discovery
     """
     Print concise FLUCS-specific help without collecting tests.
     """
@@ -251,6 +255,17 @@ def pytest_generate_tests(metafunc):
 def test_system(request):
     """
     Return one standalone system specification for a core test.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=TEST_PRECISIONS,
+    ids=lambda precision: precision.name,
+)
+def precision(request):
+    """
+    Return one supported numerical precision specification.
     """
     return request.param
 

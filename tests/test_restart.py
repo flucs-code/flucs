@@ -13,7 +13,7 @@ import flucs.restart as restart_module
 from flucs.input import InvalidFlucsInputFileError
 from flucs.restart import FlucsRestart
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION, TEST_PRECISIONS
+from tests.support.support import DOUBLE_PRECISION
 
 pytestmark = pytest.mark.core
 
@@ -80,11 +80,6 @@ def _read_restart_time(restart_path):
         return float(dataset.variables["current_time"][...])
 
 
-@pytest.mark.parametrize(
-    "precision",
-    TEST_PRECISIONS,
-    ids=lambda precision: precision.name,
-)
 def test_restart_round_trip_scheduling_backups_and_reconstruction(
     tmp_path,
     monkeypatch,

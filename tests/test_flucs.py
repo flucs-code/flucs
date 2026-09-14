@@ -11,7 +11,7 @@ import pytest
 import flucs
 import flucs.flucs as flucs_module
 from flucs.solvers import FlucsSolver
-from tests.support.test_systems import TEST_SYSTEMS
+from tests.support.support import TEST_SYSTEMS
 
 pytestmark = pytest.mark.core
 

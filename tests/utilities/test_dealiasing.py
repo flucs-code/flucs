@@ -12,12 +12,8 @@ from flucs.utilities.dealiasing import (
     dealiased_multiplication_rfft,
     next_smooth_number,
 )
-from tests.support.support import DOUBLE_PRECISION
 
 pytestmark = pytest.mark.core
-
-# FFT round trips accumulate more error than direct storage conversions
-DEALIASING_TOLERANCE = 128 * DOUBLE_PRECISION.tolerance
 
 
 @pytest.mark.parametrize(
@@ -58,61 +54,81 @@ def _low_mode_fields(shape):
 
 
 @pytest.mark.parametrize(
-    ("shape", "dimensions"),
+    ("backend_name", "shape", "dimensions"),
     [
-        pytest.param((5, 7, 9), {}, id="inferred-3d"),
         pytest.param(
+            "numpy",
+            (5, 7, 9),
+            {},
+            id="numpy-inferred-3d",
+        ),
+        pytest.param(
+            "numpy",
             (1, 8, 10),
             {"nz": 1, "nx": 8, "ny": 10},
-            id="explicit-2d-even",
+            id="numpy-explicit-2d-even",
+        ),
+        pytest.param(
+            "cupy",
+            (5, 7, 9),
+            {},
+            marks=pytest.mark.gpu,
+            id="cupy-inferred-3d",
         ),
     ],
 )
-def test_dealiased_multiplication_numpy(monkeypatch, shape, dimensions):
+def test_dealiased_multiplication(
+    monkeypatch,
+    precision,
+    backend_name,
+    shape,
+    dimensions,
+):
+    """
+    Dealiased products agree across supported precisions and array backends.
+    """
+
     # Create low-mode fields
     first, second = _low_mode_fields(shape)
+    first = first.astype(precision.float_type)
+    second = second.astype(precision.float_type)
 
     # Compute their Fourier components and the expected product
-    first_rfft = np.fft.rfftn(first, norm="forward")
-    second_rfft = np.fft.rfftn(second, norm="forward")
-    expected = np.fft.rfftn(first * second, norm="forward")
+    first_rfft = np.fft.rfftn(first, norm="forward").astype(
+        precision.complex_type
+    )
+    second_rfft = np.fft.rfftn(second, norm="forward").astype(
+        precision.complex_type
+    )
+    expected = np.fft.rfftn(first * second, norm="forward").astype(
+        precision.complex_type
+    )
 
-    # Patch cupy to None to ensure that the numpy implementation is used
-    monkeypatch.setattr(dealiasing, "cp", None)
+    # Select the requested backend without doing GPU work during collection
+    if backend_name == "numpy":
+        monkeypatch.setattr(dealiasing, "cp", None)
+        inputs = (first_rfft, second_rfft)
+    else:
+        inputs = (cp.asarray(first_rfft), cp.asarray(second_rfft))
+
+    # Exercise the same public multiplication contract for either backend
     result = dealiased_multiplication_rfft(
-        first_rfft,
-        second_rfft,
+        *inputs,
         **dimensions,
     )
 
-    # Check the returned backend and numerical result
-    assert isinstance(result, np.ndarray)
+    # Return to the host before applying the shared precision policy
+    if backend_name == "numpy":
+        assert isinstance(result, np.ndarray)
+        result_host = result
+    else:
+        assert isinstance(result, cp.ndarray)
+        result_host = cp.asnumpy(result)
+
+    assert result_host.dtype == np.dtype(precision.complex_type)
     npt.assert_allclose(
-        result,
+        result_host,
         expected,
-        rtol=DEALIASING_TOLERANCE,
-        atol=DEALIASING_TOLERANCE,
-    )
-
-
-@pytest.mark.gpu
-def test_dealiased_multiplication_cupy():
-    # Create low-mode fields
-    first, second = _low_mode_fields((5, 7, 9))
-
-    # Compute their Fourier components on the GPU and the expected product
-    first_gpu = cp.asarray(np.fft.rfftn(first, norm="forward"))
-    second_gpu = cp.asarray(np.fft.rfftn(second, norm="forward"))
-    expected = np.fft.rfftn(first * second, norm="forward")
-
-    # Compute using the GPU implementation
-    result = dealiased_multiplication_rfft(first_gpu, second_gpu)
-
-    # Check the returned backend and numerical result
-    assert isinstance(result, cp.ndarray)
-    npt.assert_allclose(
-        cp.asnumpy(result),
-        expected,
-        rtol=DEALIASING_TOLERANCE,
-        atol=DEALIASING_TOLERANCE,
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
     )
