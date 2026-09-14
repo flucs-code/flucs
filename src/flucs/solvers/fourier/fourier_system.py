@@ -2208,7 +2208,7 @@ class FourierSystem(FlucsSystem):
                 :, solved_grid_mask_ky0
             ]
         )
-        flucsprint(f"Inititial condition reality error: {error:.3e}")
+        flucsprint(f"Initial condition reality error: {error:.3e}")
 
     # -------------------------------------------------------------------------
     # Health checks
