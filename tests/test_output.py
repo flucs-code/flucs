@@ -18,6 +18,7 @@ from flucs.output import (
     get_output_type,
 )
 from flucs.solvers import FlucsSolverState
+from tests.support.support import DOUBLE_PRECISION, TEST_PRECISIONS
 
 pytestmark = pytest.mark.core
 
@@ -138,9 +139,16 @@ class _OutputSystem:
     Explicit core-system boundary used by the output tests.
     """
 
-    def __init__(self, tmp_path, output_type, diagnostics, available):
+    def __init__(
+        self,
+        tmp_path,
+        output_type,
+        diagnostics,
+        available,
+        float_type=DOUBLE_PRECISION.float_type,
+    ):
         self.input = _OutputInput(tmp_path, output_type, diagnostics)
-        self.float = np.float64
+        self.float = float_type
         self.solver = SimpleNamespace(state=FlucsSolverState.TIMING)
         self.current_time = 0.0
         self.current_step = 0
@@ -215,11 +223,25 @@ def test_text_output_runs_the_diagnostic_and_writes_rows(tmp_path):
         for var in diagnostic.vars.values()
     )
 
+    # A later run is separated cleanly before repeating the complete header
+    output.ready()
+    repeated_lines = output.filepath.read_text(encoding="utf-8").splitlines()
+    assert repeated_lines[3] == "-" * len(repeated_lines[0])
+    assert repeated_lines[4] == repeated_lines[0]
+
     with pytest.raises(ValueError, match=r"Data type .* is not supported"):
         output.format_data([1.0])
 
 
-def test_netcdf_output_round_trip_preserves_layout_and_values(tmp_path):
+@pytest.mark.parametrize(
+    "precision",
+    TEST_PRECISIONS,
+    ids=lambda precision: precision.name,
+)
+def test_netcdf_output_round_trip_preserves_layout_and_values(
+    tmp_path,
+    precision,
+):
     """
     NetCDF output writes nested, complex, and time-independent variables.
     """
@@ -230,9 +252,11 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(tmp_path):
         "netcdf4",
         ["array"],
         {"array": _ArrayDiagnostic},
+        float_type=precision.float_type,
     )
     output = FlucsOutput("test", system)
     assert type(output) is FlucsOutputNC
+    assert output.netcdf_precision == precision.netcdf_precision
 
     # Ready writes static metadata, while executions cache evolving arrays
     system.solver.state = FlucsSolverState.RUNNING
@@ -253,10 +277,42 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(tmp_path):
         assert group.type == "flucs_output"
         assert str(group.variables["input_file"][...]).startswith("[setup]")
 
-        npt.assert_allclose(group.variables["time"][:], [0.25, 0.5])
-        npt.assert_allclose(group.variables["dt"][:], [0.1, 0.05])
-        
-        npt.assert_allclose(grid.variables["position"][:], [-1.0, 1.0])
+        # Every numerical variable follows the selected system precision
+        numerical_variables = [
+            group.variables["time"],
+            group.variables["dt"],
+            grid.variables["position"],
+            grid.variables["component"],
+            grid.variables["real"],
+            grid.variables["complex_real"],
+            grid.variables["complex_imag"],
+            grid.variables["reference_real"],
+            grid.variables["reference_imag"],
+        ]
+        assert all(
+            variable.dtype == np.dtype(precision.float_type)
+            for variable in numerical_variables
+        )
+
+        npt.assert_allclose(
+            group.variables["time"][:],
+            [0.25, 0.5],
+            rtol=precision.tolerance,
+            atol=precision.tolerance,
+        )
+        npt.assert_allclose(
+            group.variables["dt"][:],
+            [0.1, 0.05],
+            rtol=precision.tolerance,
+            atol=precision.tolerance,
+        )
+
+        npt.assert_allclose(
+            grid.variables["position"][:],
+            [-1.0, 1.0],
+            rtol=precision.tolerance,
+            atol=precision.tolerance,
+        )
         npt.assert_array_equal(grid.variables["component"][:], np.arange(3))
         npt.assert_allclose(
             grid.variables["real"][:],
@@ -264,6 +320,8 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(tmp_path):
                 [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
                 [[2.0, 3.0, 4.0], [5.0, 6.0, 7.0]],
             ],
+            rtol=precision.tolerance,
+            atol=precision.tolerance,
         )
         expected_complex = grid.variables["real"][:] + 1j * (
             grid.variables["real"][:] + 10.0
@@ -272,11 +330,15 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(tmp_path):
             grid.variables["complex_real"][:]
             + 1j * grid.variables["complex_imag"][:],
             expected_complex,
+            rtol=precision.tolerance,
+            atol=precision.tolerance,
         )
         npt.assert_allclose(
             grid.variables["reference_real"][:]
             + 1j * grid.variables["reference_imag"][:],
             np.arange(6).reshape(2, 3) + 1.0j,
+            rtol=precision.tolerance,
+            atol=precision.tolerance,
         )
 
     assert output.time_cache == []

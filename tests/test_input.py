@@ -7,26 +7,38 @@ import toml
 
 import flucs
 from flucs.input import FlucsInput
+from tests.support.support import SINGLE_PRECISION, TEST_PRECISIONS
 
 pytestmark = pytest.mark.core
 
 
-def _write_input(input_path, test_system, updates=None):
+def _write_input(
+    input_path,
+    test_system,
+    precision=SINGLE_PRECISION,
+    updates=None,
+):
     """
     Write the smallest useful input for a standalone test system.
     """
 
     input_data = test_system.create_input_data()
-    input_data["setup"]["precision"] = "single"
+    input_data["setup"]["precision"] = precision.name
     if updates:
         input_data.update(updates)
 
     input_path.write_text(toml.dumps(input_data), encoding="utf-8")
 
 
+@pytest.mark.parametrize(
+    "precision",
+    TEST_PRECISIONS,
+    ids=lambda precision: precision.name,
+)
 def test_input_resolves_defaults_and_constructs_selected_system(
     test_system,
     tmp_path,
+    precision,
 ):
     """
     A resolved input combines defaults, user values, and CLI overrides.
@@ -34,7 +46,7 @@ def test_input_resolves_defaults_and_constructs_selected_system(
 
     # Start with a small input and override values inherited from two levels
     input_path = tmp_path / "input.toml"
-    _write_input(input_path, test_system)
+    _write_input(input_path, test_system, precision=precision)
     flucs_input = FlucsInput(
         input_path,
         override=[
@@ -48,7 +60,7 @@ def test_input_resolves_defaults_and_constructs_selected_system(
     # User values, defaults, and overrides all share the dotted-key interface
     assert flucs_input.input_path == input_path
     assert flucs_input.io_path == tmp_path
-    assert flucs_input["setup.precision"] == "single"
+    assert flucs_input["setup.precision"] == precision.name
     assert flucs_input["time.dt_max"] == 0.125
     assert flucs_input["setup.timing"] is True
 
@@ -66,6 +78,9 @@ def test_input_resolves_defaults_and_constructs_selected_system(
     assert solver.system is system
     assert system.input is flucs_input
     assert system.solver is solver
+    assert system.float is precision.float_type
+    assert system.complex is precision.complex_type
+    assert system.tolerance == precision.tolerance
 
     # Once resolved, the input is deliberately read-only
     with pytest.raises(RuntimeError, match="is now read-only"):

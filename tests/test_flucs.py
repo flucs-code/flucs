@@ -31,13 +31,13 @@ def test_all_test_systems_are_registered_for_test_session(system_spec):
     )
 
 
-def test_solver_lookup_and_unknown_plugins():
+def test_solver_lookup_and_unknown_plugins(test_system):
     """
     Registered plugins can be loaded and missing plugins give useful errors.
     """
 
-    # Load the solver included with FLUCS
-    solver_type = flucs.get_solver_type("FourierSolver")
+    # Load the solver associated with each available standalone test system
+    solver_type = flucs.get_solver_type(test_system.solver_name)
     assert issubclass(solver_type, FlucsSolver)
 
     # Check errors for both kinds of plugin
@@ -250,7 +250,7 @@ def test_main_profiles_memory(monkeypatch, tmp_path, capfd):
     # Check that the profiled operation ran and produced a nonempty report
     run_flucs.assert_called_once_with(input_path, None)
     output = capfd.readouterr().out
-    
+
     assert "Memory report from CuPy's LineProfileHook:" in output
     root_report = next(
         line for line in output.splitlines() if line.startswith("_root (")

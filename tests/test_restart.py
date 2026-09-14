@@ -13,6 +13,7 @@ import flucs.restart as restart_module
 from flucs.input import InvalidFlucsInputFileError
 from flucs.restart import FlucsRestart
 from flucs.solvers import FlucsSolverState
+from tests.support.support import DOUBLE_PRECISION, TEST_PRECISIONS
 
 pytestmark = pytest.mark.core
 
@@ -47,9 +48,14 @@ class _RestartSystem:
     Explicit system boundary used for restart round trips.
     """
 
-    def __init__(self, io_path, **input_updates):
+    def __init__(
+        self,
+        io_path,
+        float_type=DOUBLE_PRECISION.float_type,
+        **input_updates,
+    ):
         self.input = _RestartInput(io_path, **input_updates)
-        self.float = np.float64
+        self.float = float_type
         self.solver = SimpleNamespace(state=FlucsSolverState.RUNNING)
         self.current_time = 1.0
         self.current_dt = 0.125
@@ -74,9 +80,15 @@ def _read_restart_time(restart_path):
         return float(dataset.variables["current_time"][...])
 
 
+@pytest.mark.parametrize(
+    "precision",
+    TEST_PRECISIONS,
+    ids=lambda precision: precision.name,
+)
 def test_restart_round_trip_scheduling_backups_and_reconstruction(
     tmp_path,
     monkeypatch,
+    precision,
 ):
     """
     Restart writes rotate safely and can restore state and input metadata.
@@ -89,20 +101,39 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
         SimpleNamespace(ndarray=_GpuArray),
     )
 
+    # An optional default restart may be absent when beginning a fresh run
+    optional_system = _RestartSystem(
+        tmp_path,
+        float_type=precision.float_type,
+        **{
+            "restart.restart_if_exists": True,
+            "restart.write_restart_file": False,
+        },
+    )
+    optional_restart = FlucsRestart(optional_system)
+    assert optional_restart.initial_path is None
+    assert optional_restart.data is None
+
     # Write a mixture of named, implicit, real, and complex restart arrays
-    system = _RestartSystem(tmp_path)
+    system = _RestartSystem(tmp_path, float_type=precision.float_type)
     system.restart_data = {
         "real_data": {
-            "data": np.array([1.0, 2.0]),
+            "data": np.array([1.0, 2.0], dtype=precision.float_type),
             "dimension_names": ("field",),
         },
         "complex_state": {
-            "data": np.array([1.0 + 2.0j, 3.0 + 4.0j]),
+            "data": np.array(
+                [1.0 + 2.0j, 3.0 + 4.0j],
+                dtype=precision.complex_type,
+            ),
             "dimension_names": ("state_component",),
         },
-        "implicit": {"data": np.arange(6).reshape(2, 3)},
+        "implicit": {
+            "data": np.arange(6, dtype=precision.float_type).reshape(2, 3)
+        },
     }
     restart = FlucsRestart(system)
+    assert restart.netcdf_precision == precision.netcdf_precision
 
     # Even a forced write is suppressed outside the production solver state
     system.solver.state = FlucsSolverState.TIMING
@@ -118,7 +149,10 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
 
     system.current_time = 2.0
     system.current_dt = 0.0625
-    system.restart_data["real_data"]["data"] = np.array([2.0, 3.0])
+    system.restart_data["real_data"]["data"] = np.array(
+        [2.0, 3.0],
+        dtype=precision.float_type,
+    )
 
     restart.write_restart()
     assert _read_restart_time(tmp_path / "restart.nc") == 1.0
@@ -127,7 +161,10 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
 
     # A forced third write leaves the two preceding states in newest-first order
     system.current_time = 3.0
-    system.restart_data["real_data"]["data"] = np.array([3.0, 4.0])
+    system.restart_data["real_data"]["data"] = np.array(
+        [3.0, 4.0],
+        dtype=precision.float_type,
+    )
     restart.write_restart(force=True)
 
     assert _read_restart_time(tmp_path / "restart.nc") == 3.0
@@ -135,11 +172,27 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     assert _read_restart_time(tmp_path / "restart.backup.01.nc") == 1.0
     assert not (tmp_path / "restart.temp.nc").exists()
 
-    # Loading reconstructs complex values, dimensions, and continuation times
+    # The on-disk scalar and array data all use the selected precision
+    with Dataset(tmp_path / "restart.nc", "r", format="NETCDF4") as dataset:
+        numerical_variables = [
+            dataset.variables["current_time"],
+            dataset.variables["current_dt"],
+            dataset.variables["real_data"],
+            dataset.variables["complex_state_real"],
+            dataset.variables["complex_state_imag"],
+            dataset.variables["implicit"],
+        ]
+        assert all(
+            variable.dtype == np.dtype(precision.float_type)
+            for variable in numerical_variables
+        )
+
+    # The default restart reconstructs values, dimensions, and continuation time
     loaded_system = _RestartSystem(
         tmp_path,
+        float_type=precision.float_type,
         **{
-            "restart.restart_from": "restart.nc",
+            "restart.restart_if_exists": True,
             "restart.write_restart_file": False,
         },
     )
@@ -149,11 +202,29 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     assert loaded_system.init_time == 3.0
     assert loaded_system.init_dt == 0.0625
     assert loaded_system.final_time == 7.0
+    assert type(loaded_system.init_time) is precision.float_type
+    assert type(loaded_system.init_dt) is precision.float_type
 
-    npt.assert_allclose(loaded.data["real_data"]["data"], [3.0, 4.0])
+    assert loaded.data["real_data"]["data"].dtype == np.dtype(
+        precision.float_type
+    )
+    assert loaded.data["complex_state"]["data"].dtype == np.dtype(
+        precision.complex_type
+    )
+    assert loaded.data["implicit"]["data"].dtype == np.dtype(
+        precision.float_type
+    )
+    npt.assert_allclose(
+        loaded.data["real_data"]["data"],
+        [3.0, 4.0],
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
+    )
     npt.assert_allclose(
         loaded.data["complex_state"]["data"],
         [1.0 + 2.0j, 3.0 + 4.0j],
+        rtol=precision.tolerance,
+        atol=precision.tolerance,
     )
     assert loaded.data["complex_state"]["dimension_names"] == (
         "state_component",
@@ -170,6 +241,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     # Reset-time restarts retain the saved timestep but begin a new time window
     reset_system = _RestartSystem(
         tmp_path,
+        float_type=precision.float_type,
         **{
             "restart.restart_from": "restart.nc",
             "restart.reset_time": True,
@@ -184,7 +256,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     # The embedded resolved input can seed a fresh i/o directory
     reconstructed_path = tmp_path / "reconstructed"
     reconstructed_path.mkdir()
-    
+
     FlucsRestart.reconstruct_input_from_restart(
         tmp_path / "restart.nc",
         reconstructed_path,
@@ -192,6 +264,41 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     assert (reconstructed_path / "input.toml").read_text(
         encoding="utf-8"
     ) == str(system.input)
+
+
+@pytest.mark.parametrize(
+    ("backup_count", "expected_backup_times"),
+    [
+        pytest.param(0, [], id="no-backups"),
+        pytest.param(1, [1.0], id="one-backup"),
+    ],
+)
+def test_restart_applies_each_backup_policy(
+    tmp_path,
+    backup_count,
+    expected_backup_times,
+):
+    """
+    Zero and one-backup policies replace or retain the preceding restart.
+    """
+
+    # Write two generations through the same public restart workflow
+    system = _RestartSystem(
+        tmp_path,
+        **{"restart.backup_count": backup_count},
+    )
+    restart = FlucsRestart(system)
+    restart.write_restart(force=True)
+    system.current_time = 2.0
+    restart.write_restart(force=True)
+
+    # The current file survives while only the requested history is retained
+    assert _read_restart_time(tmp_path / "restart.nc") == 2.0
+    assert not (tmp_path / "restart.temp.nc").exists()
+    backup_paths = sorted(tmp_path.glob("restart.backup.*.nc"))
+    assert [
+        _read_restart_time(backup_path) for backup_path in backup_paths
+    ] == expected_backup_times
 
 
 def test_restart_rejects_ambiguous_or_unsafe_configuration(tmp_path):
@@ -224,16 +331,17 @@ def test_restart_rejects_ambiguous_or_unsafe_configuration(tmp_path):
     with pytest.raises(InvalidFlucsInputFileError, match="cannot be found"):
         FlucsRestart(missing)
 
-    # Backup counts are bounded before paths are rotated
-    invalid_backups = _RestartSystem(
-        tmp_path,
-        **{"restart.backup_count": 101},
-    )
-    with pytest.raises(
-        InvalidFlucsInputFileError,
-        match="backup_count must be an integer between 0 and 100",
-    ):
-        FlucsRestart(invalid_backups)
+    # Both sides of the permitted backup-count interval are enforced
+    for backup_count in (-1, 101):
+        invalid_backups = _RestartSystem(
+            tmp_path,
+            **{"restart.backup_count": backup_count},
+        )
+        with pytest.raises(
+            InvalidFlucsInputFileError,
+            match="backup_count must be an integer between 0 and 100",
+        ):
+            FlucsRestart(invalid_backups)
 
     # Existing state is never overwritten without an explicit restart request
     restart_path.touch()

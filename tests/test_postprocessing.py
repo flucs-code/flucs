@@ -11,6 +11,7 @@ from netCDF4 import Dataset
 
 import flucs
 from flucs.postprocessing import FlucsPostProcessing
+from tests.support.support import DOUBLE_PRECISION
 
 pytestmark = pytest.mark.core
 
@@ -106,6 +107,7 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     """
 
     # Build one ordinary i/o directory and use overlapping output patterns
+    tolerance = DOUBLE_PRECISION.tolerance
     io_path = tmp_path / "run"
     io_path.mkdir()
     _write_input(io_path, test_system)
@@ -163,9 +165,16 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
                 -np.ones((1, 2, 3)),
             ]
         ),
+        rtol=tolerance,
+        atol=tolerance,
     )
     assert boundaries == [2]
-    npt.assert_allclose(dimensions[0]["position"], [-1.0, 1.0])
+    npt.assert_allclose(
+        dimensions[0]["position"],
+        [-1.0, 1.0],
+        rtol=tolerance,
+        atol=tolerance,
+    )
     npt.assert_array_equal(dimensions[0]["component"], np.arange(3))
     assert dimensions[1] == {}
 
@@ -183,6 +192,8 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     npt.assert_allclose(
         complex_values,
         expected_real + 1j * (expected_real + 20.0),
+        rtol=tolerance,
+        atol=tolerance,
     )
     assert complex_boundaries == [2]
 
@@ -191,7 +202,12 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
         "diagnostic/grid/state_real",
         groups=-1,
     )
-    npt.assert_allclose(latest, np.arange(1.0, 7.0).reshape(1, 2, 3))
+    npt.assert_allclose(
+        latest,
+        np.arange(1.0, 7.0).reshape(1, 2, 3),
+        rtol=tolerance,
+        atol=tolerance,
+    )
     assert latest_boundaries == []
 
     # Stored inputs are returned in the same selected group order
@@ -227,7 +243,7 @@ def test_postprocessing_saves_figures_and_parses_common_arguments(
         save_kwargs={"close": True, "dpi": 40},
     )
     save_path = save_directory / "result.png"
-    
+
     assert save_path.is_file()
     assert not plt.fignum_exists(figure.number)
 

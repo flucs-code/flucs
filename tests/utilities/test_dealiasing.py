@@ -12,8 +12,12 @@ from flucs.utilities.dealiasing import (
     dealiased_multiplication_rfft,
     next_smooth_number,
 )
+from tests.support.support import DOUBLE_PRECISION
 
 pytestmark = pytest.mark.core
+
+# FFT round trips accumulate more error than direct storage conversions
+DEALIASING_TOLERANCE = 128 * DOUBLE_PRECISION.tolerance
 
 
 @pytest.mark.parametrize(
@@ -83,7 +87,12 @@ def test_dealiased_multiplication_numpy(monkeypatch, shape, dimensions):
 
     # Check the returned backend and numerical result
     assert isinstance(result, np.ndarray)
-    npt.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+    npt.assert_allclose(
+        result,
+        expected,
+        rtol=DEALIASING_TOLERANCE,
+        atol=DEALIASING_TOLERANCE,
+    )
 
 
 @pytest.mark.gpu
@@ -104,6 +113,6 @@ def test_dealiased_multiplication_cupy():
     npt.assert_allclose(
         cp.asnumpy(result),
         expected,
-        rtol=1e-12,
-        atol=1e-12,
+        rtol=DEALIASING_TOLERANCE,
+        atol=DEALIASING_TOLERANCE,
     )
