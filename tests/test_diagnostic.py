@@ -30,8 +30,8 @@ class _ExampleDiagnostic(FlucsDiagnostic):
         self.add_var(
             FlucsDiagnosticVariable(
                 name="values",
-                shape=("mode",),
-                dimensions={"mode": np.arange(2)},
+                shape=("sample",),
+                dimensions={"sample": np.arange(2)},
                 is_complex=False,
             )
         )
@@ -91,8 +91,8 @@ def test_diagnostic_initialisation_and_options():
     values = diagnostic.vars["values"]
     reference = diagnostic.vars["reference"]
 
-    assert values.shape == ("mode",)
-    npt.assert_array_equal(values.dimensions["mode"], np.arange(2))
+    assert values.shape == ("sample",)
+    npt.assert_array_equal(values.dimensions["sample"], np.arange(2))
     assert values.is_complex is False
     assert values.is_time_dependent is True
 
@@ -133,7 +133,7 @@ def test_diagnostic_variable_cache_lifecycle():
     # Each variable owns its cache and receives data through the normal hooks
     assert diagnostic.vars["reference"].data_cache == [1.0 + 2.0j]
     assert len(diagnostic.vars["values"].data_cache) == 2
-    
+
     npt.assert_array_equal(
         diagnostic.vars["values"].data_cache[0],
         np.array([2.0, 1.5]),

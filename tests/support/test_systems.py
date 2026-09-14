@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import importlib
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass
 from importlib.metadata import EntryPoints
 from types import SimpleNamespace
+from typing import Any
 
 __test__ = False
 
@@ -18,10 +20,25 @@ class TestSystemSpec:
     """
     A standalone system used to exercise one solver.
     """
+
     # Standard attributes
     solver_name: str
     system_name: str
     system_path: str
+    input_data: dict[str, Any]
+
+    def create_input_data(self) -> dict[str, Any]:
+        """
+        Return an independent, minimally valid input for this test system.
+        """
+        input_data = deepcopy(self.input_data)
+        input_data.setdefault("setup", {}).update(
+            {
+                "solver": self.solver_name,
+                "system": self.system_name,
+            }
+        )
+        return input_data
 
     @property
     def system_type(self) -> type:
@@ -32,14 +49,23 @@ class TestSystemSpec:
         module = importlib.import_module(module_name)
         return getattr(module, class_name)
 
+
 # Definitive list of test systems for the test suite
 TEST_SYSTEMS = {
     "FourierSolver": TestSystemSpec(
         solver_name="FourierSolver",
         system_name="TestFourierSystem",
         system_path="tests.support.fourier:TestFourierSystem",
+        input_data={
+            "dimensions": {
+                "nx": 8,
+                "ny": 10,
+                "nz": 6,
+            }
+        },
     ),
 }
+
 
 @dataclass(frozen=True)
 class _TestSystemEntryPoint:
@@ -61,6 +87,7 @@ class _TestSystemEntryPoint:
             getattr(self, key) == value for key, value in parameters.items()
         )
 
+
 def _test_system_entry_points() -> tuple[_TestSystemEntryPoint, ...]:
     """
     Construct entry points with enough metadata for normal CLI listing.
@@ -76,6 +103,7 @@ def _test_system_entry_points() -> tuple[_TestSystemEntryPoint, ...]:
         entries.append(entry)
 
     return tuple(entries)
+
 
 @contextmanager
 def registered_test_systems():
