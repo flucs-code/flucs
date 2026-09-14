@@ -11,6 +11,7 @@
     #define flucs_fmax(x, y) fmax(x, y)
     #define flucs_sin(x) sin(x)
     #define flucs_cos(x) cos(x)
+    #define flucs_exp(x) exp(x) 
     #define flucs_normal2(x) curand_normal2_double(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV double2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)2.2204460492503131e-16)
@@ -22,6 +23,7 @@
     #define flucs_fmax(x, y) fmaxf(x, y)
     #define flucs_sin(x) sinf(x)
     #define flucs_cos(x) cosf(x)
+    #define flucs_exp(x) expf(x) 
     #define flucs_normal2(x) curand_normal2(x)
     #define FLUCS_COMPLEX_FLOAT_EQUIV float2
     #define FLUCS_EPSILON ((FLUCS_FLOAT)1.1920928955078125e-7f)
@@ -169,7 +171,7 @@ void add_hyperdissipation(
     const FLUCS_FLOAT hyperdissipation = (
         get_hyperdissipation(index, adaptive_rate)
     );
-    const FLUCS_FLOAT factor = exp(-propagator_dt * hyperdissipation);
+    const FLUCS_FLOAT factor = flucs_exp(-propagator_dt * hyperdissipation);
 
     #pragma unroll
     for (int i = 0; i < NUMBER_OF_FIELDS; i++) {
