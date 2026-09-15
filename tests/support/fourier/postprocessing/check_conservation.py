@@ -14,13 +14,14 @@ def check_conservation(post, args):
 
     # Iterate over output files
     for index, nc_path in enumerate(nc_paths):
-
         # Separate figure for each output
         fig, axs = plt.subplots(3, 1, layout="constrained", sharex=True)
         ax_energy, ax_balance, ax_error = axs
 
         # Set figure title
-        figure_name = f"check_conservation_energy_{pl.Path(nc_path).parent.name}"
+        figure_name = (
+            f"check_conservation_energy_{pl.Path(nc_path).parent.name}"
+        )
         fig.canvas.manager.set_window_title(figure_name)
 
         # Read data from netCDF file
@@ -36,9 +37,7 @@ def check_conservation(post, args):
             time[boundary] = np.nan
 
         # Load data
-        dt = post.load_netcdf_variable(
-            nc_path, "dt", groups=args.groups
-        )[0]
+        dt = post.load_netcdf_variable(nc_path, "dt", groups=args.groups)[0]
         free_energy = post.load_netcdf_variable(
             nc_path, "free_energy/W", groups=args.groups
         )[0]
@@ -124,9 +123,7 @@ def check_conservation(post, args):
 
         # Compute and plot measures of the error in the free-energy balance
         integrand = (
-            0.5
-            * (dWdt_error[1:] + dWdt_error[:-1])
-            * np.diff(time)
+            0.5 * (dWdt_error[1:] + dWdt_error[:-1]) * np.diff(time)
         )  # Manual trapezoidal rule
         normalisation = np.abs(
             np.maximum(free_energy[0], np.average(free_energy[1:]))
@@ -137,7 +134,7 @@ def check_conservation(post, args):
         accumulated_error[1:] = np.nancumsum(integrand) / normalisation
 
         instantaneous_error = dWdt_error / (
-            + np.abs(dWdt)
+            +np.abs(dWdt)
             + np.abs(dWdt_nonlinear)
             + np.abs(injection)
             + np.abs(dissipation)
@@ -191,7 +188,6 @@ def check_conservation(post, args):
 
 
 if __name__ == "__main__":
-
     # Setup parser
     parser = argparse.ArgumentParser(
         parents=[FlucsPostProcessing.parser()],

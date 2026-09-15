@@ -242,13 +242,11 @@ class FreeEnergyDiag1D(FlucsDiagnostic):
                 ),
                 complex_output=False,
             )
-            self.get_dWdt_hyperdissipation[spectrum] = (
-                reductions.get_reduction(
-                    reduction_output=spectrum,
-                    functor="FreeEnergyHyperdissipation_Functor",
-                    input_args="const FLUCS_COMPLEX*,FLUCS_FLOAT",
-                    complex_output=False,
-                )
+            self.get_dWdt_hyperdissipation[spectrum] = reductions.get_reduction(
+                reduction_output=spectrum,
+                functor="FreeEnergyHyperdissipation_Functor",
+                input_args="const FLUCS_COMPLEX*,FLUCS_FLOAT",
+                complex_output=False,
             )
 
             # Save contributions if required
@@ -284,7 +282,6 @@ class FreeEnergyDiag1D(FlucsDiagnostic):
 
         # Iterate over spectra to save
         for spectrum in self.get_W:
-
             # Free energy
             W = self.get_W[spectrum](fields).get()
 

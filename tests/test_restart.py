@@ -328,10 +328,9 @@ def test_runtime_restart_restores_the_completed_test_system(
                 real_name = f"{name}{system.netcdf_real_suffix}"
                 imag_name = f"{name}{system.netcdf_imag_suffix}"
                 expected_variable_names.update((real_name, imag_name))
-                stored_data = (
-                    np.asarray(dataset.variables[real_name][:])
-                    + 1j * np.asarray(dataset.variables[imag_name][:])
-                )
+                stored_data = np.asarray(
+                    dataset.variables[real_name][:]
+                ) + 1j * np.asarray(dataset.variables[imag_name][:])
                 stored_variables = (
                     dataset.variables[real_name],
                     dataset.variables[imag_name],
@@ -383,7 +382,7 @@ def test_runtime_restart_restores_the_completed_test_system(
 
     assert loaded_restart.initial_path == (reload_path / "restart.nc").resolve()
     assert loaded_restart.data is not None
-    
+
     npt.assert_allclose(
         fresh_system.init_time,
         system.current_time,

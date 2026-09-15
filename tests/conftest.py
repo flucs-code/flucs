@@ -216,9 +216,7 @@ def _resolve_runtime_precisions(node):
         )
 
     precision_name = marker.args[0]
-    precisions = {
-        precision.name: precision for precision in TEST_PRECISIONS
-    }
+    precisions = {precision.name: precision for precision in TEST_PRECISIONS}
     if precision_name not in precisions:
         available = ", ".join(precisions)
         raise pytest.UsageError(
@@ -351,7 +349,7 @@ def runtime_run(request, tmp_path_factory, _register_test_systems):
     io_path = tmp_path_factory.mktemp(path_name)
     input_path = io_path / "input.toml"
 
-    write_runtime_input(input_path, test_system,precision=precision)
+    write_runtime_input(input_path, test_system, precision=precision)
 
     # Execute the normal public runtime exactly once for this parameter pair
     flucs_input, solver = run_flucs(input_path)

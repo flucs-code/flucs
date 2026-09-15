@@ -1,5 +1,5 @@
 r"""
-Three-field system for testing FourierSolver. 
+Three-field system for testing FourierSolver.
 
 The system evolves:
 
@@ -66,7 +66,7 @@ class TestFourierSystem(FourierSystem):
     # Supported diagnostics
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
         FreeEnergyDiag,
-        FreeEnergyDiag1D
+        FreeEnergyDiag1D,
     }
 
     # Supported forcing
@@ -145,7 +145,6 @@ class TestFourierSystem(FourierSystem):
 
         # Read and validate vector parameters
         for parameter in ("advection", "rotation"):
-
             # Try to parse as an array
             try:
                 value = np.asarray(
@@ -162,7 +161,7 @@ class TestFourierSystem(FourierSystem):
                     f"parameters.{parameter} must contain three finite real "
                     f"numbers."
                 )
-            
+
             # Assign value
             self.__setattr__(parameter, value)
 
@@ -178,9 +177,7 @@ class TestFourierSystem(FourierSystem):
 
         # Handle known initialisation methods
         match self.input["init.method"]:
-
             case "deterministic":
-
                 # Create realspace meshgrid
                 x = 2.0 * np.pi * np.arange(self.nx) / self.nx
                 y = 2.0 * np.pi * np.arange(self.ny) / self.ny
@@ -270,12 +267,12 @@ class TestFourierSystem(FourierSystem):
 
         # Rotation in field order (uz, ux, uy)
         omega_z, omega_x, omega_y = self.rotation
-        linear_matrix[0, 1] = - omega_y
-        linear_matrix[0, 2] = + omega_x
-        linear_matrix[1, 0] = + omega_y
-        linear_matrix[1, 2] = - omega_z
-        linear_matrix[2, 0] = - omega_x
-        linear_matrix[2, 1] = + omega_z
+        linear_matrix[0, 1] = -omega_y
+        linear_matrix[0, 2] = +omega_x
+        linear_matrix[1, 0] = +omega_y
+        linear_matrix[1, 2] = -omega_z
+        linear_matrix[2, 0] = -omega_x
+        linear_matrix[2, 1] = +omega_z
 
         return linear_matrix
 
@@ -284,7 +281,7 @@ class TestFourierSystem(FourierSystem):
         Return the analytical dispersion relation on the Fourier grid.
         """
 
-        # Frequencies 
+        # Frequencies
         advection_frequency = self._compute_advection_frequency()
         rotation_frequency = np.linalg.norm(self.rotation)
 
@@ -307,7 +304,7 @@ class TestFourierSystem(FourierSystem):
         kz, kx, ky = self.get_broadcast_wavenumbers()
 
         return (
-            + self.advection[0] * kz
+            +self.advection[0] * kz
             + self.advection[1] * kx
             + self.advection[2] * ky
         )

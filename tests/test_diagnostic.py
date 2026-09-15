@@ -251,9 +251,10 @@ def test_runtime_diagnostics_follow_their_declared_contract(runtime_run):
                         )
 
                         # Coordinate variables match the diagnostic declaration
-                        for name, expected_values in (
-                            variable.dimensions.items()
-                        ):
+                        for (
+                            name,
+                            expected_values,
+                        ) in variable.dimensions.items():
                             coordinate = get_netcdf_variable(
                                 diagnostic_group,
                                 name,

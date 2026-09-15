@@ -82,7 +82,7 @@ def test_system_coordinates_diagnostics_output_and_interruption(
     # A forced pass fills only data not already due on this exact step
     system.current_step = 3
     system.execute_diagnostics(force=True)
-    
+
     assert fast_output.execute_steps == [0, 2, 3]
     assert slow_output.execute_steps == [1]
 
@@ -176,12 +176,11 @@ def test_system_reuses_temporary_arrays_and_reports_memory(
     assert device_usage["id"] == initial_device
     assert device_usage["global"]["total"] > 0
     assert device_usage["global"]["used"] == (
-        device_usage["global"]["total"]
-        - device_usage["global"]["free"]
+        device_usage["global"]["total"] - device_usage["global"]["free"]
     )
     assert device_usage["cupy"]["used"] <= device_usage["cupy"]["total"]
     assert device_usage["cupy"]["free"] == (
         device_usage["cupy"]["total"] - device_usage["cupy"]["used"]
     )
-    
+
     assert cp.cuda.Device().id == initial_device

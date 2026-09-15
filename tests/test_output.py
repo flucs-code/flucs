@@ -122,9 +122,7 @@ def _netcdf_variable_paths(group, prefix=""):
     """
     Return all variable paths beneath a NetCDF group.
     """
-    paths = {
-        f"{prefix}{name}" for name in group.variables
-    }
+    paths = {f"{prefix}{name}" for name in group.variables}
     for name, subgroup in group.groups.items():
         paths.update(
             _netcdf_variable_paths(
@@ -455,7 +453,7 @@ def test_runtime_outputs_preserve_configured_data(runtime_run):
                 # Time coordinates are nontrivial, finite, and fully written
                 times = np.asarray(group.variables["time"][:])
                 timesteps = np.asarray(group.variables["dt"][:])
-                
+
                 assert times.size > 1
                 assert times.shape == timesteps.shape
                 assert np.all(np.diff(times) > 0.0)
