@@ -7,27 +7,9 @@ import toml
 
 import flucs
 from flucs.input import FlucsInput
-from tests.support.support import SINGLE_PRECISION
+from tests.support.support import write_test_input
 
 pytestmark = pytest.mark.core
-
-
-def _write_input(
-    input_path,
-    test_system,
-    precision=SINGLE_PRECISION,
-    updates=None,
-):
-    """
-    Write the smallest useful input for a standalone test system.
-    """
-
-    input_data = test_system.create_input_data()
-    input_data["setup"]["precision"] = precision.name
-    if updates:
-        input_data.update(updates)
-
-    input_path.write_text(toml.dumps(input_data), encoding="utf-8")
 
 
 def test_input_resolves_defaults_and_constructs_selected_system(
@@ -41,7 +23,7 @@ def test_input_resolves_defaults_and_constructs_selected_system(
 
     # Start with a small input and override values inherited from two levels
     input_path = tmp_path / "input.toml"
-    _write_input(input_path, test_system, precision=precision)
+    write_test_input(input_path, test_system, precision=precision)
     flucs_input = FlucsInput(
         input_path,
         override=[
@@ -75,6 +57,7 @@ def test_input_resolves_defaults_and_constructs_selected_system(
     assert system.solver is solver
     assert system.float is precision.float_type
     assert system.complex is precision.complex_type
+    assert system.netcdf_precision == precision.netcdf_precision
     assert system.tolerance == precision.tolerance
 
     # Once resolved, the input is deliberately read-only
@@ -128,7 +111,7 @@ def test_input_rejects_invalid_parameters(
 
     # Keep every failure behind the same public file-loading boundary
     input_path = tmp_path / "input.toml"
-    _write_input(input_path, test_system, updates=updates)
+    write_test_input(input_path, test_system, updates=updates)
 
     with pytest.raises(error, match=message):
         FlucsInput(input_path, override=override)

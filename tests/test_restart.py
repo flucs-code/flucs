@@ -13,19 +13,26 @@ import flucs.restart as restart_module
 from flucs.input import InvalidFlucsInputFileError
 from flucs.restart import FlucsRestart
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION
+from tests.support.support import DOUBLE_PRECISION, MappingInputStub
 
 pytestmark = pytest.mark.core
 
 
-class _RestartInput:
+class _RestartSystem:
     """
-    Minimal input interface for configuring a restart manager.
+    Explicit system boundary used for restart round trips.
     """
 
-    def __init__(self, io_path, **updates):
-        self.io_path = io_path
-        self.values = {
+    netcdf_real_suffix = "_real"
+    netcdf_imag_suffix = "_imag"
+
+    def __init__(
+        self,
+        io_path,
+        precision=DOUBLE_PRECISION,
+        **input_updates,
+    ):
+        input_values = {
             "restart.restart_if_exists": False,
             "restart.restart_from": "",
             "restart.reset_time": False,
@@ -34,28 +41,10 @@ class _RestartInput:
             "restart.backup_count": 2,
             "time.tfinal": 4.0,
         }
-        self.values.update(updates)
-
-    def __getitem__(self, key):
-        return self.values[key]
-
-    def __str__(self):
-        return "[setup]\nsolver = 'ExampleSolver'\n"
-
-
-class _RestartSystem:
-    """
-    Explicit system boundary used for restart round trips.
-    """
-
-    def __init__(
-        self,
-        io_path,
-        float_type=DOUBLE_PRECISION.float_type,
-        **input_updates,
-    ):
-        self.input = _RestartInput(io_path, **input_updates)
-        self.float = float_type
+        input_values.update(input_updates)
+        self.input = MappingInputStub(io_path, input_values)
+        self.float = precision.float_type
+        self.netcdf_precision = precision.netcdf_precision
         self.solver = SimpleNamespace(state=FlucsSolverState.RUNNING)
         self.current_time = 1.0
         self.current_dt = 0.125
@@ -99,7 +88,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     # An optional default restart may be absent when beginning a fresh run
     optional_system = _RestartSystem(
         tmp_path,
-        float_type=precision.float_type,
+        precision=precision,
         **{
             "restart.restart_if_exists": True,
             "restart.write_restart_file": False,
@@ -110,9 +99,9 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     assert optional_restart.data is None
 
     # Write a mixture of named, implicit, real, and complex restart arrays
-    system = _RestartSystem(tmp_path, float_type=precision.float_type)
+    system = _RestartSystem(tmp_path, precision=precision)
     system.restart_data = {
-        "real_data": {
+        "shear_real": {
             "data": np.array([1.0, 2.0], dtype=precision.float_type),
             "dimension_names": ("field",),
         },
@@ -144,7 +133,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
 
     system.current_time = 2.0
     system.current_dt = 0.0625
-    system.restart_data["real_data"]["data"] = np.array(
+    system.restart_data["shear_real"]["data"] = np.array(
         [2.0, 3.0],
         dtype=precision.float_type,
     )
@@ -156,7 +145,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
 
     # A forced third write leaves the two preceding states in newest-first order
     system.current_time = 3.0
-    system.restart_data["real_data"]["data"] = np.array(
+    system.restart_data["shear_real"]["data"] = np.array(
         [3.0, 4.0],
         dtype=precision.float_type,
     )
@@ -172,7 +161,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
         numerical_variables = [
             dataset.variables["current_time"],
             dataset.variables["current_dt"],
-            dataset.variables["real_data"],
+            dataset.variables["shear_real"],
             dataset.variables["complex_state_real"],
             dataset.variables["complex_state_imag"],
             dataset.variables["implicit"],
@@ -185,7 +174,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     # The default restart reconstructs values, dimensions, and continuation time
     loaded_system = _RestartSystem(
         tmp_path,
-        float_type=precision.float_type,
+        precision=precision,
         **{
             "restart.restart_if_exists": True,
             "restart.write_restart_file": False,
@@ -200,7 +189,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     assert type(loaded_system.init_time) is precision.float_type
     assert type(loaded_system.init_dt) is precision.float_type
 
-    assert loaded.data["real_data"]["data"].dtype == np.dtype(
+    assert loaded.data["shear_real"]["data"].dtype == np.dtype(
         precision.float_type
     )
     assert loaded.data["complex_state"]["data"].dtype == np.dtype(
@@ -210,7 +199,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
         precision.float_type
     )
     npt.assert_allclose(
-        loaded.data["real_data"]["data"],
+        loaded.data["shear_real"]["data"],
         [3.0, 4.0],
         rtol=precision.tolerance,
         atol=precision.tolerance,
@@ -236,7 +225,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     # Reset-time restarts retain the saved timestep but begin a new time window
     reset_system = _RestartSystem(
         tmp_path,
-        float_type=precision.float_type,
+        precision=precision,
         **{
             "restart.restart_from": "restart.nc",
             "restart.reset_time": True,

@@ -11,20 +11,9 @@ from netCDF4 import Dataset
 
 import flucs
 from flucs.postprocessing import FlucsPostProcessing
+from tests.support.support import write_test_input
 
 pytestmark = pytest.mark.core
-
-
-def _write_input(io_path, test_system):
-    """
-    Write the plugin selection needed by post-processing discovery.
-    """
-
-    input_data = test_system.create_input_data()
-    (io_path / "input.toml").write_text(
-        toml.dumps(input_data),
-        encoding="utf-8",
-    )
 
 
 def _write_output(nc_path, test_system, precision):
@@ -106,7 +95,7 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     # Build one ordinary i/o directory and use overlapping output patterns
     io_path = tmp_path / "run"
     io_path.mkdir()
-    _write_input(io_path, test_system)
+    write_test_input(io_path / "input.toml", test_system)
 
     nc_path = io_path / "output.data.nc"
     _write_output(nc_path, test_system, precision)

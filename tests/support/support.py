@@ -5,6 +5,7 @@ Shared parameter sets and architecture for the FLUCS test suite.
 from __future__ import annotations
 
 import importlib
+import pathlib as pl
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
+import toml
 
 __test__ = False
 
@@ -54,6 +56,28 @@ DOUBLE_PRECISION = PrecisionSpec(
     netcdf_precision="f8",
 )
 TEST_PRECISIONS = (SINGLE_PRECISION, DOUBLE_PRECISION)
+
+
+class MappingInputStub:
+    """
+    Minimal dotted-key input interface for core integration tests.
+    """
+
+    def __init__(
+        self,
+        io_path: pl.Path,
+        values: dict[str, Any],
+        resolved_text: str = "[setup]\nsolver = 'ExampleSolver'\n",
+    ):
+        self.io_path = io_path
+        self.values = dict(values)
+        self.resolved_text = resolved_text
+
+    def __getitem__(self, key: str):
+        return self.values[key]
+
+    def __str__(self):
+        return self.resolved_text
 
 
 @dataclass(frozen=True)
@@ -108,6 +132,106 @@ TEST_SYSTEMS = {
 }
 
 
+def write_test_input(
+    input_path: pl.Path,
+    test_system: TestSystemSpec,
+    *,
+    precision: PrecisionSpec = SINGLE_PRECISION,
+    updates: dict[str, Any] | None = None,
+) -> None:
+    """
+    Write a standalone TestSystem input with optional test-specific changes.
+    """
+    input_data = test_system.create_input_data()
+    input_data["setup"]["precision"] = precision.name
+
+    # A shallow update deliberately permits replacement of a complete group
+    if updates is not None:
+        input_data.update(updates)
+
+    input_path.write_text(toml.dumps(input_data), encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class TestOwnership:
+    """
+    Validated ownership of a test by core or one solver.
+    """
+
+    solver_name: str | None = None
+
+    @property
+    def is_core(self) -> bool:
+        """
+        Return whether this test belongs to shared core functionality.
+        """
+        return self.solver_name is None
+
+
+def resolve_test_ownership(
+    core_markers: int,
+    solver_names: tuple[str, ...],
+    available_solvers,
+) -> TestOwnership:
+    """
+    Validate test ownership and return its solver-independent description.
+    """
+    if core_markers == 1 and not solver_names:
+        return TestOwnership()
+
+    if core_markers == 0 and len(solver_names) == 1:
+        solver_name = solver_names[0]
+        if solver_name not in available_solvers:
+            available = ", ".join(available_solvers)
+            raise ValueError(
+                f"Unknown solver marker {solver_name!r}. Available: {available}"
+            )
+        return TestOwnership(solver_name=solver_name)
+
+    raise ValueError(
+        "must have exactly one ownership marker: "
+        "core or solver(<entry-point name>)"
+    )
+
+
+def select_test_systems(
+    ownership: TestOwnership,
+    selected_solvers: tuple[str, ...] | None,
+    test_systems=TEST_SYSTEMS,
+) -> tuple[TestSystemSpec, ...]:
+    """
+    Return TestSystems compatible with validated ownership and CLI selection.
+    """
+    if ownership.is_core:
+        solver_names = (
+            tuple(test_systems)
+            if selected_solvers is None
+            else selected_solvers
+        )
+    else:
+        solver_names = (ownership.solver_name,)
+
+    return tuple(test_systems[name] for name in solver_names)
+
+
+def is_test_selected(
+    ownership: TestOwnership,
+    core_only: bool,
+    selected_solvers: tuple[str, ...] | None,
+) -> bool:
+    """
+    Return whether CLI selection includes a test with this ownership.
+    """
+    if core_only:
+        return ownership.is_core
+
+    return (
+        selected_solvers is None
+        or ownership.is_core
+        or ownership.solver_name in selected_solvers
+    )
+
+
 @dataclass(frozen=True)
 class _TestSystemEntryPoint:
     """
@@ -155,13 +279,17 @@ def registered_test_systems():
     flucs = importlib.import_module("flucs")
     flucs_module = importlib.import_module("flucs.flucs")
 
+    # Snapshot both public registry references exactly as they were supplied
+    original_module_systems = flucs_module.systems
+    original_package_systems = flucs.systems
+
     # Get possible test systems
     test_system_names = {system.system_name for system in TEST_SYSTEMS.values()}
 
     # Combine production and test systems for lookup
     production_systems = EntryPoints(
         entry
-        for entry in flucs_module.systems
+        for entry in original_module_systems
         if entry.name not in test_system_names
     )
     test_systems = _test_system_entry_points()
@@ -181,13 +309,12 @@ def registered_test_systems():
                 )
         yield
     finally:
-        # Restore registered production systems
-        flucs_module.systems = production_systems
-        flucs.systems = production_systems
+        # Restore both objects, including any production name collisions
+        flucs_module.systems = original_module_systems
+        flucs.systems = original_package_systems
 
-        # Raise an error if any test systems remain registered
-        remaining_names = {entry.name for entry in flucs_module.systems}
-        unexpected = test_system_names & remaining_names
-        if unexpected:
-            names = ", ".join(sorted(unexpected))
-            raise RuntimeError(f"Failed to unregister test systems: {names}")
+        if (
+            flucs_module.systems is not original_module_systems
+            or flucs.systems is not original_package_systems
+        ):
+            raise RuntimeError("Failed to restore the original system registry")

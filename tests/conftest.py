@@ -11,7 +11,10 @@ import pytest
 from tests.support.support import (
     TEST_PRECISIONS,
     TEST_SYSTEMS,
+    is_test_selected,
     registered_test_systems,
+    resolve_test_ownership,
+    select_test_systems,
 )
 
 
@@ -168,23 +171,34 @@ def _solver_marker_name(marker) -> str:
             "solver markers require exactly one solver entry-point name"
         )
 
-    # Ensure that the solver name is valid
-    solver_name = marker.args[0]
-    if solver_name not in TEST_SYSTEMS:
-        available = ", ".join(TEST_SYSTEMS)
-        raise pytest.UsageError(
-            f"Unknown solver marker {solver_name!r}. Available: {available}"
-        )
+    return marker.args[0]
 
-    return solver_name
+
+def _resolve_node_ownership(node):
+    """
+    Resolve pytest markers through the shared ownership policy.
+    """
+    solver_names = tuple(
+        _solver_marker_name(marker) for marker in node.iter_markers("solver")
+    )
+
+    try:
+        return resolve_test_ownership(
+            core_markers=len(list(node.iter_markers("core"))),
+            solver_names=solver_names,
+            available_solvers=TEST_SYSTEMS,
+        )
+    except ValueError as error:
+        nodeid = getattr(node, "nodeid", node.name)
+        raise pytest.UsageError(f"{nodeid} {error}") from error
 
 
 def pytest_collection_modifyitems(config, items):
     """
-    Validate ownership and deselect tests outside the requested scope.
+    Validate ownership and deselect tests outside the requested selection.
     """
 
-    # Validate ownership and deselect tests outside the requested scope.
+    # Validate ownership and deselect tests outside the requested selection
     include_gpu = config.getoption("--gpu")
     core_only = config.getoption("--core")
     selected_solvers = config._flucs_selected_solvers
@@ -194,28 +208,16 @@ def pytest_collection_modifyitems(config, items):
     deselected = []
 
     for item in items:
-        # Gather items
-        is_core = item.get_closest_marker("core") is not None
-        solver_markers = list(item.iter_markers("solver"))
-
-        if is_core == bool(solver_markers):
-            raise pytest.UsageError(
-                f"{item.nodeid} must have exactly one ownership marker: "
-                "core or solver(<entry-point name>)"
-            )
-
-        solver_names = {
-            _solver_marker_name(marker) for marker in solver_markers
-        }
+        # Resolve ownership once so collection and parametrization agree
+        ownership = _resolve_node_ownership(item)
         include_item = include_gpu or item.get_closest_marker("gpu") is None
 
-        # Check for core-only or solver-specific selection
-        if core_only:
-            include_item = include_item and is_core
-        elif selected_solvers is not None:
-            include_item = include_item and (
-                is_core or bool(solver_names & set(selected_solvers))
-            )
+        # Apply the same shared ownership policy used for parametrization
+        include_item = include_item and is_test_selected(
+            ownership,
+            core_only,
+            selected_solvers,
+        )
 
         if include_item:
             selected.append(item)
@@ -237,12 +239,10 @@ def pytest_generate_tests(metafunc):
     if "test_system" not in metafunc.fixturenames:
         return
 
-    # Get all systems for a given solver
+    # Match core tests to the requested systems and solver tests to their owner
+    ownership = _resolve_node_ownership(metafunc.definition)
     selected_solvers = metafunc.config._flucs_selected_solvers
-    if selected_solvers is None:
-        systems = list(TEST_SYSTEMS.values())
-    else:
-        systems = [TEST_SYSTEMS[name] for name in selected_solvers]
+    systems = select_test_systems(ownership, selected_solvers)
     metafunc.parametrize(
         "test_system",
         systems,

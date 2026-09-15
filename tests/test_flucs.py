@@ -3,6 +3,7 @@ Tests for the top-level FLUCS command-line module.
 """
 
 import sys
+from importlib.metadata import EntryPoints
 from types import SimpleNamespace
 from unittest.mock import create_autospec, sentinel
 
@@ -11,24 +12,45 @@ import pytest
 import flucs
 import flucs.flucs as flucs_module
 from flucs.solvers import FlucsSolver
-from tests.support.support import TEST_SYSTEMS
+from tests.support.support import (
+    TEST_SYSTEMS,
+    is_test_selected,
+    registered_test_systems,
+    resolve_test_ownership,
+    select_test_systems,
+)
 
 pytestmark = pytest.mark.core
 
 
-@pytest.mark.parametrize(
-    "system_spec",
-    TEST_SYSTEMS.values(),
-    ids=lambda system_spec: system_spec.system_name,
-)
-def test_all_test_systems_are_registered_for_test_session(system_spec):
+def test_test_system_registry_is_temporary_and_complete(monkeypatch):
     """
-    All standalone test systems are available through normal lookup.
+    The complete test overlay restores both original registry objects exactly.
     """
-    assert (
-        flucs.get_system_type(system_spec.system_name)
-        is system_spec.system_type
-    )
+
+    # Every standalone system is visible through the session-level overlay
+    for system_spec in TEST_SYSTEMS.values():
+        assert (
+            flucs.get_system_type(system_spec.system_name)
+            is system_spec.system_type
+        )
+
+    # Use separate snapshots containing collisions to exercise exact teardown
+    original_module_systems = EntryPoints(tuple(flucs_module.systems))
+    original_package_systems = EntryPoints(tuple(flucs.systems))
+    monkeypatch.setattr(flucs_module, "systems", original_module_systems)
+    monkeypatch.setattr(flucs, "systems", original_package_systems)
+
+    with registered_test_systems():
+        assert flucs_module.systems is flucs.systems
+        for system_spec in TEST_SYSTEMS.values():
+            assert (
+                flucs.get_system_type(system_spec.system_name)
+                is system_spec.system_type
+            )
+
+    assert flucs_module.systems is original_module_systems
+    assert flucs.systems is original_package_systems
 
 
 def test_solver_lookup_and_unknown_plugins(test_system):
@@ -46,6 +68,59 @@ def test_solver_lookup_and_unknown_plugins(test_system):
 
     with pytest.raises(KeyError, match="System 'Missing' not found"):
         flucs.get_system_type("Missing")
+
+
+def test_test_ownership_resolves_compatible_systems():
+    """
+    Ownership validation keeps core and solver parametrization consistent.
+    """
+
+    # Use sentinels so this policy test does not depend on today's registry
+    systems = {
+        "FirstSolver": sentinel.first_system,
+        "SecondSolver": sentinel.second_system,
+    }
+    core_ownership = resolve_test_ownership(1, (), systems)
+    solver_ownership = resolve_test_ownership(
+        0,
+        ("SecondSolver",),
+        systems,
+    )
+
+    # Core follows CLI selection while solver tests use only their own system
+    assert select_test_systems(core_ownership, None, systems) == (
+        sentinel.first_system,
+        sentinel.second_system,
+    )
+    assert select_test_systems(
+        core_ownership,
+        ("FirstSolver",),
+        systems,
+    ) == (sentinel.first_system,)
+    assert select_test_systems(solver_ownership, None, systems) == (
+        sentinel.second_system,
+    )
+    assert is_test_selected(core_ownership, True, None)
+    assert not is_test_selected(solver_ownership, True, None)
+    assert not is_test_selected(
+        solver_ownership,
+        False,
+        ("FirstSolver",),
+    )
+
+    # Missing, duplicated, and mixed ownership all fail through one policy
+    invalid_ownership = (
+        (0, ()),
+        (2, ()),
+        (1, ("FirstSolver",)),
+        (0, ("FirstSolver", "SecondSolver")),
+    )
+    for core_markers, solver_names in invalid_ownership:
+        with pytest.raises(ValueError, match="exactly one ownership marker"):
+            resolve_test_ownership(core_markers, solver_names, systems)
+
+    with pytest.raises(ValueError, match="Unknown solver marker"):
+        resolve_test_ownership(0, ("MissingSolver",), systems)
 
 
 def test_list_solvers_and_systems(monkeypatch, capsys):

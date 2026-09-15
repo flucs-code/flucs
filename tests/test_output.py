@@ -18,29 +18,9 @@ from flucs.output import (
     get_output_type,
 )
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION
+from tests.support.support import DOUBLE_PRECISION, MappingInputStub
 
 pytestmark = pytest.mark.core
-
-
-class _OutputInput:
-    """
-    Minimal dotted input interface needed by an output object.
-    """
-
-    def __init__(self, io_path, output_type, diagnostics):
-        self.io_path = io_path
-        self.values = {
-            "output.test.type": output_type,
-            "output.test.save_steps": 2,
-            "output.test.diags": diagnostics,
-        }
-
-    def __getitem__(self, key):
-        return self.values[key]
-
-    def __str__(self):
-        return "[setup]\nsolver = 'ExampleSolver'\n"
 
 
 class _ScalarDiagnostic(FlucsDiagnostic):
@@ -139,16 +119,27 @@ class _OutputSystem:
     Explicit core-system boundary used by the output tests.
     """
 
+    netcdf_real_suffix = "_real"
+    netcdf_imag_suffix = "_imag"
+
     def __init__(
         self,
         tmp_path,
         output_type,
         diagnostics,
         available,
-        float_type=DOUBLE_PRECISION.float_type,
+        precision=DOUBLE_PRECISION,
     ):
-        self.input = _OutputInput(tmp_path, output_type, diagnostics)
-        self.float = float_type
+        self.input = MappingInputStub(
+            tmp_path,
+            {
+                "output.test.type": output_type,
+                "output.test.save_steps": 2,
+                "output.test.diags": diagnostics,
+            },
+        )
+        self.float = precision.float_type
+        self.netcdf_precision = precision.netcdf_precision
         self.solver = SimpleNamespace(state=FlucsSolverState.TIMING)
         self.current_time = 0.0
         self.current_step = 0
@@ -247,7 +238,7 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         "netcdf4",
         ["array"],
         {"array": _ArrayDiagnostic},
-        float_type=precision.float_type,
+        precision=precision,
     )
     output = FlucsOutput("test", system)
     assert type(output) is FlucsOutputNC
