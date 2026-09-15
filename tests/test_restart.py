@@ -13,45 +13,44 @@ import flucs.restart as restart_module
 from flucs.input import InvalidFlucsInputFileError
 from flucs.restart import FlucsRestart
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION, MappingInputStub
+from tests.support.support import DOUBLE_PRECISION, create_test_solver_system
 
 pytestmark = pytest.mark.core
 
 
-class _RestartSystem:
+def _create_restart_system(
+    io_path,
+    test_system,
+    precision=DOUBLE_PRECISION,
+    **restart_updates,
+):
     """
-    Explicit system boundary used for restart round trips.
+    Construct a real TestSystem configured for restart integration.
     """
-
-    netcdf_real_suffix = "_real"
-    netcdf_imag_suffix = "_imag"
-
-    def __init__(
-        self,
+    restart_input = {
+        "restart_if_exists": False,
+        "restart_from": "",
+        "reset_time": False,
+        "write_restart_file": True,
+        "write_steps": 2,
+        "backup_count": 2,
+    }
+    restart_input.update(restart_updates)
+    _, _, system = create_test_solver_system(
         io_path,
-        precision=DOUBLE_PRECISION,
-        **input_updates,
-    ):
-        input_values = {
-            "restart.restart_if_exists": False,
-            "restart.restart_from": "",
-            "restart.reset_time": False,
-            "restart.write_restart_file": True,
-            "restart.write_steps": 2,
-            "restart.backup_count": 2,
-            "time.tfinal": 4.0,
-        }
-        input_values.update(input_updates)
-        self.input = MappingInputStub(io_path, input_values)
-        self.float = precision.float_type
-        self.netcdf_precision = precision.netcdf_precision
-        self.solver = SimpleNamespace(state=FlucsSolverState.RUNNING)
-        self.current_time = 1.0
-        self.current_dt = 0.125
-        self.restart_data = {}
+        test_system,
+        precision=precision,
+        updates={
+            "restart": restart_input,
+            "time": {"tfinal": 4.0},
+        },
+    )
 
-    def get_restart_data(self):
-        return self.restart_data
+    # Supply the runtime values normally initialized by system setup
+    system.solver.state = FlucsSolverState.RUNNING
+    system.current_time = 1.0
+    system.current_dt = 0.125
+    return system
 
 
 class _GpuArray:
@@ -69,7 +68,19 @@ def _read_restart_time(restart_path):
         return float(dataset.variables["current_time"][...])
 
 
+def _use_numpy_restart_arrays(monkeypatch):
+    """
+    Keep host-only restart tests independent of an available CUDA runtime.
+    """
+    monkeypatch.setattr(
+        restart_module,
+        "cp",
+        SimpleNamespace(ndarray=_GpuArray),
+    )
+
+
 def test_restart_round_trip_scheduling_backups_and_reconstruction(
+    test_system,
     tmp_path,
     monkeypatch,
     precision,
@@ -79,28 +90,28 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     """
 
     # Keep this CPU test on the NumPy branch without requiring a CUDA runtime
-    monkeypatch.setattr(
-        restart_module,
-        "cp",
-        SimpleNamespace(ndarray=_GpuArray),
-    )
+    _use_numpy_restart_arrays(monkeypatch)
 
     # An optional default restart may be absent when beginning a fresh run
-    optional_system = _RestartSystem(
-        tmp_path,
+    optional_system = _create_restart_system(
+        tmp_path / "optional",
+        test_system,
         precision=precision,
-        **{
-            "restart.restart_if_exists": True,
-            "restart.write_restart_file": False,
-        },
+        restart_if_exists=True,
+        write_restart_file=False,
     )
     optional_restart = FlucsRestart(optional_system)
     assert optional_restart.initial_path is None
     assert optional_restart.data is None
 
     # Write a mixture of named, implicit, real, and complex restart arrays
-    system = _RestartSystem(tmp_path, precision=precision)
-    system.restart_data = {
+    io_path = tmp_path / "run"
+    system = _create_restart_system(
+        io_path,
+        test_system,
+        precision=precision,
+    )
+    restart_data = {
         "shear_real": {
             "data": np.array([1.0, 2.0], dtype=precision.float_type),
             "dimension_names": ("field",),
@@ -116,6 +127,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
             "data": np.arange(6, dtype=precision.float_type).reshape(2, 3)
         },
     }
+    monkeypatch.setattr(system, "get_restart_data", lambda: restart_data)
     restart = FlucsRestart(system)
     assert restart.netcdf_precision == precision.netcdf_precision
 
@@ -123,41 +135,41 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     system.solver.state = FlucsSolverState.TIMING
     restart.write_restart(force=True)
 
-    assert not (tmp_path / "restart.nc").exists()
+    assert not (io_path / "restart.nc").exists()
 
     # The first call writes immediately, after which the normal cadence applies
     system.solver.state = FlucsSolverState.RUNNING
     restart.write_restart()
 
-    assert _read_restart_time(tmp_path / "restart.nc") == 1.0
+    assert _read_restart_time(io_path / "restart.nc") == 1.0
 
     system.current_time = 2.0
     system.current_dt = 0.0625
-    system.restart_data["shear_real"]["data"] = np.array(
+    restart_data["shear_real"]["data"] = np.array(
         [2.0, 3.0],
         dtype=precision.float_type,
     )
 
     restart.write_restart()
-    assert _read_restart_time(tmp_path / "restart.nc") == 1.0
+    assert _read_restart_time(io_path / "restart.nc") == 1.0
     restart.write_restart()
-    assert _read_restart_time(tmp_path / "restart.nc") == 2.0
+    assert _read_restart_time(io_path / "restart.nc") == 2.0
 
     # A forced third write leaves the two preceding states in newest-first order
     system.current_time = 3.0
-    system.restart_data["shear_real"]["data"] = np.array(
+    restart_data["shear_real"]["data"] = np.array(
         [3.0, 4.0],
         dtype=precision.float_type,
     )
     restart.write_restart(force=True)
 
-    assert _read_restart_time(tmp_path / "restart.nc") == 3.0
-    assert _read_restart_time(tmp_path / "restart.backup.00.nc") == 2.0
-    assert _read_restart_time(tmp_path / "restart.backup.01.nc") == 1.0
-    assert not (tmp_path / "restart.temp.nc").exists()
+    assert _read_restart_time(io_path / "restart.nc") == 3.0
+    assert _read_restart_time(io_path / "restart.backup.00.nc") == 2.0
+    assert _read_restart_time(io_path / "restart.backup.01.nc") == 1.0
+    assert not (io_path / "restart.temp.nc").exists()
 
     # The on-disk scalar and array data all use the selected precision
-    with Dataset(tmp_path / "restart.nc", "r", format="NETCDF4") as dataset:
+    with Dataset(io_path / "restart.nc", "r", format="NETCDF4") as dataset:
         numerical_variables = [
             dataset.variables["current_time"],
             dataset.variables["current_dt"],
@@ -172,17 +184,16 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
         )
 
     # The default restart reconstructs values, dimensions, and continuation time
-    loaded_system = _RestartSystem(
-        tmp_path,
+    loaded_system = _create_restart_system(
+        io_path,
+        test_system,
         precision=precision,
-        **{
-            "restart.restart_if_exists": True,
-            "restart.write_restart_file": False,
-        },
+        restart_if_exists=True,
+        write_restart_file=False,
     )
     loaded = FlucsRestart(loaded_system)
 
-    assert loaded.initial_path == (tmp_path / "restart.nc").resolve()
+    assert loaded.initial_path == (io_path / "restart.nc").resolve()
     assert loaded_system.init_time == 3.0
     assert loaded_system.init_dt == 0.0625
     assert loaded_system.final_time == 7.0
@@ -223,14 +234,13 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     )
 
     # Reset-time restarts retain the saved timestep but begin a new time window
-    reset_system = _RestartSystem(
-        tmp_path,
+    reset_system = _create_restart_system(
+        io_path,
+        test_system,
         precision=precision,
-        **{
-            "restart.restart_from": "restart.nc",
-            "restart.reset_time": True,
-            "restart.write_restart_file": False,
-        },
+        restart_from="restart.nc",
+        reset_time=True,
+        write_restart_file=False,
     )
     FlucsRestart(reset_system)
     assert reset_system.init_time == 0.0
@@ -242,7 +252,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     reconstructed_path.mkdir()
 
     FlucsRestart.reconstruct_input_from_restart(
-        tmp_path / "restart.nc",
+        io_path / "restart.nc",
         reconstructed_path,
     )
     assert (reconstructed_path / "input.toml").read_text(
@@ -258,7 +268,9 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     ],
 )
 def test_restart_applies_each_backup_policy(
+    test_system,
     tmp_path,
+    monkeypatch,
     backup_count,
     expected_backup_times,
 ):
@@ -266,10 +278,24 @@ def test_restart_applies_each_backup_policy(
     Zero and one-backup policies replace or retain the preceding restart.
     """
 
-    # Write two generations through the same public restart workflow
-    system = _RestartSystem(
+    # Write two generations through the selected TestSystem
+    _use_numpy_restart_arrays(monkeypatch)
+    system = _create_restart_system(
         tmp_path,
-        **{"restart.backup_count": backup_count},
+        test_system,
+        backup_count=backup_count,
+    )
+    monkeypatch.setattr(
+        system,
+        "get_restart_data",
+        lambda: {
+            "state": {
+                "data": np.array(
+                    [system.current_time],
+                    dtype=system.float,
+                )
+            }
+        },
     )
     restart = FlucsRestart(system)
     restart.write_restart(force=True)
@@ -285,7 +311,10 @@ def test_restart_applies_each_backup_policy(
     ] == expected_backup_times
 
 
-def test_restart_rejects_ambiguous_or_unsafe_configuration(tmp_path):
+def test_restart_rejects_ambiguous_or_unsafe_configuration(
+    test_system,
+    tmp_path,
+):
     """
     Invalid restart sources and output policies fail before data is changed.
     """
@@ -293,12 +322,11 @@ def test_restart_rejects_ambiguous_or_unsafe_configuration(tmp_path):
     # Selecting both restart mechanisms is inherently ambiguous
     restart_path = tmp_path / "restart.nc"
     restart_path.touch()
-    conflicting = _RestartSystem(
+    conflicting = _create_restart_system(
         tmp_path,
-        **{
-            "restart.restart_if_exists": True,
-            "restart.restart_from": "restart.nc",
-        },
+        test_system,
+        restart_if_exists=True,
+        restart_from="restart.nc",
     )
     with pytest.raises(
         InvalidFlucsInputFileError,
@@ -308,18 +336,20 @@ def test_restart_rejects_ambiguous_or_unsafe_configuration(tmp_path):
 
     # Explicit sources must exist rather than silently starting from scratch
     restart_path.unlink()
-    missing = _RestartSystem(
+    missing = _create_restart_system(
         tmp_path,
-        **{"restart.restart_from": "missing.nc"},
+        test_system,
+        restart_from="missing.nc",
     )
     with pytest.raises(InvalidFlucsInputFileError, match="cannot be found"):
         FlucsRestart(missing)
 
     # Both sides of the permitted backup-count interval are enforced
     for backup_count in (-1, 101):
-        invalid_backups = _RestartSystem(
+        invalid_backups = _create_restart_system(
             tmp_path,
-            **{"restart.backup_count": backup_count},
+            test_system,
+            backup_count=backup_count,
         )
         with pytest.raises(
             InvalidFlucsInputFileError,
@@ -329,7 +359,7 @@ def test_restart_rejects_ambiguous_or_unsafe_configuration(tmp_path):
 
     # Existing state is never overwritten without an explicit restart request
     restart_path.touch()
-    unsafe_write = _RestartSystem(tmp_path)
+    unsafe_write = _create_restart_system(tmp_path, test_system)
     with pytest.raises(
         InvalidFlucsInputFileError,
         match=r"remove existing 'restart[.]nc' manually",

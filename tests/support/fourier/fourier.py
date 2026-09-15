@@ -60,6 +60,9 @@ class TestFourierSystem(FourierSystem):
     find_derivatives_kernel: KernelWrapper
     find_nonlinear_bits_kernel: KernelWrapper
 
+    # Keep test kernels portable to GPUs with tighter register limits
+    cuda_block_size: int = 128
+
     # Supported diagnostics
     diags: ClassVar[set[type[FlucsDiagnostic]]] = {
         FreeEnergyDiag,

@@ -8,7 +8,7 @@ import importlib
 import pathlib as pl
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import EntryPoints
 from types import SimpleNamespace
 from typing import Any
@@ -58,28 +58,6 @@ DOUBLE_PRECISION = PrecisionSpec(
 TEST_PRECISIONS = (SINGLE_PRECISION, DOUBLE_PRECISION)
 
 
-class MappingInputStub:
-    """
-    Minimal dotted-key input interface for core integration tests.
-    """
-
-    def __init__(
-        self,
-        io_path: pl.Path,
-        values: dict[str, Any],
-        resolved_text: str = "[setup]\nsolver = 'ExampleSolver'\n",
-    ):
-        self.io_path = io_path
-        self.values = dict(values)
-        self.resolved_text = resolved_text
-
-    def __getitem__(self, key: str):
-        return self.values[key]
-
-    def __str__(self):
-        return self.resolved_text
-
-
 @dataclass(frozen=True)
 class TestSystemSpec:
     """
@@ -91,6 +69,9 @@ class TestSystemSpec:
     system_name: str
     system_path: str
     input_data: dict[str, Any]
+    runtime_requires_gpu: bool = False
+    runtime_input_data: dict[str, Any] = field(default_factory=dict)
+    runtime_netcdf_files: tuple[tuple[str, str], ...] = ()
 
     def create_input_data(self) -> dict[str, Any]:
         """
@@ -128,8 +109,51 @@ TEST_SYSTEMS = {
                 "nz": 6,
             }
         },
+        runtime_requires_gpu=True,
+        runtime_input_data={
+            "time": {
+                "dt_max": 0.01,
+                "tfinal": 0.01,
+            },
+            "setup": {
+                "timing_steps": 1,
+                "print_time_estimate": False,
+                "check_linear_matrix": False,
+            },
+            "restart": {
+                "write_restart_file": True,
+                "write_steps": 1,
+                "backup_count": 0,
+            },
+            "output": {
+                "write_steps": 1,
+                "0d": {
+                    "save_steps": 1,
+                    "diags": ["free_energy"],
+                    "type": "netcdf4",
+                },
+            },
+        },
+        runtime_netcdf_files=(
+            ("output.0d.nc", "flucs_output"),
+            ("restart.nc", "flucs_restart"),
+        ),
     ),
 }
+
+
+def _update_test_input(
+    input_data: dict[str, Any],
+    updates: dict[str, Any],
+) -> None:
+    """
+    Recursively apply valid or deliberately invalid test input changes.
+    """
+    for key, value in updates.items():
+        if isinstance(value, dict) and isinstance(input_data.get(key), dict):
+            _update_test_input(input_data[key], value)
+        else:
+            input_data[key] = deepcopy(value)
 
 
 def write_test_input(
@@ -145,11 +169,39 @@ def write_test_input(
     input_data = test_system.create_input_data()
     input_data["setup"]["precision"] = precision.name
 
-    # A shallow update deliberately permits replacement of a complete group
+    # Non-dictionary values still permit deliberate replacement of a group
     if updates is not None:
-        input_data.update(updates)
+        _update_test_input(input_data, updates)
 
     input_path.write_text(toml.dumps(input_data), encoding="utf-8")
+
+
+def create_test_solver_system(
+    io_path: pl.Path,
+    test_system: TestSystemSpec,
+    *,
+    precision: PrecisionSpec = SINGLE_PRECISION,
+    updates: dict[str, Any] | None = None,
+):
+    """
+    Construct a registered TestSystem through the normal FLUCS input path.
+    """
+    from flucs.input import FlucsInput
+
+    # Give every construction an ordinary, self-contained i/o directory
+    io_path.mkdir(parents=True, exist_ok=True)
+    input_path = io_path / "input.toml"
+    write_test_input(
+        input_path,
+        test_system,
+        precision=precision,
+        updates=updates,
+    )
+
+    # Exercise the same construction path used by a solver run
+    flucs_input = FlucsInput(input_path)
+    solver, system = flucs_input.create_solver_system()
+    return flucs_input, solver, system
 
 
 @dataclass(frozen=True)

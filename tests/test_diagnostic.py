@@ -10,6 +10,7 @@ import numpy.testing as npt
 import pytest
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
+from tests.support.support import create_test_solver_system
 
 pytestmark = pytest.mark.core
 
@@ -55,14 +56,17 @@ class _ExampleDiagnostic(FlucsDiagnostic):
         self.save_data("reference", 1.0 + 2.0j)
 
 
-def test_diagnostic_initialisation_and_options():
+def test_diagnostic_initialisation_and_options(test_system, tmp_path):
     """
     Construction loads typed options and prepares independent variables.
     """
 
+    # Construct the selected TestSystem through the ordinary plugin path
+    _, _, system = create_test_solver_system(tmp_path, test_system)
+
     # Supply string and tuple values as they might arrive from user input
     diagnostic = _ExampleDiagnostic(
-        system=sentinel.system,
+        system=system,
         output=sentinel.output,
         options={
             "count": "4",
@@ -72,7 +76,7 @@ def test_diagnostic_initialisation_and_options():
     )
 
     # Check the common state and option casting established by the base class
-    assert diagnostic.system is sentinel.system
+    assert diagnostic.system is system
     assert diagnostic.output is sentinel.output
 
     assert diagnostic.cache_len == 0
@@ -102,8 +106,8 @@ def test_diagnostic_initialisation_and_options():
     assert reference.is_time_dependent is False
 
     # Mutable option defaults must not leak from one diagnostic to the next
-    first_default = _ExampleDiagnostic(sentinel.system, sentinel.output)
-    second_default = _ExampleDiagnostic(sentinel.system, sentinel.output)
+    first_default = _ExampleDiagnostic(system, sentinel.output)
+    second_default = _ExampleDiagnostic(system, sentinel.output)
     first_default.labels.append("private")
     assert second_default.labels == []
 
@@ -113,19 +117,20 @@ def test_diagnostic_initialisation_and_options():
         match="Unknown option 'unknown' for diagnostic 'example'",
     ):
         _ExampleDiagnostic(
-            sentinel.system,
+            system,
             sentinel.output,
             options={"unknown": 1},
         )
 
 
-def test_diagnostic_variable_cache_lifecycle():
+def test_diagnostic_variable_cache_lifecycle(test_system, tmp_path):
     """
     Diagnostic execution fills distinct caches which can be cleared safely.
     """
 
-    # Prepare both the time-independent and evolving diagnostic data
-    diagnostic = _ExampleDiagnostic(sentinel.system, sentinel.output)
+    # Use the real TestSystem while retaining an inert parent output
+    _, _, system = create_test_solver_system(tmp_path, test_system)
+    diagnostic = _ExampleDiagnostic(system, sentinel.output)
     diagnostic.ready()
     diagnostic.execute()
     diagnostic.execute()

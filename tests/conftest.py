@@ -235,16 +235,33 @@ def pytest_generate_tests(metafunc):
     Parametrize solver-facing core tests over compatible test systems.
     """
 
-    # Make sure we have the necessary fixtures
-    if "test_system" not in metafunc.fixturenames:
+    # Make sure we have one of the TestSystem fixtures
+    fixture_names = set(metafunc.fixturenames)
+    if not fixture_names & {"test_system", "runtime_test_system"}:
         return
+
+    fixture_name = (
+        "runtime_test_system"
+        if "runtime_test_system" in fixture_names
+        else "test_system"
+    )
 
     # Match core tests to the requested systems and solver tests to their owner
     ownership = _resolve_node_ownership(metafunc.definition)
     selected_solvers = metafunc.config._flucs_selected_solvers
     systems = select_test_systems(ownership, selected_solvers)
+
+    if fixture_name == "runtime_test_system":
+        systems = tuple(
+            pytest.param(
+                system,
+                marks=pytest.mark.gpu if system.runtime_requires_gpu else (),
+            )
+            for system in systems
+        )
+
     metafunc.parametrize(
-        "test_system",
+        fixture_name,
         systems,
         indirect=True,
         ids=lambda system: system.solver_name,
@@ -255,6 +272,14 @@ def pytest_generate_tests(metafunc):
 def test_system(request):
     """
     Return one standalone system specification for a core test.
+    """
+    return request.param
+
+
+@pytest.fixture
+def runtime_test_system(request):
+    """
+    Return one TestSystem with runtime-dependent selection marks.
     """
     return request.param
 

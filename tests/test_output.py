@@ -2,12 +2,12 @@
 Tests for diagnostic scheduling and output serialization.
 """
 
-from types import SimpleNamespace
 from typing import ClassVar
 
 import numpy as np
 import numpy.testing as npt
 import pytest
+import toml
 from netCDF4 import Dataset
 
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
@@ -18,7 +18,10 @@ from flucs.output import (
     get_output_type,
 )
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION, MappingInputStub
+from tests.support.support import (
+    SINGLE_PRECISION,
+    create_test_solver_system,
+)
 
 pytestmark = pytest.mark.core
 
@@ -114,56 +117,68 @@ class _ArrayDiagnostic(FlucsDiagnostic):
         )
 
 
-class _OutputSystem:
+def _create_output_system(
+    io_path,
+    test_system,
+    monkeypatch,
+    output_name,
+    output_type,
+    diagnostics,
+    available,
+    precision=SINGLE_PRECISION,
+):
     """
-    Explicit core-system boundary used by the output tests.
+    Construct a real TestSystem with controlled output diagnostics.
     """
+    _, _, system = create_test_solver_system(
+        io_path,
+        test_system,
+        precision=precision,
+        updates={
+            "output": {
+                output_name: {
+                    "type": output_type,
+                    "save_steps": 2,
+                    "diags": diagnostics,
+                }
+            }
+        },
+    )
 
-    netcdf_real_suffix = "_real"
-    netcdf_imag_suffix = "_imag"
+    # Isolate serialization with small diagnostics valid for every TestSystem
+    monkeypatch.setattr(system, "get_available_diags", lambda: available)
 
-    def __init__(
-        self,
-        tmp_path,
-        output_type,
-        diagnostics,
-        available,
-        precision=DOUBLE_PRECISION,
-    ):
-        self.input = MappingInputStub(
-            tmp_path,
-            {
-                "output.test.type": output_type,
-                "output.test.save_steps": 2,
-                "output.test.diags": diagnostics,
-            },
-        )
-        self.float = precision.float_type
-        self.netcdf_precision = precision.netcdf_precision
-        self.solver = SimpleNamespace(state=FlucsSolverState.TIMING)
-        self.current_time = 0.0
-        self.current_step = 0
-        self.current_dt = 0.1
-        self.current_cfl = 0.0
-        self._available = available
-
-    def get_available_diags(self):
-        return self._available
+    # Supply the ordinary runtime state consumed by output diagnostics
+    system.current_time = 0.0
+    system.current_step = 0
+    system.current_dt = 0.1
+    system.current_cfl = 0.0
+    return system
 
 
-def test_text_output_runs_the_diagnostic_and_writes_rows(tmp_path):
+def test_text_output_runs_the_diagnostic_and_writes_rows(
+    test_system,
+    tmp_path,
+    monkeypatch,
+    precision,
+):
     """
     Text output ignores timing data then writes and clears production rows.
     """
 
-    # Construct through the registered public output factory
-    system = _OutputSystem(
+    # Construct through the selected TestSystem and public output factory
+    output_name = "time"
+    system = _create_output_system(
         tmp_path,
+        test_system,
+        monkeypatch,
+        output_name,
         "text",
         [{"name": "scalar", "options": {"factor": 2.0}}],
         {"scalar": _ScalarDiagnostic},
+        precision,
     )
-    output = FlucsOutput("test", system)
+    output = FlucsOutput(output_name, system)
     assert type(output) is FlucsOutputText
     assert get_output_type("text") is FlucsOutputText
 
@@ -225,22 +240,28 @@ def test_text_output_runs_the_diagnostic_and_writes_rows(tmp_path):
 
 
 def test_netcdf_output_round_trip_preserves_layout_and_values(
+    test_system,
     tmp_path,
+    monkeypatch,
     precision,
 ):
     """
     NetCDF output writes nested, complex, and time-independent variables.
     """
 
-    # NetCDF output creates its container and first numbered run group
-    system = _OutputSystem(
+    # Use a real TestSystem to create the first numbered output group
+    output_name = "3d"
+    system = _create_output_system(
         tmp_path,
+        test_system,
+        monkeypatch,
+        output_name,
         "netcdf4",
         ["array"],
         {"array": _ArrayDiagnostic},
-        precision=precision,
+        precision,
     )
-    output = FlucsOutput("test", system)
+    output = FlucsOutput(output_name, system)
     assert type(output) is FlucsOutputNC
     assert output.netcdf_precision == precision.netcdf_precision
 
@@ -261,7 +282,9 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         grid = diagnostic.groups["grid"]
 
         assert group.type == "flucs_output"
-        assert str(group.variables["input_file"][...]).startswith("[setup]")
+        resolved_input = toml.loads(str(group.variables["input_file"][...]))
+        assert resolved_input["setup"]["solver"] == test_system.solver_name
+        assert resolved_input["setup"]["system"] == test_system.system_name
 
         # Every numerical variable follows the selected system precision
         numerical_variables = [
@@ -363,7 +386,9 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
     ],
 )
 def test_output_rejects_invalid_diagnostic_configuration(
+    test_system,
     tmp_path,
+    monkeypatch,
     diagnostics,
     available,
     error,
@@ -373,12 +398,16 @@ def test_output_rejects_invalid_diagnostic_configuration(
     Invalid diagnostic declarations fail before an output run begins.
     """
 
-    # All three failures occur while resolving the configured diagnostics
-    system = _OutputSystem(
+    # Resolve each invalid declaration against an actual TestSystem
+    output_name = "time"
+    system = _create_output_system(
         tmp_path,
+        test_system,
+        monkeypatch,
+        output_name,
         "text",
         diagnostics,
         available,
     )
     with pytest.raises(error, match=message):
-        FlucsOutput("test", system)
+        FlucsOutput(output_name, system)

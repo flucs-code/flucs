@@ -2,12 +2,12 @@
 Tests for CUDA configuration and kernel-wrapper utilities.
 """
 
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from flucs.utilities.cupy import KernelCollection, KernelWrapper, ModuleOptions
+from tests.support.support import create_test_solver_system
 
 pytestmark = pytest.mark.core
 
@@ -40,10 +40,10 @@ def test_module_options_public_workflow():
     assert "--fmad=false" not in ModuleOptions().get_options()
 
 
-def test_kernel_collection_lifecycle():
-    # Construct minimal object resembling a FLUCS system
-    system = SimpleNamespace(module_options=ModuleOptions())
-    system.kernels = KernelCollection(system)
+def test_kernel_collection_lifecycle(test_system, tmp_path):
+    # Use the selected TestSystem's real module options and kernel collection
+    _, _, system = create_test_solver_system(tmp_path, test_system)
+    assert isinstance(system.kernels, KernelCollection)
 
     # Make a mock cupy.RawModule and associated kernel
     cuda_kernel = Mock()
