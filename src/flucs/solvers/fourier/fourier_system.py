@@ -115,7 +115,7 @@ class FourierSystem(FlucsSystem):
     dt_mult_steps: float
 
     # Hyperdissipation variables
-    hyperdissipation_components = ("kz", "kx", "ky", "kperp")
+    hyperdissipation_components = ("kz", "kx", "ky", "kperp", "kmod")
     hyperdissipation_components_kmax: np.ndarray
     adaptive_rate: float
 
@@ -229,6 +229,17 @@ class FourierSystem(FlucsSystem):
             )
 
         # Check for conflicts in hyperdissipation parameters
+        if self.input["hyperdissipation.kmod"] > 0.0 and any(
+            self.input[f"hyperdissipation.{component}"] > 0.0
+            for component in self.hyperdissipation_components
+            if component != "kmod"
+        ):
+            raise InvalidFlucsInputFileError(
+                "Cannot enable hyperdissipation.kmod alongside other "
+                "hyperdissipation components. Use either kmod or the "
+                "directional components."
+            )
+
         if self.input["hyperdissipation.kperp"] > 0.0 and (
             self.input["hyperdissipation.kx"] > 0.0
             or self.input["hyperdissipation.ky"] > 0.0
@@ -928,7 +939,9 @@ class FourierSystem(FlucsSystem):
             for component in self.hyperdissipation_components
         ):
             # Hyperdissipation normalisation
-            hyperdissipation_components_kmax = cp.empty(4, dtype=self.float)
+            hyperdissipation_components_kmax = cp.empty(
+                len(self.hyperdissipation_components), dtype=self.float
+            )
 
             self.compute_hyperdissipation_components_kmax_kernel(
                 hyperdissipation_components_kmax
@@ -2307,6 +2320,7 @@ class FourierSystem(FlucsSystem):
             if not np.allclose(
                 matrix_reference[..., solved_grid_mask],
                 matrix_solver[..., solved_grid_mask],
+                atol=self.tolerance,
             ):
                 raise ValueError(
                     "The linear matrix computed by CUDA disagrees "

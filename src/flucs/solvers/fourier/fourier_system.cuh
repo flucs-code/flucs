@@ -164,7 +164,8 @@ void add_hyperdissipation(
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
 ) {
     #if !(defined(HYPERDISSIPATION_KPERP) || defined(HYPERDISSIPATION_KX) || \
-          defined(HYPERDISSIPATION_KY)    || defined(HYPERDISSIPATION_KZ))
+          defined(HYPERDISSIPATION_KY)    || defined(HYPERDISSIPATION_KZ) || \
+          defined(HYPERDISSIPATION_KMOD))
         return;
     #endif
 
