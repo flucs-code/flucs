@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import create_autospec, sentinel
 
 import pytest
-from netCDF4 import Dataset
 
 import flucs
 import flucs.flucs as flucs_module
@@ -19,7 +18,6 @@ from tests.support.support import (
     registered_test_systems,
     resolve_test_ownership,
     select_test_systems,
-    write_test_input,
 )
 
 pytestmark = pytest.mark.core
@@ -199,54 +197,6 @@ def test_parse_cli_arguments(
     # Check the arguments destined for each parser
     assert flucs_args == expected_flucs
     assert postprocess_args == expected_postprocess
-
-
-def test_run_flucs_executes_registered_test_system(
-    runtime_test_system,
-    tmp_path,
-    precision,
-):
-    """
-    A real TestSystem run produces its log, diagnostic output, and restart.
-    """
-
-    # Build the smallest complete runtime configured by this TestSystem
-    input_path = tmp_path / "input.toml"
-    write_test_input(
-        input_path,
-        runtime_test_system,
-        precision=precision,
-        updates=runtime_test_system.runtime_input_data,
-    )
-
-    # Run through the public helper and retain its debugging objects
-    flucs_input, solver = flucs_module.run_flucs(input_path)
-    system = solver.system
-
-    # Check that normal plugin construction selected the requested types
-    assert type(solver) is flucs.get_solver_type(
-        runtime_test_system.solver_name
-    )
-    assert type(system) is runtime_test_system.system_type
-    assert system.input is flucs_input
-    assert system.current_step > 0
-
-    # Check the user-facing log and each TestSystem runtime artifact
-    log_contents = (tmp_path / "output.log").read_text(encoding="utf-8")
-    assert flucs_module.FLUCS_HEADER in log_contents
-    assert "Finished at time" in log_contents
-
-    for filename, file_type in runtime_test_system.runtime_netcdf_files:
-        output_path = tmp_path / filename
-        assert output_path.is_file()
-        with Dataset(output_path, "r", format="NETCDF4") as dataset:
-            if file_type == "flucs_output":
-                assert dataset.groups
-                assert all(
-                    group.type == file_type for group in dataset.groups.values()
-                )
-            else:
-                assert dataset.type == file_type
 
 
 def test_main_defaults_to_run_and_combines_overrides(monkeypatch, tmp_path):

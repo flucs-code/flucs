@@ -8,7 +8,7 @@ import importlib
 import pathlib as pl
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from importlib.metadata import EntryPoints
 from types import SimpleNamespace
 from typing import Any
@@ -69,9 +69,8 @@ class TestSystemSpec:
     system_name: str
     system_path: str
     input_data: dict[str, Any]
+    runtime_input_path: pl.Path
     runtime_requires_gpu: bool = False
-    runtime_input_data: dict[str, Any] = field(default_factory=dict)
-    runtime_netcdf_files: tuple[tuple[str, str], ...] = ()
 
     def create_input_data(self) -> dict[str, Any]:
         """
@@ -109,35 +108,8 @@ TEST_SYSTEMS = {
                 "nz": 6,
             }
         },
+        runtime_input_path=pl.Path(__file__).parent / "fourier/runtime.toml",
         runtime_requires_gpu=True,
-        runtime_input_data={
-            "time": {
-                "dt_max": 0.01,
-                "tfinal": 0.01,
-            },
-            "setup": {
-                "timing_steps": 1,
-                "print_time_estimate": False,
-                "check_linear_matrix": False,
-            },
-            "restart": {
-                "write_restart_file": True,
-                "write_steps": 1,
-                "backup_count": 0,
-            },
-            "output": {
-                "write_steps": 1,
-                "0d": {
-                    "save_steps": 1,
-                    "diags": ["free_energy"],
-                    "type": "netcdf4",
-                },
-            },
-        },
-        runtime_netcdf_files=(
-            ("output.0d.nc", "flucs_output"),
-            ("restart.nc", "flucs_restart"),
-        ),
     ),
 }
 
@@ -174,6 +146,87 @@ def write_test_input(
         _update_test_input(input_data, updates)
 
     input_path.write_text(toml.dumps(input_data), encoding="utf-8")
+
+
+def write_runtime_input(
+    input_path: pl.Path,
+    test_system: TestSystemSpec,
+    *,
+    precision: PrecisionSpec = SINGLE_PRECISION,
+    updates: dict[str, Any] | None = None,
+) -> None:
+    """
+    Copy a TestSystem runtime input with optional test-specific changes.
+    """
+
+    # Load an independent copy so the shared baseline remains immutable
+    input_data = toml.load(test_system.runtime_input_path)
+    input_data["setup"]["precision"] = precision.name
+
+    # Permit focused runtime tests to vary the common simulation
+    if updates is not None:
+        _update_test_input(input_data, updates)
+
+    # Runtime inputs must continue to exercise their registered TestSystem
+    setup = input_data.get("setup", {})
+    if setup.get("solver") != test_system.solver_name:
+        raise ValueError(
+            f"Runtime input for {test_system.solver_name} selects solver "
+            f"{setup.get('solver')!r}."
+        )
+    if setup.get("system") != test_system.system_name:
+        raise ValueError(
+            f"Runtime input for {test_system.solver_name} selects system "
+            f"{setup.get('system')!r}."
+        )
+
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+    input_path.write_text(toml.dumps(input_data), encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class RuntimeRun:
+    """
+    Objects and artifacts retained from one completed TestSystem run.
+    """
+
+    test_system: TestSystemSpec
+    precision: PrecisionSpec
+    io_path: pl.Path
+    flucs_input: Any
+    solver: Any
+    system: Any
+
+
+def as_numpy(data) -> np.ndarray:
+    """
+    Move test data to NumPy without assuming its original array backend.
+    """
+    if hasattr(data, "get"):
+        data = data.get()
+    return np.asarray(data)
+
+
+def get_netcdf_variable(group, variable_path: str):
+    """
+    Resolve a possibly nested variable path beneath a NetCDF group.
+    """
+    path_parts = variable_path.split("/")
+    for group_name in path_parts[:-1]:
+        group = group.groups[group_name]
+    return group.variables[path_parts[-1]]
+
+
+def get_stored_variable_names(system, variable) -> tuple[str, ...]:
+    """
+    Return the NetCDF names used to store one diagnostic or restart variable.
+    """
+    if variable.is_complex:
+        return (
+            f"{variable.name}{system.netcdf_real_suffix}",
+            f"{variable.name}{system.netcdf_imag_suffix}",
+        )
+    return (variable.name,)
 
 
 def create_test_solver_system(

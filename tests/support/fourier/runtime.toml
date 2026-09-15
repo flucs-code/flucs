@@ -1,0 +1,65 @@
+[setup]
+solver = "FourierSolver"
+system = "TestFourierSystem"
+precision = "single"
+timing_steps = 1
+
+[time]
+tfinal = 50.0
+dt_max = 0.02
+max_cfl = 0.2
+dt_method = "continuous"
+
+[dimensions]
+nx = 24
+ny = 36
+nz = 32
+
+[dealiasing]
+method = "two-thirds"
+
+[timestepping]
+method = "ssprk3"
+
+[parameters]
+advection = [0.3, 0.5, -0.1]
+rotation = [0.2, 0.1, 0.2]
+
+[init]
+method = "deterministic"
+amplitude = 0.01
+
+[forcing]
+method = "ornstein_uhlenbeck"
+amplitude = [0.1, 0.1, 0.1]
+corr_time = 1.0
+rand_seed = 1
+range_kmod = [0.5, 2.5]
+
+[hyperdissipation]
+kmod = 1.0
+kmod_power = 3
+kmod_adaptive = true
+kmod_normalised = true
+
+[output]
+write_steps = 1000
+
+[output.time]
+save_steps = 100
+
+[output.0d]
+save_steps = 10
+diags = ["free_energy"]
+
+[output.1d]
+save_steps = 10
+diags = [
+    {name = "free_energy_1d", options = {spectra = ["kz", "kperp", "kmod"]}},
+]
+
+[restart]
+write_restart_file = true
+write_steps = 500
+restart_if_exists = false
+

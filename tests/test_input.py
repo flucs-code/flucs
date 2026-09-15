@@ -7,7 +7,7 @@ import toml
 
 import flucs
 from flucs.input import FlucsInput
-from tests.support.support import write_test_input
+from tests.support.support import write_runtime_input, write_test_input
 
 pytestmark = pytest.mark.core
 
@@ -21,9 +21,12 @@ def test_input_resolves_defaults_and_constructs_selected_system(
     A resolved input combines defaults, user values, and CLI overrides.
     """
 
-    # Start with a small input and override values inherited from two levels
+    # Start with the TestSystem's real runtime input and preserve the source
+    runtime_contents = test_system.runtime_input_path.read_text(
+        encoding="utf-8"
+    )
     input_path = tmp_path / "input.toml"
-    write_test_input(input_path, test_system, precision=precision)
+    write_runtime_input(input_path, test_system, precision=precision)
     flucs_input = FlucsInput(
         input_path,
         override=[
@@ -59,6 +62,10 @@ def test_input_resolves_defaults_and_constructs_selected_system(
     assert system.complex is precision.complex_type
     assert system.netcdf_precision == precision.netcdf_precision
     assert system.tolerance == precision.tolerance
+    assert (
+        test_system.runtime_input_path.read_text(encoding="utf-8")
+        == runtime_contents
+    )
 
     # Once resolved, the input is deliberately read-only
     with pytest.raises(RuntimeError, match="is now read-only"):

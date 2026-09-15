@@ -2,18 +2,25 @@
 Tests for FLUCS restart persistence and selection.
 """
 
+import shutil
 from types import SimpleNamespace
 
 import numpy as np
 import numpy.testing as npt
 import pytest
+import toml
 from netCDF4 import Dataset
 
 import flucs.restart as restart_module
-from flucs.input import InvalidFlucsInputFileError
+from flucs.input import FlucsInput, InvalidFlucsInputFileError
 from flucs.restart import FlucsRestart
 from flucs.solvers import FlucsSolverState
-from tests.support.support import DOUBLE_PRECISION, create_test_solver_system
+from tests.support.support import (
+    DOUBLE_PRECISION,
+    as_numpy,
+    create_test_solver_system,
+    write_runtime_input,
+)
 
 pytestmark = pytest.mark.core
 
@@ -258,6 +265,152 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     assert (reconstructed_path / "input.toml").read_text(
         encoding="utf-8"
     ) == str(system.input)
+
+
+@pytest.mark.runtime_precision("single")
+def test_runtime_restart_restores_the_completed_test_system(
+    runtime_run,
+    tmp_path,
+):
+    """
+    A real TestSystem restart preserves and restores its complete state.
+    """
+
+    # Snapshot the system-owned payload without assuming names or grid shapes
+    system = runtime_run.system
+    restart = system.restart_manager
+
+    assert restart.write_restart_file
+    assert restart.write_path.is_file()
+
+    expected_restart = {}
+    for name, entry in system.get_restart_data().items():
+        data = as_numpy(entry["data"]).copy()
+        dimension_names = entry.get(
+            "dimension_names",
+            tuple(f"{name}_dim{index}" for index in range(data.ndim)),
+        )
+        expected_restart[name] = {
+            "data": data,
+            "dimension_names": tuple(dimension_names),
+        }
+
+    assert expected_restart
+
+    # Compare the restart container with the system's public restart contract
+    with Dataset(restart.write_path, "r", format="NETCDF4") as dataset:
+        assert dataset.type == "flucs_restart"
+        assert toml.loads(str(dataset.variables["input_file"][...])) == (
+            toml.loads(str(runtime_run.flucs_input))
+        )
+
+        npt.assert_allclose(
+            dataset.variables["current_time"][...],
+            system.current_time,
+            rtol=runtime_run.precision.tolerance,
+            atol=runtime_run.precision.tolerance,
+        )
+        npt.assert_allclose(
+            dataset.variables["current_dt"][...],
+            system.current_dt,
+            rtol=runtime_run.precision.tolerance,
+            atol=runtime_run.precision.tolerance,
+        )
+
+        expected_variable_names = {
+            "input_file",
+            "current_time",
+            "current_dt",
+        }
+        for name, entry in expected_restart.items():
+            expected_data = entry["data"]
+            if np.iscomplexobj(expected_data):
+                real_name = f"{name}{system.netcdf_real_suffix}"
+                imag_name = f"{name}{system.netcdf_imag_suffix}"
+                expected_variable_names.update((real_name, imag_name))
+                stored_data = (
+                    np.asarray(dataset.variables[real_name][:])
+                    + 1j * np.asarray(dataset.variables[imag_name][:])
+                )
+                stored_variables = (
+                    dataset.variables[real_name],
+                    dataset.variables[imag_name],
+                )
+            else:
+                expected_variable_names.add(name)
+                stored_data = np.asarray(dataset.variables[name][:])
+                stored_variables = (dataset.variables[name],)
+
+            assert all(
+                variable.dimensions == entry["dimension_names"]
+                for variable in stored_variables
+            )
+            assert all(
+                variable.dtype == np.dtype(runtime_run.precision.float_type)
+                for variable in stored_variables
+            )
+            npt.assert_allclose(
+                stored_data,
+                expected_data,
+                rtol=runtime_run.precision.tolerance,
+                atol=runtime_run.precision.tolerance,
+            )
+
+        assert set(dataset.variables) == expected_variable_names
+
+    # Load that file through a fresh instance of the same registered system
+    reload_path = tmp_path / "reload"
+    reload_path.mkdir()
+    shutil.copy2(restart.write_path, reload_path / "restart.nc")
+
+    write_runtime_input(
+        reload_path / "input.toml",
+        runtime_run.test_system,
+        precision=runtime_run.precision,
+        updates={
+            "restart": {
+                "restart_if_exists": True,
+                "restart_from": "",
+                "write_restart_file": False,
+            }
+        },
+    )
+
+    fresh_input = FlucsInput(reload_path / "input.toml")
+    _, fresh_system = fresh_input.create_solver_system()
+    fresh_system.setup()
+    loaded_restart = fresh_system.restart_manager
+
+    assert loaded_restart.initial_path == (reload_path / "restart.nc").resolve()
+    assert loaded_restart.data is not None
+    
+    npt.assert_allclose(
+        fresh_system.init_time,
+        system.current_time,
+        rtol=runtime_run.precision.tolerance,
+        atol=runtime_run.precision.tolerance,
+    )
+    npt.assert_allclose(
+        fresh_system.init_dt,
+        system.current_dt,
+        rtol=runtime_run.precision.tolerance,
+        atol=runtime_run.precision.tolerance,
+    )
+
+    for name, entry in expected_restart.items():
+        loaded_entry = loaded_restart.data[name]
+        assert loaded_entry["dimension_names"] == entry["dimension_names"]
+        npt.assert_allclose(
+            loaded_entry["data"],
+            entry["data"],
+            rtol=runtime_run.precision.tolerance,
+            atol=runtime_run.precision.tolerance,
+        )
+
+    # Let the TestSystem itself interpret the generic restored mapping
+    prepared_data = as_numpy(fresh_system.prepare_restart_data())
+    assert prepared_data.size > 0
+    assert np.all(np.isfinite(prepared_data))
 
 
 @pytest.mark.parametrize(

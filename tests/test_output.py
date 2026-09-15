@@ -21,6 +21,7 @@ from flucs.solvers import FlucsSolverState
 from tests.support.support import (
     SINGLE_PRECISION,
     create_test_solver_system,
+    get_stored_variable_names,
 )
 
 pytestmark = pytest.mark.core
@@ -115,6 +116,33 @@ class _ArrayDiagnostic(FlucsDiagnostic):
             "grid/reference",
             np.arange(6).reshape(2, 3) + 1.0j,
         )
+
+
+def _netcdf_variable_paths(group, prefix=""):
+    """
+    Return all variable paths beneath a NetCDF group.
+    """
+    paths = {
+        f"{prefix}{name}" for name in group.variables
+    }
+    for name, subgroup in group.groups.items():
+        paths.update(
+            _netcdf_variable_paths(
+                subgroup,
+                prefix=f"{prefix}{name}/",
+            )
+        )
+    return paths
+
+
+def _netcdf_variables(group):
+    """
+    Return all variables beneath a NetCDF group.
+    """
+    variables = list(group.variables.values())
+    for subgroup in group.groups.values():
+        variables.extend(_netcdf_variables(subgroup))
+    return variables
 
 
 def _create_output_system(
@@ -357,6 +385,120 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         for diagnostic in output.diagnostics
         for var in diagnostic.vars.values()
     )
+
+
+@pytest.mark.runtime_precision("single")
+def test_runtime_outputs_preserve_configured_data(runtime_run):
+    """
+    Real TestSystem outputs preserve their complete declared schemas.
+    """
+
+    # Inspect every active output without assuming its name or file format
+    system = runtime_run.system
+    outputs = tuple(system.output_heap or ())
+    assert outputs
+    assert system.current_step > 0
+
+    # The public run helper records a complete user-facing runtime log
+    log_contents = (runtime_run.io_path / "output.log").read_text(
+        encoding="utf-8"
+    )
+    assert "Finished at time" in log_contents
+
+    for output in outputs:
+        assert output.filepath.is_file()
+
+        expected_diagnostic_names = {
+            diagnostic.name for diagnostic in output.diagnostics
+        }
+
+        if isinstance(output, FlucsOutputText):
+            lines = output.filepath.read_text(encoding="utf-8").splitlines()
+            expected_header = [
+                *output.timing_data_column_names,
+                *(
+                    variable.name
+                    for diagnostic in output.diagnostics
+                    for variable in diagnostic.vars.values()
+                ),
+            ]
+            assert lines[0].split() == expected_header
+
+            # The runtime baseline deliberately provides a useful time series
+            rows = [line.split() for line in lines[1:]]
+            assert len(rows) > 1
+            assert all(len(row) == len(expected_header) for row in rows)
+
+            times = np.asarray([float(row[0]) for row in rows])
+            timesteps = np.asarray([float(row[2]) for row in rows])
+            assert np.all(np.diff(times) > 0.0)
+            assert np.all(timesteps > 0.0)
+            assert times[-1] == float(
+                output.format_data(system.current_time).strip()
+            )
+
+        elif isinstance(output, FlucsOutputNC):
+            with Dataset(output.filepath, "r", format="NETCDF4") as dataset:
+                # A fresh temporary run creates exactly one numbered group
+                assert set(dataset.groups) == {output.group_name}
+                group = dataset.groups[output.group_name]
+                assert group.type == "flucs_output"
+                assert set(group.groups) == expected_diagnostic_names
+
+                resolved_input = toml.loads(
+                    str(group.variables["input_file"][...])
+                )
+                assert resolved_input == toml.loads(
+                    str(runtime_run.flucs_input)
+                )
+
+                # Time coordinates are nontrivial, finite, and fully written
+                times = np.asarray(group.variables["time"][:])
+                timesteps = np.asarray(group.variables["dt"][:])
+                
+                assert times.size > 1
+                assert times.shape == timesteps.shape
+                assert np.all(np.diff(times) > 0.0)
+                assert np.all(np.isfinite(times))
+                assert np.all(np.isfinite(timesteps))
+                assert np.all(timesteps > 0.0)
+
+                npt.assert_allclose(
+                    times[-1],
+                    system.current_time,
+                    rtol=runtime_run.precision.tolerance,
+                    atol=runtime_run.precision.tolerance,
+                )
+
+                # Each diagnostic group contains exactly its declared schema
+                numerical_variables = [
+                    group.variables["time"],
+                    group.variables["dt"],
+                ]
+                for diagnostic in output.diagnostics:
+                    diagnostic_group = group.groups[diagnostic.name]
+                    expected_paths = set()
+                    for variable in diagnostic.vars.values():
+                        expected_paths.update(variable.dimensions)
+                        expected_paths.update(
+                            get_stored_variable_names(system, variable)
+                        )
+
+                    assert _netcdf_variable_paths(diagnostic_group) == (
+                        expected_paths
+                    )
+
+                    numerical_variables.extend(
+                        _netcdf_variables(diagnostic_group)
+                    )
+
+                assert all(
+                    variable.dtype == np.dtype(runtime_run.precision.float_type)
+                    for variable in numerical_variables
+                )
+
+        else:
+            pytest.fail(f"Unsupported runtime output type: {type(output)}")
 
 
 @pytest.mark.parametrize(

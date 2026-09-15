@@ -11,10 +11,12 @@ import pytest
 from tests.support.support import (
     TEST_PRECISIONS,
     TEST_SYSTEMS,
+    RuntimeRun,
     is_test_selected,
     registered_test_systems,
     resolve_test_ownership,
     select_test_systems,
+    write_runtime_input,
 )
 
 
@@ -193,6 +195,40 @@ def _resolve_node_ownership(node):
         raise pytest.UsageError(f"{nodeid} {error}") from error
 
 
+def _resolve_runtime_precisions(node):
+    """
+    Return the requested runtime precision or every supported precision.
+    """
+    markers = list(node.iter_markers("runtime_precision"))
+    if not markers:
+        return TEST_PRECISIONS
+
+    nodeid = getattr(node, "nodeid", node.name)
+    if len(markers) != 1:
+        raise pytest.UsageError(
+            f"{nodeid} must have at most one runtime_precision marker"
+        )
+
+    marker = markers[0]
+    if len(marker.args) != 1 or marker.kwargs:
+        raise pytest.UsageError(
+            f"{nodeid} runtime_precision requires exactly one precision name"
+        )
+
+    precision_name = marker.args[0]
+    precisions = {
+        precision.name: precision for precision in TEST_PRECISIONS
+    }
+    if precision_name not in precisions:
+        available = ", ".join(precisions)
+        raise pytest.UsageError(
+            f"{nodeid} has unknown runtime precision {precision_name!r}. "
+            f"Available: {available}"
+        )
+
+    return (precisions[precision_name],)
+
+
 def pytest_collection_modifyitems(config, items):
     """
     Validate ownership and deselect tests outside the requested selection.
@@ -210,6 +246,16 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         # Resolve ownership once so collection and parametrization agree
         ownership = _resolve_node_ownership(item)
+
+        # Precision restrictions apply only to complete runtime fixtures
+        if list(item.iter_markers("runtime_precision")):
+            if "runtime_run" not in item.fixturenames:
+                raise pytest.UsageError(
+                    f"{item.nodeid} uses runtime_precision without "
+                    "requesting runtime_run"
+                )
+            _resolve_runtime_precisions(item)
+
         include_item = include_gpu or item.get_closest_marker("gpu") is None
 
         # Apply the same shared ownership policy used for parametrization
@@ -235,33 +281,48 @@ def pytest_generate_tests(metafunc):
     Parametrize solver-facing core tests over compatible test systems.
     """
 
-    # Make sure we have one of the TestSystem fixtures
+    # Share each complete runtime over every module that inspects its results
     fixture_names = set(metafunc.fixturenames)
-    if not fixture_names & {"test_system", "runtime_test_system"}:
+    if "runtime_run" in fixture_names:
+        ownership = _resolve_node_ownership(metafunc.definition)
+        selected_solvers = metafunc.config._flucs_selected_solvers
+        systems = select_test_systems(ownership, selected_solvers)
+        precisions = _resolve_runtime_precisions(metafunc.definition)
+
+        runtime_cases = []
+        for system in systems:
+            for precision in precisions:
+                runtime_cases.append(
+                    pytest.param(
+                        (system, precision),
+                        marks=(
+                            pytest.mark.gpu
+                            if system.runtime_requires_gpu
+                            else ()
+                        ),
+                        id=f"{system.solver_name}-{precision.name}",
+                    )
+                )
+
+        metafunc.parametrize(
+            "runtime_run",
+            runtime_cases,
+            indirect=True,
+            scope="session",
+        )
         return
 
-    fixture_name = (
-        "runtime_test_system"
-        if "runtime_test_system" in fixture_names
-        else "test_system"
-    )
+    # Ordinary core tests construct an inexpensive TestSystem without running
+    if "test_system" not in fixture_names:
+        return
 
     # Match core tests to the requested systems and solver tests to their owner
     ownership = _resolve_node_ownership(metafunc.definition)
     selected_solvers = metafunc.config._flucs_selected_solvers
     systems = select_test_systems(ownership, selected_solvers)
 
-    if fixture_name == "runtime_test_system":
-        systems = tuple(
-            pytest.param(
-                system,
-                marks=pytest.mark.gpu if system.runtime_requires_gpu else (),
-            )
-            for system in systems
-        )
-
     metafunc.parametrize(
-        fixture_name,
+        "test_system",
         systems,
         indirect=True,
         ids=lambda system: system.solver_name,
@@ -276,12 +337,32 @@ def test_system(request):
     return request.param
 
 
-@pytest.fixture
-def runtime_test_system(request):
+@pytest.fixture(scope="session")
+def runtime_run(request, tmp_path_factory, _register_test_systems):
     """
-    Return one TestSystem with runtime-dependent selection marks.
+    Run one TestSystem and retain its objects and artifacts for inspection.
     """
-    return request.param
+    from flucs.flucs import run_flucs
+
+    test_system, precision = request.param
+
+    # Give each solver and precision an isolated, persistent session directory
+    path_name = f"{test_system.solver_name}-{precision.name}"
+    io_path = tmp_path_factory.mktemp(path_name)
+    input_path = io_path / "input.toml"
+
+    write_runtime_input(input_path, test_system,precision=precision)
+
+    # Execute the normal public runtime exactly once for this parameter pair
+    flucs_input, solver = run_flucs(input_path)
+    return RuntimeRun(
+        test_system=test_system,
+        precision=precision,
+        io_path=io_path,
+        flucs_input=flucs_input,
+        solver=solver,
+        system=solver.system,
+    )
 
 
 @pytest.fixture(
