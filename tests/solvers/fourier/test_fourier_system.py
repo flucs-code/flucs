@@ -225,9 +225,27 @@ def test_fourier_geometry_shells_and_solved_modes(
         },
     )
 
-    expected_kz = 2 * np.pi * np.fft.fftfreq(system.nz) * system.nz / 3.0
-    expected_kx = 2 * np.pi * np.fft.fftfreq(system.nx) * system.nx / 4.0
-    expected_ky = 2 * np.pi * np.fft.rfftfreq(system.ny) * system.ny / 5.0
+    expected_kz = (
+        2
+        * np.pi
+        * np.fft.fftfreq(system.nz)
+        * system.nz
+        / system.input["dimensions.Lz"]
+    )
+    expected_kx = (
+        2
+        * np.pi
+        * np.fft.fftfreq(system.nx)
+        * system.nx
+        / system.input["dimensions.Lx"]
+    )
+    expected_ky = (
+        2
+        * np.pi
+        * np.fft.rfftfreq(system.ny)
+        * system.ny
+        / system.input["dimensions.Ly"]
+    )
 
     npt.assert_allclose(system.kz, expected_kz, atol=precision.tolerance)
     npt.assert_allclose(system.kx, expected_kx, atol=precision.tolerance)
@@ -494,18 +512,18 @@ def _assert_restart_modes_match(source_fields, result):
 
 
 @pytest.mark.parametrize(
-    "source_shape",
+    "grid_change",
     [
-        pytest.param((6, 8, 6), id="unchanged"),
-        pytest.param((4, 6, 4), id="refined"),
-        pytest.param((8, 10, 7), id="coarsened"),
+        pytest.param("unchanged", id="unchanged"),
+        pytest.param("refined", id="refined"),
+        pytest.param("coarsened", id="coarsened"),
     ],
 )
 def test_restart_grid_remapping(
     test_system,
     tmp_path,
     precision,
-    source_shape,
+    grid_change,
 ):
     """
     Restart loading preserves common modes across unchanged or resized grids.
@@ -517,10 +535,30 @@ def test_restart_grid_remapping(
         precision=precision,
     )
 
+    # Vary full-grid axes independently to expose swaps and odd/even mistakes
+    grid_changes = {
+        "unchanged": (0, 0, 0),
+        "refined": (-1, -2, -3),
+        "coarsened": (3, 2, 1),
+    }[grid_change]
+    source_nz, source_nx, source_ny = (
+        size + change
+        for size, change in zip(
+            (system.nz, system.nx, system.ny),
+            grid_changes,
+            strict=True,
+        )
+    )
+    source_shape = (
+        source_nz,
+        source_nx,
+        source_ny // 2 + 1,
+    )
+
     # Seeded random values expose any axis, sign, or field-index mix-up
     source_size = system.number_of_fields * np.prod(source_shape)
     random = np.random.default_rng(4821)
-    
+
     source_fields = (
         random.standard_normal(source_size)
         + 1j * random.standard_normal(source_size)

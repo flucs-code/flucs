@@ -177,12 +177,15 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
 
     # The on-disk scalar and array data all use the selected precision
     with Dataset(io_path / "restart.nc", "r", format="NETCDF4") as dataset:
+        complex_state_names = (
+            f"complex_state{system.netcdf_real_suffix}",
+            f"complex_state{system.netcdf_imag_suffix}",
+        )
         numerical_variables = [
             dataset.variables["current_time"],
             dataset.variables["current_dt"],
             dataset.variables["shear_real"],
-            dataset.variables["complex_state_real"],
-            dataset.variables["complex_state_imag"],
+            *(dataset.variables[name] for name in complex_state_names),
             dataset.variables["implicit"],
         ]
         assert all(

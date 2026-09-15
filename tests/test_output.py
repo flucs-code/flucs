@@ -276,7 +276,7 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
     """
 
     # Use a real TestSystem to create the first numbered output group
-    output_name = "3d"
+    output_name = "time"
     system = _create_output_system(
         tmp_path,
         test_system,
@@ -307,6 +307,22 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         diagnostic = group.groups["array"]
         grid = diagnostic.groups["grid"]
 
+        # Resolve storage names from the active system's NetCDF convention
+        complex_names = tuple(
+            name.rsplit("/", maxsplit=1)[-1]
+            for name in get_stored_variable_names(
+                system,
+                output.diagnostics[0].vars["grid/complex"],
+            )
+        )
+        reference_names = tuple(
+            name.rsplit("/", maxsplit=1)[-1]
+            for name in get_stored_variable_names(
+                system,
+                output.diagnostics[0].vars["grid/reference"],
+            )
+        )
+
         assert group.type == "flucs_output"
         resolved_input = toml.loads(str(group.variables["input_file"][...]))
         assert resolved_input["setup"]["solver"] == test_system.solver_name
@@ -319,10 +335,8 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
             grid.variables["position"],
             grid.variables["component"],
             grid.variables["real"],
-            grid.variables["complex_real"],
-            grid.variables["complex_imag"],
-            grid.variables["reference_real"],
-            grid.variables["reference_imag"],
+            *(grid.variables[name] for name in complex_names),
+            *(grid.variables[name] for name in reference_names),
         ]
         assert all(
             variable.dtype == np.dtype(precision.float_type)
@@ -362,15 +376,15 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
             grid.variables["real"][:] + 10.0
         )
         npt.assert_allclose(
-            grid.variables["complex_real"][:]
-            + 1j * grid.variables["complex_imag"][:],
+            grid.variables[complex_names[0]][:]
+            + 1j * grid.variables[complex_names[1]][:],
             expected_complex,
             rtol=precision.tolerance,
             atol=precision.tolerance,
         )
         npt.assert_allclose(
-            grid.variables["reference_real"][:]
-            + 1j * grid.variables["reference_imag"][:],
+            grid.variables[reference_names[0]][:]
+            + 1j * grid.variables[reference_names[1]][:],
             np.arange(6).reshape(2, 3) + 1.0j,
             rtol=precision.tolerance,
             atol=precision.tolerance,
@@ -427,8 +441,16 @@ def test_runtime_outputs_preserve_configured_data(runtime_run):
             assert len(rows) > 1
             assert all(len(row) == len(expected_header) for row in rows)
 
-            times = np.asarray([float(row[0]) for row in rows])
-            timesteps = np.asarray([float(row[2]) for row in rows])
+            timing_columns = {
+                name: index
+                for index, name in enumerate(output.timing_data_column_names)
+            }
+            times = np.asarray(
+                [float(row[timing_columns["time"]]) for row in rows]
+            )
+            timesteps = np.asarray(
+                [float(row[timing_columns["dt"]]) for row in rows]
+            )
             assert np.all(np.diff(times) > 0.0)
             assert np.all(timesteps > 0.0)
             assert times[-1] == float(

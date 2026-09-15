@@ -16,9 +16,9 @@ from typing import Any
 import numpy as np
 import toml
 
-__test__ = False
+from flucs.systems import FlucsSystem
 
-FLUCS_TOLERANCE_MULTIPLIER = 64.0
+__test__ = False
 
 
 @dataclass(frozen=True)
@@ -37,9 +37,7 @@ class PrecisionSpec:
         """
         Return the baseline round-off tolerance used by FLUCS.
         """
-        return self.float_type(
-            np.finfo(self.float_type).eps * FLUCS_TOLERANCE_MULTIPLIER
-        )
+        return FlucsSystem.precision_tolerance(self.float_type)
 
 
 # Exercise every supported precision through the same behavioural tests

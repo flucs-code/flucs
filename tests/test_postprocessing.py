@@ -21,6 +21,12 @@ def _write_output(nc_path, test_system, precision):
     Write two output groups with one deliberately absent variable.
     """
 
+    system_type = test_system.system_type
+    state_names = (
+        f"state{system_type.netcdf_real_suffix}",
+        f"state{system_type.netcdf_imag_suffix}",
+    )
+
     with Dataset(nc_path, "w", format="NETCDF4") as dataset:
         for group_number, times in ((0, [0.0, 0.5]), (1, [1.0])):
             group = dataset.createGroup(str(group_number))
@@ -72,15 +78,17 @@ def _write_output(nc_path, test_system, precision):
                 )
             complex_values = real_values + 1j * (real_values + 20.0)
             grid.createVariable(
-                "state_real",
+                state_names[0],
                 precision.netcdf_precision,
                 ("time", "position", "component"),
             )[:] = complex_values.real
             grid.createVariable(
-                "state_imag",
+                state_names[1],
                 precision.netcdf_precision,
                 ("time", "position", "component"),
             )[:] = complex_values.imag
+
+    return state_names
 
 
 def test_postprocessing_discovers_and_loads_netcdf_data(
@@ -98,7 +106,8 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     write_test_input(io_path / "input.toml", test_system)
 
     nc_path = io_path / "output.data.nc"
-    _write_output(nc_path, test_system, precision)
+    state_names = _write_output(nc_path, test_system, precision)
+    state_paths = tuple(f"diagnostic/grid/{name}" for name in state_names)
 
     post = FlucsPostProcessing(
         io_path,
@@ -129,12 +138,10 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     )
     assert variables == {
         "diagnostic/grid/value": [0],
-        "diagnostic/grid/state_real": [0, 1],
-        "diagnostic/grid/state_imag": [0, 1],
+        state_paths[0]: [0, 1],
+        state_paths[1]: [0, 1],
     }
-    assert post.get_valid_netcdf_paths("diagnostic/grid/state_real") == [
-        nc_path.resolve()
-    ]
+    assert post.get_valid_netcdf_paths(state_paths[0]) == [nc_path.resolve()]
 
     # Missing group segments are filled while run boundaries remain visible
     values, boundaries, dimensions = post.load_netcdf_variable(
@@ -188,7 +195,7 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
 
     latest, latest_boundaries, _ = post.load_netcdf_variable(
         nc_path,
-        "diagnostic/grid/state_real",
+        state_paths[0],
         groups=-1,
     )
     npt.assert_allclose(
