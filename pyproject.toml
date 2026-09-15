@@ -107,4 +107,4 @@ select = [
 exclude = [
   "**/_version.py", # Auto-generated file
 ]
-ignore = ["N806"]
+ignore = ["N806", "N815"]
