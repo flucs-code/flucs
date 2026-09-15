@@ -134,6 +134,13 @@ class FlucsSystem(ABC):
 
             flucs_input.load_toml_str(contents, default=True)
 
+    @staticmethod
+    def precision_tolerance(float_type: type) -> np.floating:
+        """
+        Return the baseline numerical tolerance for a floating-point type.
+        """
+        return float_type(np.finfo(float_type).eps * 64.0)
+
     def _set_precision(self):
         """
         Interprets the precision parameter and sets types accordingly.
@@ -153,7 +160,7 @@ class FlucsSystem(ABC):
         self.int = np.int64
 
         # Get float error tolerance
-        self.tolerance = self.float(np.finfo(self.float).eps * 64.0)
+        self.tolerance = self.precision_tolerance(self.float)
 
         # Print precision info
         flucsprint(
