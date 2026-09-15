@@ -228,28 +228,6 @@ class FourierSystem(FlucsSystem):
                 "Must be either 'discrete' or 'continuous'."
             )
 
-        # Check for conflicts in hyperdissipation parameters
-        if self.input["hyperdissipation.kmod"] > 0.0 and any(
-            self.input[f"hyperdissipation.{component}"] > 0.0
-            for component in self.hyperdissipation_components
-            if component != "kmod"
-        ):
-            raise InvalidFlucsInputFileError(
-                "Cannot enable hyperdissipation.kmod alongside other "
-                "hyperdissipation components. Use either kmod or the "
-                "directional components."
-            )
-
-        if self.input["hyperdissipation.kperp"] > 0.0 and (
-            self.input["hyperdissipation.kx"] > 0.0
-            or self.input["hyperdissipation.ky"] > 0.0
-        ):
-            raise InvalidFlucsInputFileError(
-                "Cannot enable both hyperdissipation.kperp "
-                "and hyperdissipation.kx/ky simultaneously. "
-                "Use either kperp or kx/ky. "
-            )
-
         # Resolve and validate the dealiasing options before setup
         dealiasing_method = self.input["dealiasing.method"]
         match dealiasing_method:
