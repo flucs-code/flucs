@@ -143,9 +143,7 @@ class FlucsOutput(ABC):
         self.save_steps = self.system.input[f"output.{self.name}.save_steps"]
 
         # Set the precision of the netcdf outputs
-        self.netcdf_precision = (
-            "f4" if self.system.float is np.float32 else "f8"
-        )
+        self.netcdf_precision = self.system.netcdf_precision
 
         self._add_diagnostics_from_input()
 
@@ -448,27 +446,34 @@ class FlucsOutputNC(FlucsOutput):
 
                     # Create variable
                     if var.is_complex:
+                        real_name = (
+                            f"{var.name}{self.system.netcdf_real_suffix}"
+                        )
+                        imag_name = (
+                            f"{var.name}{self.system.netcdf_imag_suffix}"
+                        )
+
                         # Complex variables are stored as two separate netCDF4
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
                         diagnostic_group.createVariable(
-                            f"{var.name}_real",
+                            real_name,
                             self.netcdf_precision,
                             var_shape,
                         )
                         diagnostic_group.createVariable(
-                            f"{var.name}_imag",
+                            imag_name,
                             self.netcdf_precision,
                             var_shape,
                         )
 
                         # If time-independent, write data now
                         if not var.is_time_dependent:
-                            diagnostic_group[f"{var.name}_real"][:] = np.array(
+                            diagnostic_group[real_name][:] = np.array(
                                 var.data_cache[-1]
                             )[:].real
 
-                            diagnostic_group[f"{var.name}_imag"][:] = np.array(
+                            diagnostic_group[imag_name][:] = np.array(
                                 var.data_cache[-1]
                             )[:].imag
 
@@ -525,10 +530,16 @@ class FlucsOutputNC(FlucsOutput):
                     # If scalar diagnostic, this is much easier
                     if len(var.shape) == 0:
                         if var.is_complex:
-                            diagnostic_group[f"{var.name}_real"][
+                            real_name = (
+                                f"{var.name}{self.system.netcdf_real_suffix}"
+                            )
+                            imag_name = (
+                                f"{var.name}{self.system.netcdf_imag_suffix}"
+                            )
+                            diagnostic_group[real_name][
                                 first_index:last_index
                             ] = np.asarray(var.data_cache).real
-                            diagnostic_group[f"{var.name}_imag"][
+                            diagnostic_group[imag_name][
                                 first_index:last_index
                             ] = np.asarray(var.data_cache).imag
                         else:
@@ -537,11 +548,17 @@ class FlucsOutputNC(FlucsOutput):
                             ] = np.asarray(var.data_cache).real
                     else:
                         if var.is_complex:
+                            real_name = (
+                                f"{var.name}{self.system.netcdf_real_suffix}"
+                            )
+                            imag_name = (
+                                f"{var.name}{self.system.netcdf_imag_suffix}"
+                            )
                             for i in range(times_to_write):
-                                diagnostic_group[f"{var.name}_real"][
+                                diagnostic_group[real_name][
                                     first_index + i, :
                                 ] = var.data_cache[i][:].real
-                                diagnostic_group[f"{var.name}_imag"][
+                                diagnostic_group[imag_name][
                                     first_index + i, :
                                 ] = var.data_cache[i][:].imag
                         else:

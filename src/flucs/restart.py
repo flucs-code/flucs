@@ -46,10 +46,8 @@ class FlucsRestart:
     def __init__(self, system: FlucsSystem):
         self.system = system
 
-        # Set the precision for netCDF variables based on system float type
-        self.netcdf_precision = (
-            "f4" if self.system.float is np.float32 else "f8"
-        )
+        # Follow the precision contract established by the parent system
+        self.netcdf_precision = self.system.netcdf_precision
 
         self._decide_initial_path()
         self._load_restart_data()
@@ -147,13 +145,15 @@ class FlucsRestart:
 
             for name in var_names:
                 # Imaginary part handled simulatneously with real part
-                if name.endswith("_imag"):
+                if name.endswith(self.system.netcdf_imag_suffix):
                     continue
 
                 # Complex arrays stored as <base>_real and <base>_imag
-                if name.endswith("_real"):
-                    base_name = name.removesuffix("_real")
-                    imag_name = base_name + "_imag"
+                if name.endswith(self.system.netcdf_real_suffix):
+                    base_name = name.removesuffix(
+                        self.system.netcdf_real_suffix
+                    )
+                    imag_name = f"{base_name}{self.system.netcdf_imag_suffix}"
 
                     v_r = ds.variables[name]
                     if imag_name in ds.variables:
@@ -364,13 +364,15 @@ class FlucsRestart:
                             ds.createDimension(dname, int(dsize))
 
                 if np.iscomplexobj(var_data):
+                    real_name = f"{var_name}{self.system.netcdf_real_suffix}"
+                    imag_name = f"{var_name}{self.system.netcdf_imag_suffix}"
                     v_r = ds.createVariable(
-                        f"{var_name}_real",
+                        real_name,
                         self.netcdf_precision,
                         tuple(dim_names),
                     )
                     v_i = ds.createVariable(
-                        f"{var_name}_imag",
+                        imag_name,
                         self.netcdf_precision,
                         tuple(dim_names),
                     )

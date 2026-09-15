@@ -1,4 +1,5 @@
-"""Definition of the abstract base for any flucs system.
+"""
+Definition of the abstract base for any flucs system.
 
 Outlines the basic functionality of any system using
 abstract methods.
@@ -13,7 +14,7 @@ import importlib
 import pathlib as pl
 import sys
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -41,7 +42,12 @@ class FlucsSystem(ABC):
     float: type
     complex: type
     int: type
+    netcdf_precision: str
     tolerance: float
+
+    # Naming convention for complex variables stored in NetCDF files
+    netcdf_real_suffix: ClassVar[str] = "_real"
+    netcdf_imag_suffix: ClassVar[str] = "_imag"
 
     # Variables to that keep track of time
     current_step: int
@@ -136,9 +142,11 @@ class FlucsSystem(ABC):
             case "single":
                 self.float = np.float32
                 self.complex = np.complex64
+                self.netcdf_precision = "f4"
             case "double":
                 self.float = np.float64
                 self.complex = np.complex128
+                self.netcdf_precision = "f8"
                 self.module_options.define_flag("DOUBLE_PRECISION")
 
         # We always use 64-bit integers

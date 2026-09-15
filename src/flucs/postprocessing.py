@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 from netCDF4 import Dataset
 
 import flucs
+from flucs.systems import FlucsSystem
 from flucs.utilities.messages import flucsprint
 
 
@@ -581,10 +582,12 @@ class FlucsPostProcessing:
         """
 
         # Load data
+        real_name = f"{variable}{FlucsSystem.netcdf_real_suffix}"
+        imag_name = f"{variable}{FlucsSystem.netcdf_imag_suffix}"
         real, boundary_indices_real, dims_dicts_real = (
             self.load_netcdf_variable(
                 nc_path,
-                f"{variable}_real",
+                real_name,
                 fill_value=np.real(fill_value),
                 groups=groups,
                 concatenate=concatenate,
@@ -594,7 +597,7 @@ class FlucsPostProcessing:
         imag, boundary_indices_imag, dims_dicts_imag = (
             self.load_netcdf_variable(
                 nc_path,
-                f"{variable}_imag",
+                imag_name,
                 fill_value=np.imag(fill_value),
                 groups=groups,
                 concatenate=concatenate,
