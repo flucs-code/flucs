@@ -4,7 +4,7 @@
 // Runs once during CUDA initialisation.
 extern "C" __global__
 void compute_hyperdissipation_components_kmax(
-    FLUCS_FLOAT hyperdissipation_components_kmax[4]
+    FLUCS_FLOAT hyperdissipation_components_kmax[5]
 ) {
     if (blockIdx.x != 0 || threadIdx.x != 0)
         return;
@@ -14,6 +14,7 @@ void compute_hyperdissipation_components_kmax(
     FLUCS_FLOAT kx_max = 0;
     FLUCS_FLOAT ky_max = 0;
     FLUCS_FLOAT kperp2_max = 0;
+    FLUCS_FLOAT kmod2_max = 0;
 
     // The maximum kx, ky, and kperp occur for kz = 0
     for (size_t ikx = 0; ikx < NX; ikx++) {
@@ -43,12 +44,34 @@ void compute_hyperdissipation_components_kmax(
         );
     }
 
+#ifdef HYPERDISSIPATION_KMOD
+    // The isotropic maximum can occur away from every coordinate axis
+    for (size_t ikz = 0; ikz < NZ; ikz++) {
+        for (size_t ikx = 0; ikx < NX; ikx++) {
+            for (size_t iky = 0; iky < HALF_NY; iky++) {
+                if (is_mode_padded(ikz, ikx, iky))
+                    continue;
+
+                const FLUCS_FLOAT kz = kz_from_ikz(ikz);
+                const FLUCS_FLOAT kx = kx_from_ikx(ikx);
+                const FLUCS_FLOAT ky = ky_from_iky(iky);
+                const FLUCS_FLOAT kmod2 = kz*kz + kx*kx + ky*ky;
+
+                kmod2_max = flucs_fmax(kmod2_max, kmod2);
+            }
+        }
+    }
+#endif
+
     // Store maximum wavenumbers
     hyperdissipation_components_kmax[HYPERDISSIPATION_KZ_INT] = kz_max;
     hyperdissipation_components_kmax[HYPERDISSIPATION_KX_INT] = kx_max;
     hyperdissipation_components_kmax[HYPERDISSIPATION_KY_INT] = ky_max;
     hyperdissipation_components_kmax[HYPERDISSIPATION_KPERP_INT] = (
         flucs_sqrt(kperp2_max)
+    );
+    hyperdissipation_components_kmax[HYPERDISSIPATION_KMOD_INT] = (
+        flucs_sqrt(kmod2_max)
     );
 }
 
@@ -196,6 +219,44 @@ FLUCS_FLOAT get_hyperdissipation_kz(
 #endif
 }
 
+// Calculates the isotropic hyperdissipation for a given kx, ky, kz mode
+__device__ __forceinline__
+FLUCS_FLOAT get_hyperdissipation_kmod(
+    const FLUCS_FLOAT kx,
+    const FLUCS_FLOAT ky,
+    const FLUCS_FLOAT kz,
+    const FLUCS_FLOAT adaptive_rate
+) {
+
+#ifdef HYPERDISSIPATION_KMOD
+
+    const FLUCS_FLOAT kmod2 = kx * kx + ky * ky + kz * kz;
+
+#ifdef HYPERDISSIPATION_KMOD_NORMALISED
+    constexpr FLUCS_FLOAT kmod_max = HYPERDISSIPATION_KMOD_KMAX;
+    const FLUCS_FLOAT kmod2_norm = kmod_max > 0
+        ? kmod2 / (kmod_max * kmod_max)
+        : (FLUCS_FLOAT)0;
+#else
+    const FLUCS_FLOAT kmod2_norm = kmod2;
+#endif // NORMALISED
+
+    FLUCS_FLOAT hyperdissipation = HYPERDISSIPATION_KMOD;
+
+    #pragma unroll
+    for (int i = 0; i < HYPERDISSIPATION_KMOD_POWER; i++)
+        hyperdissipation *= kmod2_norm;
+
+    #ifdef HYPERDISSIPATION_KMOD_ADAPTIVE
+        hyperdissipation *= adaptive_rate;
+    #endif
+
+    return hyperdissipation;
+#else
+    return (FLUCS_FLOAT)0;
+#endif
+}
+
 // Calculates the total hyperdissipation for a given mode
 __device__ __forceinline__
 FLUCS_FLOAT get_hyperdissipation(
@@ -212,7 +273,8 @@ FLUCS_FLOAT get_hyperdissipation(
     return get_hyperdissipation_kperp(kx, ky, adaptive_rate)
         + get_hyperdissipation_kx(kx, adaptive_rate)
         + get_hyperdissipation_ky(ky, adaptive_rate)
-        + get_hyperdissipation_kz(kz, adaptive_rate);
+        + get_hyperdissipation_kz(kz, adaptive_rate)
+        + get_hyperdissipation_kmod(kx, ky, kz, adaptive_rate);
 }
 
 // Functor for calculating the size of the term due to perpendicular hyperdissipation for a given mode
@@ -288,9 +350,28 @@ struct HyperdissipationKz_Functor {
     }
 };
 
+// Functor for calculating the size of isotropic hyperdissipation for a mode
+template<typename FunctorT>
+struct HyperdissipationKmod_Functor {
+    const FunctorT functor;
+    const FLUCS_FLOAT adaptive_rate;
+    __device__ __forceinline__ FLUCS_FLOAT operator()(size_t index) const {
 
-// Functor for calculating the total (perpendicular + directional)
-// hyperdissipation for a given mode
+        indices3d_t indices = get_indices3d<NZ, NX, HALF_NY>(index);
+        const FLUCS_FLOAT kx = kx_from_ikx(indices.ikx);
+        const FLUCS_FLOAT ky = ky_from_iky(indices.iky);
+        const FLUCS_FLOAT kz = kz_from_ikz(indices.ikz);
+
+        const FLUCS_FLOAT hyperdissipation = (
+            get_hyperdissipation_kmod(kx, ky, kz, adaptive_rate)
+        );
+
+        return hyperdissipation * functor(index);
+    }
+};
+
+
+// Functor for calculating the total hyperdissipation for a given mode
 template<typename FunctorT>
 struct Hyperdissipation_Functor {
     const FunctorT functor;
@@ -328,6 +409,10 @@ struct HyperdissipationSelector_Functor {
                 }(index);
             case HYPERDISSIPATION_KPERP_INT:
                 return HyperdissipationKperp_Functor<FunctorT>{
+                    functor, adaptive_rate
+                }(index);
+            case HYPERDISSIPATION_KMOD_INT:
+                return HyperdissipationKmod_Functor<FunctorT>{
                     functor, adaptive_rate
                 }(index);
             default:
