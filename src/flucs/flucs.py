@@ -218,7 +218,7 @@ def main():
     )
 
     operation_modes.add_argument(
-        "--memory-profile",
+        "--memory",
         "-m",
         action="store_true",
         default=False,
@@ -302,13 +302,17 @@ def main():
         if not input_path.exists():
             raise FileNotFoundError(f"Input file not found in {io_path} ")
 
-        if args.memory_profile:
+        if args.memory:
             hook = LineProfileHook()
             with hook:
                 run_flucs(input_path, args.override)
             cupy.cuda.get_current_stream().synchronize()
-            flucsprint("Memory report from CuPy's LineProfileHook:")
-            hook.print_report()
+
+            log_path = io_path / "output.log"
+            with open(log_path, "a", encoding="utf-8") as log_file:
+                with FlucsLogHandler(log_file, keep_stdout=True):
+                    flucsprint("Memory report from CuPy's LineProfileHook:")
+                    hook.print_report(file=sys.stdout)
             return
 
         run_flucs(input_path, args.override)
