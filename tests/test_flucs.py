@@ -246,7 +246,7 @@ def test_main_defaults_to_run_and_combines_overrides(monkeypatch, tmp_path):
 
 
 @pytest.mark.gpu
-def test_main_profiles_memory(monkeypatch, tmp_path, capfd):
+def test_main_profiles_memory(monkeypatch, tmp_path, capsys):
     """
     Memory profiling records a real GPU allocation and prints its report.
     """
@@ -267,7 +267,7 @@ def test_main_profiles_memory(monkeypatch, tmp_path, capfd):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["flucs", "--io_path", str(tmp_path), "--memory-profile"],
+        ["flucs", "--io_path", str(tmp_path), "--memory"],
     )
 
     # Empty the pool so that the hook observes a fresh device allocation
@@ -279,12 +279,14 @@ def test_main_profiles_memory(monkeypatch, tmp_path, capfd):
         profiled_arrays.clear()
         memory_pool.free_all_blocks()
 
-    # Check that the profiled operation ran and produced a nonempty report
+    # Check that the report reaches both the terminal and the FLUCS log
     run_flucs.assert_called_once_with(input_path, None)
-    output = capfd.readouterr().out
+    terminal_output = capsys.readouterr().out
+    log_output = (tmp_path / "output.log").read_text(encoding="utf-8")
 
-    assert "Memory report from CuPy's LineProfileHook:" in output
-    root_report = next(
-        line for line in output.splitlines() if line.startswith("_root (")
-    )
-    assert root_report != "_root (0.00B, 0.00B)"
+    for output in (terminal_output, log_output):
+        assert "Memory report from CuPy's LineProfileHook:" in output
+        root_report = next(
+            line for line in output.splitlines() if line.startswith("_root (")
+        )
+        assert root_report != "_root (0.00B, 0.00B)"
