@@ -15,8 +15,5 @@ rotation = [0.2, 0.1, 0.2]
 method = "deterministic"
 
 [forcing]
-# Total free-energy injection rate for explicit negative damping.
 method = "negative_damping"
 rate = 0.02
-range_kperp = [0.5, 1.5]
-range_kz = [0.5, 1.5]
