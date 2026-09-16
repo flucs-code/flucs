@@ -376,10 +376,14 @@ class FourierSystem(FlucsSystem):
             case "polyhedral":
                 self.module_options.define_flag("PHASE_SHIFT_POLYHEDRAL")
 
-                # Set to largest multiple of 1/scale that is strictly below
-                # the theoretical pairwise limit of 2/(nonlinear_order + 1)
-                denominator = nonlinear_order + 1
-                max_sum = ((2 * scale - 1) // denominator) / scale
+                # Set dealiasing max sum
+                if self.input["dealiasing.max_sum"] > 0:
+                    max_sum = self.input["dealiasing.max_sum"]
+                else:
+                    # Set to largest multiple of 1/scale that is strictly below
+                    # the theoretical pairwise limit of 2/(nonlinear_order + 1)
+                    denominator = nonlinear_order + 1
+                    max_sum = ((2 * scale - 1) // denominator) / scale
 
                 self.module_options.define_float(
                     "DEALIASING_MAX_SUM",
@@ -2228,11 +2232,6 @@ class FourierSystem(FlucsSystem):
 
         if not self.input["dealiasing.check_errors"]:
             return
-
-        # TODO a test of the dealiasing boundaries should be written, in which
-        # the padded values or radius are changed, and all of this code moved
-        # into said function.
-        # This should be both for two-thirds and phase-shifted dealiasing.
 
         solved_modes_mask = self.get_solved_grid_mask()
         solved_modes_mask = cp.array(solved_modes_mask)
