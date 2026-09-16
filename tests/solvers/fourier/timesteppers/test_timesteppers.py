@@ -299,7 +299,7 @@ def _run_solution(method, systems, initial_fields, dt):
 
 
 @pytest.mark.gpu
-@pytest.mark.long
+@pytest.mark.slow
 @pytest.mark.parametrize("method", tuple(EXPECTED_ORDERS))
 def test_timestepper_convergence(
     method,

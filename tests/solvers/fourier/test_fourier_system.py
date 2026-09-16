@@ -1067,7 +1067,7 @@ def test_field_history_realspace_and_restart_data(ready_fourier_system):
 
 
 @pytest.mark.gpu
-@pytest.mark.long
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("n_unpadded", "is_safe"),
     [
@@ -1108,7 +1108,7 @@ def test_two_thirds_dealiasing_boundary(
 
 
 @pytest.mark.gpu
-@pytest.mark.long
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("radius_squared", "is_safe"),
     [
@@ -1148,7 +1148,7 @@ def test_spherical_phase_shift_dealiasing_boundary(
 
 
 @pytest.mark.gpu
-@pytest.mark.long
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("max_sum", "is_safe"),
     [
@@ -1188,7 +1188,7 @@ def test_polyhedral_phase_shift_dealiasing_boundary(
 
 
 @pytest.mark.gpu
-@pytest.mark.long
+@pytest.mark.slow
 @pytest.mark.parametrize("truncation", ("spherical", "polyhedral"))
 def test_phase_shift_memory_models_agree(
     test_system,

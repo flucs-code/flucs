@@ -41,9 +41,9 @@ def pytest_addoption(parser):
         help="Run only GPU tests (requires a CUDA device).",
     )
     group.addoption(
-        "--long",
+        "--slow",
         action="store_true",
-        help="Include long-running tests in the selected test classes.",
+        help="Include slow-running tests in the selected test classes.",
     )
     group.addoption(
         "--core",
@@ -80,8 +80,8 @@ def pytest_cmdline_main(config):  # Has to be called this for pytest discovery
         "      Run CPU tests only, without probing for a CUDA device.\n"
         "  --gpu\n"
         "      Run GPU tests only after checking for a usable CUDA device.\n"
-        "  --long\n"
-        "      Include long-running tests in the selected test classes.\n"
+        "  --slow\n"
+        "      Include slow-running tests in the selected test classes.\n"
         "  --flucs-help\n"
         "      Show this help and exit.\n"
         "\n"
@@ -91,10 +91,10 @@ def pytest_cmdline_main(config):  # Has to be called this for pytest discovery
         "  pytest\n"
         "  pytest --cpu\n"
         "  pytest --gpu\n"
-        "  pytest --gpu --long\n"
+        "  pytest --gpu --slow\n"
         "  pytest --core\n"
         "  pytest --solvers all\n"
-        "  pytest --solvers <name of solver> --gpu --long"
+        "  pytest --solvers <name of solver> --gpu --slow"
     )
     return pytest.ExitCode.OK
 
@@ -190,13 +190,13 @@ def pytest_configure(config):
 
         if gpu_only:
             selected_devices = frozenset({"gpu"})
-            device_report = "GPU only (explicit --gpu)"
+            device_report = "GPU only"
         elif gpu_available:
             selected_devices = frozenset({"cpu", "gpu"})
             device_report = "CPU and GPU"
         else:
             selected_devices = frozenset({"cpu"})
-            device_report = "CPU only (no usable CUDA device detected)"
+            device_report = "CPU only"
 
     config._flucs_selected_devices = selected_devices
     config._flucs_device_report = device_report
@@ -209,10 +209,9 @@ def pytest_report_header(config):
     if not hasattr(config, "_flucs_selected_devices"):
         return None
 
-    long_report = "included" if config.getoption("--long") else "excluded"
+    slow_report = "including" if config.getoption("--slow") else "excluding"
     return [
-        f"FLUCS devices: {config._flucs_device_report}",
-        f"FLUCS long tests: {long_report}",
+        f"Selected tests: {config._flucs_device_report} ({slow_report} --slow)",
     ]
 
 
@@ -272,18 +271,18 @@ def _resolve_device_class(node) -> str:
     return "cpu" if cpu_markers else "gpu"
 
 
-def _is_long_test(node) -> bool:
+def _is_slow_test(node) -> bool:
     """
     Validate the optional duration marker and return whether it is present.
     """
-    markers = list(node.iter_markers("long"))
+    markers = list(node.iter_markers("slow"))
     nodeid = getattr(node, "nodeid", node.name)
 
     if len(markers) > 1:
-        raise pytest.UsageError(f"{nodeid} must have at most one long marker")
+        raise pytest.UsageError(f"{nodeid} must have at most one slow marker")
     if markers and (markers[0].args or markers[0].kwargs):
         raise pytest.UsageError(
-            f"{nodeid} long markers do not accept arguments"
+            f"{nodeid} slow markers do not accept arguments"
         )
 
     return bool(markers)
@@ -328,7 +327,7 @@ def pytest_collection_modifyitems(config, items):
 
     # Validate ownership and deselect tests outside the requested selection
     selected_devices = config._flucs_selected_devices
-    include_long = config.getoption("--long")
+    include_slow = config.getoption("--slow")
     core_only = config.getoption("--core")
     selected_solvers = config._flucs_selected_solvers
 
@@ -340,7 +339,7 @@ def pytest_collection_modifyitems(config, items):
         # Resolve ownership once so collection and parametrization agree
         ownership = _resolve_node_ownership(item)
         device_class = _resolve_device_class(item)
-        is_long = _is_long_test(item)
+        is_slow = _is_slow_test(item)
 
         # Precision restrictions apply only to complete runtime fixtures
         if list(item.iter_markers("runtime_precision")):
@@ -352,7 +351,7 @@ def pytest_collection_modifyitems(config, items):
             _resolve_runtime_precisions(item)
 
         include_item = device_class in selected_devices
-        include_item = include_item and (include_long or not is_long)
+        include_item = include_item and (include_slow or not is_slow)
 
         # Apply the same shared ownership policy used for parametrization
         include_item = include_item and is_test_selected(
