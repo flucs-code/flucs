@@ -54,7 +54,6 @@ class FlucsOutput(ABC):
     extension: str
     save_steps: int
     next_save: int
-    netcdf_precision: str
 
     # Associated system
     system: FlucsSystem
@@ -141,11 +140,6 @@ class FlucsOutput(ABC):
         # Setup steps and diagnostics from input file and system
         self.next_save = 0
         self.save_steps = self.system.input[f"output.{self.name}.save_steps"]
-
-        # Set the precision of the netcdf outputs
-        self.netcdf_precision = (
-            "f4" if self.system.float is np.float32 else "f8"
-        )
 
         self._add_diagnostics_from_input()
 
@@ -305,20 +299,28 @@ class FlucsOutputNC(FlucsOutput):
 
     # netCDF4 group to write to
     group_name: str
+    group_number: int
     group: Group
+
+    netcdf_precision: str
+
+    def get_next_group(self):
+        with Dataset(self.filepath, "r+", format="NETCDF4") as dataset:
+            if hasattr(self, "group_name"):
+                raise ValueError(
+                    f"Output {self.name} has already "
+                    f"set up group '{self.group_name}'."
+                )
+
+            group_number = max(
+                [-1] + [int(name) for name in dataset.groups.keys()]
+            )
+        return group_number + 1
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
         if not hasattr(self, "group_name"):
-            # We are yet to initialise the group
-            # Go through the file and pick group_name to be an integer that is
-            # equal to the largest one found + 1
-            group_number = max(
-                [-1] + [int(name) for name in dataset.groups.keys()]
-            )
-            group_number += 1
-
-            self.group_name = str(group_number)
+            self.group_name = str(self.group_number)
             group = dataset.createGroup(self.group_name)
             group.createDimension("time", None)
             group.createVariable("time", self.netcdf_precision, ("time",))
@@ -340,9 +342,9 @@ class FlucsOutputNC(FlucsOutput):
 
     def _createDimension(  # noqa: N802
         self,
-        rootgrp: Dataset or Group,
+        rootgrp: Dataset | Group,
         dim_name: str,
-        dim_size: int or None,
+        dim_size: int | None,
         dim_data,
     ):
         """
@@ -426,6 +428,10 @@ class FlucsOutputNC(FlucsOutput):
         routines).
 
         """
+        # Set the precision of the netcdf outputs
+        self.netcdf_precision = (
+            "f4" if self.system.float is np.float32 else "f8"
+        )
 
         with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()

@@ -20,7 +20,7 @@ import numpy as np
 from flucs import FlucsInput
 from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic
-from flucs.output import FlucsOutput
+from flucs.output import FlucsOutput, FlucsOutputNC
 from flucs.restart import FlucsRestart
 from flucs.utilities.cupy import KernelCollection, ModuleOptions
 from flucs.utilities.messages import flucsprint, format_seconds
@@ -220,6 +220,26 @@ class FlucsSystem(ABC):
 
         self.restart_manager = FlucsRestart(self)
 
+    def setup_netcdf_output_group(self) -> None:
+        """
+        Goes through all the netCDF outputs and
+        decides what group number to use.
+        """
+        if not self.output_heap:
+            return
+
+        output_group = 0
+        for output in self.output_heap:
+            if isinstance(output, FlucsOutputNC):
+                output_group = max(
+                    output_group,
+                    output.get_next_group()
+                )
+
+        for output in self.output_heap:
+            if isinstance(output, FlucsOutputNC):
+                output.group_number = output_group
+
     def write_output(self, force=False):
         self.steps_until_next_write -= 1
         if self.steps_until_next_write > 0 and not force:
@@ -308,6 +328,8 @@ class FlucsSystem(ABC):
                 continue
 
             self.add_output(FlucsOutput(name=output_name, system=self))
+        
+        self.setup_netcdf_output_group()
 
     def compile_cupy_module(self) -> None:
         """
