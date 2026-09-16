@@ -228,7 +228,7 @@ class FlucsSystem(ABC):
         if not self.output_heap:
             return
 
-        output_group = 0
+        output_group = -1
         for output in self.output_heap:
             if isinstance(output, FlucsOutputNC):
                 output_group = max(
@@ -240,7 +240,10 @@ class FlucsSystem(ABC):
             if isinstance(output, FlucsOutputNC):
                 output.group_number = output_group
 
-        flucsprint(f"netCDF output group: {output_group}")
+        # If output_group is still -1, then none of the
+        # outputs are FlucsOutputNC
+        if output_group > -1:
+            flucsprint(f"netCDF output group: {output_group}")
 
     def write_output(self, force=False):
         self.steps_until_next_write -= 1
