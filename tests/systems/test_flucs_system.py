@@ -14,6 +14,22 @@ from tests.support.support import create_test_solver_system
 pytestmark = pytest.mark.core
 
 
+def test_precision_tolerance_follows_machine_precision(precision):
+    """
+    The shared tolerance remains anchored to each floating-point precision.
+    """
+
+    # Calculate the policy independently of the production helper
+    expected_tolerance = precision.float_type(
+        np.finfo(precision.float_type).eps * 64.0
+    )
+    tolerance = FlucsSystem.precision_tolerance(precision.float_type)
+
+    # Check both its numerical value and scalar type
+    assert type(tolerance) is precision.float_type
+    assert tolerance == expected_tolerance
+
+
 class _ScheduledOutput:
     """
     Small explicit output implementing the interface scheduled by FlucsSystem.

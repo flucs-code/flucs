@@ -28,6 +28,14 @@ def test_test_system_registry_is_temporary_and_complete(monkeypatch):
     The complete test overlay restores both original registry objects exactly.
     """
 
+    # Every solver supplied by FLUCS must have an independent TestSystem
+    flucs_solver_names = {
+        entry.name
+        for entry in flucs_module.solvers
+        if entry.dist is not None and entry.dist.name == "flucs"
+    }
+    assert set(TEST_SYSTEMS) == flucs_solver_names
+
     # Every standalone system is visible through the session-level overlay
     for system_spec in TEST_SYSTEMS.values():
         assert (

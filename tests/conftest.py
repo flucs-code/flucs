@@ -77,7 +77,7 @@ def pytest_cmdline_main(config):  # Has to be called this for pytest discovery
         "  pytest\n"
         "  pytest --core\n"
         "  pytest --solvers all\n"
-        "  pytest --solvers FourierSolver --gpu"
+        "  pytest --solvers <name of solver> --gpu"
     )
     return pytest.ExitCode.OK
 

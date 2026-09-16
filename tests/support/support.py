@@ -66,6 +66,7 @@ class TestSystemSpec:
     solver_name: str
     system_name: str
     system_path: str
+    expected_timestepper_paths: dict[str, str]
     input_data: dict[str, Any]
     runtime_input_path: pl.Path
     runtime_requires_gpu: bool = False
@@ -92,6 +93,19 @@ class TestSystemSpec:
         module = importlib.import_module(module_name)
         return getattr(module, class_name)
 
+    @property
+    def timestepper_types(self) -> dict[str, type]:
+        """
+        Load the independently declared timestepper classes for this solver.
+        """
+        timestepper_types = {}
+        for name, path in self.expected_timestepper_paths.items():
+            module_name, class_name = path.split(":", maxsplit=1)
+            module = importlib.import_module(module_name)
+            timestepper_types[name] = getattr(module, class_name)
+
+        return timestepper_types
+
 
 # Definitive list of test systems for the test suite
 TEST_SYSTEMS = {
@@ -99,6 +113,18 @@ TEST_SYSTEMS = {
         solver_name="FourierSolver",
         system_name="TestFourierSystem",
         system_path="tests.support.fourier:TestFourierSystem",
+        expected_timestepper_paths={
+            "ab3": (
+                "flucs.solvers.fourier.timesteppers.ab3:FourierAB3Timestepper"
+            ),
+            "rk4": (
+                "flucs.solvers.fourier.timesteppers.rk4:FourierRK4Timestepper"
+            ),
+            "ssprk3": (
+                "flucs.solvers.fourier.timesteppers.ssprk3:"
+                "FourierSSPRK3Timestepper"
+            ),
+        },
         input_data={
             "dimensions": {
                 "nx": 8,
