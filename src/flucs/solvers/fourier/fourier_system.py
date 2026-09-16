@@ -513,7 +513,7 @@ class FourierSystem(FlucsSystem):
         nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
 
         # Maximum kperp from bin width
-        bin_width = (
+        bin_width = self.float(
             dkperp
             if nkperp_from_dkperp <= self.cuda_block_size
             else (kperp_max - kperp_min) / nkperp
@@ -575,7 +575,7 @@ class FourierSystem(FlucsSystem):
         nkmod = min(nkmod_from_dkmod, self.cuda_block_size)
 
         # Maximum kmod from bin width
-        bin_width = (
+        bin_width = self.float(
             dkmod
             if nkmod_from_dkmod <= self.cuda_block_size
             else (kmod_max - kmod_min) / nkmod
