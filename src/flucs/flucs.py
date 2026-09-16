@@ -163,6 +163,30 @@ def run_flucs(input_path: pl.Path, override: list | None = None):
 
             solver.run()
 
+def write_default_input(system_name: str):
+    """
+    Creates a default input file.
+
+    Parameters
+    ----------
+    system_name : str
+        Name of the FlucsSystem.
+
+    """
+    input_file_path = pl.Path("./input.toml")
+
+    if input_file_path.exists():
+        raise ValueError(
+            "input.toml already exists in the current directory. "
+            "Please remove it manually if you want to "
+            "write a default-input file."
+        )
+
+    default_input = FlucsInput(filepath=None)
+    get_system_type(system_name).load_defaults(default_input)
+
+    with open(input_file_path, "w") as file:
+        file.write(str(default_input))
 
 def main():
     """
@@ -196,6 +220,18 @@ def main():
         "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'.",
     )
 
+    parser.add_argument(
+        "--memory-profile",
+        "-m",
+        action="store_true",
+        default=False,
+        required=False,
+        help=(
+            "If specified, --run will execute with CuPy's LineProfileHook. "
+            "This can be used to profile GPU memory allocations."
+        ),
+    )
+
     operation_modes = parser.add_mutually_exclusive_group()
 
     operation_modes.add_argument(
@@ -207,14 +243,13 @@ def main():
     )
 
     operation_modes.add_argument(
-        "--memory-profile",
-        "-m",
-        action="store_true",
-        default=False,
+        "--init-input",
+        type=str,
+        metavar="SYSTEM_NAME",
         required=False,
         help=(
-            "If specified, --run will execute with CuPy's LineProfileHook. "
-            "This can be used to profile GPU memory allocations."
+            "Writes input.toml that contains the "
+            "defaults for the specified FlucsSystem."
         ),
     )
 
@@ -275,6 +310,7 @@ def main():
     if not any(
         (
             args.run,
+            args.init_input,
             args.list,
             args.test,
             args.clean,
@@ -302,6 +338,10 @@ def main():
 
         run_flucs(input_path, args.override)
         return
+
+    # Write a default input file
+    if args.init_input:
+        write_default_input(args.init_input)
 
     # List installed solvers and systems
     if args.list:
