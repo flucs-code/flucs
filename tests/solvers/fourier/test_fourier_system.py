@@ -1,5 +1,5 @@
 """
-CPU tests for FourierSystem configuration and state management.
+Tests for FourierSystem configuration, state management, and CUDA lifecycle.
 """
 
 from types import SimpleNamespace
@@ -10,10 +10,105 @@ import pytest
 import toml
 
 import flucs.solvers.fourier.fourier_system as fourier_system_module
+from flucs import cupy as cp
 from flucs.input import InvalidFlucsInputFileError
-from tests.support.support import create_test_solver_system
+from tests.support.support import (
+    TEST_PRECISIONS,
+    TEST_SYSTEMS,
+    create_test_solver_system,
+)
 
 pytestmark = pytest.mark.solver("FourierSolver")
+
+
+def _expected_two_thirds_mask(system):
+    """
+    Construct the rectangular solved grid independently of the CUDA kernel.
+    """
+
+    solved_z = np.ones(system.nz, dtype=bool)
+    solved_x = np.ones(system.nx, dtype=bool)
+    solved_y = np.arange(system.half_ny) < system.half_ny_unpadded
+
+    solved_z[
+        system.half_nz_unpadded : system.half_nz_unpadded
+        + system.nz
+        - system.nz_unpadded
+    ] = False
+    solved_x[
+        system.half_nx_unpadded : system.half_nx_unpadded
+        + system.nx
+        - system.nx_unpadded
+    ] = False
+
+    return (
+        solved_z[:, np.newaxis, np.newaxis]
+        & solved_x[np.newaxis, :, np.newaxis]
+        & solved_y[np.newaxis, np.newaxis, :]
+    )
+
+
+@pytest.fixture(
+    scope="module",
+    params=TEST_PRECISIONS,
+    ids=lambda precision: precision.name,
+)
+def compiled_fourier_system(request, tmp_path_factory):
+    """
+    Compile one minimal TestFourierSystem for each supported precision.
+    """
+
+    precision = request.param
+    io_path = tmp_path_factory.mktemp(f"fourier-system-{precision.name}")
+
+    # This shared system needs the linear kernels but no nonlinear workspace
+    _, solver, system = create_test_solver_system(
+        io_path,
+        TEST_SYSTEMS["FourierSolver"],
+        precision=precision,
+        updates={
+            "setup": {
+                "linear": True,
+                "check_linear_matrix": False,
+            },
+            "forcing": {"method": ""},
+        },
+    )
+
+    # Follow the production setup order up to the point needed by these tests
+    system.setup()
+    solver.timestepper.setup()
+    system.compile_cupy_module()
+    system.setup_initial_conditions()
+
+    try:
+        yield system
+    finally:
+        system.kernels.unbind()
+
+
+@pytest.fixture
+def ready_fourier_system(compiled_fourier_system):
+    """
+    Reset mutable runtime state around the shared compiled system.
+    """
+
+    system = compiled_fourier_system
+
+    # No field history or derived CPU data may leak between the GPU tests
+    for fields in system.fields:
+        fields.fill(0)
+    system.linear_matrix = None
+    system.linear_eigensystem = None
+    system.linear_propagator = None
+    system.realspace_fields = None
+    system.solver.interrupted = False
+
+    # Use the same reset hooks as the two production solver passes
+    system.ready()
+    system.solver.timestepper.ready()
+
+    return system
 
 
 @pytest.mark.parametrize(
@@ -269,25 +364,7 @@ def test_fourier_geometry_shells_and_solved_modes(
     assert system.shell_kmod_max > np.sqrt(kz_max**2 + kx_max**2 + ky_max**2)
 
     # Reconstruct the rectangular solved region without invoking CUDA
-    solved_z = np.ones(system.nz, dtype=bool)
-    solved_x = np.ones(system.nx, dtype=bool)
-    solved_y = np.arange(system.half_ny) < system.half_ny_unpadded
-
-    solved_z[
-        system.half_nz_unpadded : system.half_nz_unpadded
-        + system.nz
-        - system.nz_unpadded
-    ] = False
-    solved_x[
-        system.half_nx_unpadded : system.half_nx_unpadded
-        + system.nx
-        - system.nx_unpadded
-    ] = False
-    solved_mask = (
-        solved_z[:, np.newaxis, np.newaxis]
-        & solved_x[np.newaxis, :, np.newaxis]
-        & solved_y[np.newaxis, np.newaxis, :]
-    )
+    solved_mask = _expected_two_thirds_mask(system)
     system.solved_grid_mask = solved_mask.astype(precision.float_type)
 
     # Public helpers must report coordinates and physical mode counts together
@@ -627,3 +704,262 @@ def test_restart_grid_rejects_incompatible_field_count(
         match="but the current system requires",
     ):
         system.prepare_restart_data()
+
+
+###############################################################################
+# Shared GPU lifecycle tests
+###############################################################################
+
+
+@pytest.mark.gpu
+def test_solved_grid_and_initial_conditions(ready_fourier_system):
+    """
+    CUDA grid selection and initial fields obey the Fourier representation.
+    """
+
+    system = ready_fourier_system
+
+    # Treat the production mask as the description of the active Fourier grid
+    solved_grid_mask = system.get_solved_grid_mask()
+    solved_mask = solved_grid_mask.astype(bool)
+
+    assert solved_grid_mask.shape == system.half_tuple
+    assert solved_grid_mask.dtype == np.dtype(system.float)
+    assert np.all((solved_grid_mask == 0) | (solved_grid_mask == 1))
+    assert np.any(solved_mask)
+    assert np.any(~solved_mask)
+
+    # Count the stored half-grid and its reflected negative-ky partners
+    nonnegative_count = int(np.count_nonzero(solved_mask))
+    zero_ky_count = int(np.count_nonzero(solved_mask[:, :, 0]))
+
+    assert system.get_number_of_solved_modes() == nonnegative_count
+    assert system.get_number_of_solved_modes(False) == (
+        2 * nonnegative_count - zero_ky_count
+    )
+
+    # Initial data has the configured layout and no energy in padded modes
+    initial_fields = system.fields_initial
+    expected_shape = (system.number_of_fields, *system.half_tuple)
+
+    assert initial_fields.shape == expected_shape
+    assert initial_fields.dtype == np.dtype(system.complex)
+    assert np.all(np.isfinite(initial_fields))
+    assert np.any(initial_fields[:, solved_mask] != 0)
+    npt.assert_array_equal(
+        initial_fields[:, ~solved_mask],
+        system.complex(0),
+    )
+
+    # The ready hook copies the initial state onto the current device field
+    assert isinstance(system.get_fields(), cp.ndarray)
+    assert system.get_fields().shape == expected_shape
+    assert system.get_fields().dtype == np.dtype(system.complex)
+
+    npt.assert_array_equal(cp.asnumpy(system.get_fields()), initial_fields)
+    npt.assert_array_equal(
+        cp.asnumpy(system.get_fields(1)),
+        np.zeros_like(initial_fields),
+    )
+
+    # ky=0 must describe a real field under the two remaining FFT reflections
+    conjugate_iz = (-np.arange(system.nz)) % system.nz
+    conjugate_ix = (-np.arange(system.nx)) % system.nx
+    fields_ky0 = initial_fields[:, :, :, 0]
+    conjugate_fields = np.conj(
+        fields_ky0[:, conjugate_iz[:, None], conjugate_ix[None, :]]
+    )
+    npt.assert_allclose(
+        fields_ky0,
+        conjugate_fields,
+        rtol=0,
+        atol=system.tolerance,
+    )
+
+
+@pytest.mark.gpu
+def test_linear_matrix_eigensystem_and_propagator(ready_fourier_system):
+    """
+    CUDA linear quantities agree with independent TestSystem references.
+    """
+
+    system = ready_fourier_system
+    solved_mask = system.get_solved_grid_mask().astype(bool)
+    expected_matrix = system.compute_linear_matrix_reference()
+
+    # The CUDA matrix matches the CPU model only where modes are retained
+    matrix = system.compute_linear_matrix()
+    expected_shape = (
+        system.number_of_fields,
+        system.number_of_fields,
+        *system.half_tuple,
+    )
+
+    assert matrix.shape == expected_shape
+    assert matrix.dtype == np.dtype(system.complex)
+    npt.assert_allclose(
+        matrix[..., solved_mask],
+        expected_matrix[..., solved_mask],
+        rtol=0,
+        atol=system.tolerance,
+    )
+    npt.assert_array_equal(
+        matrix[..., ~solved_mask],
+        system.complex(0),
+    )
+
+    # Eigenfrequencies have an analytical reference for TestFourierSystem
+    eigensystem = system.compute_linear_eigensystem()
+    eigvals = eigensystem["eigvals"]
+    eigvecs = eigensystem["eigvecs"]
+    eigvecs_inverse = eigensystem["eigvecs_inverse"]
+    expected_eigvals = system.compute_linear_frequencies_reference()
+
+    for quantity in (eigvals, eigvecs, eigvecs_inverse):
+        assert quantity.dtype == np.dtype(system.complex)
+
+    npt.assert_allclose(
+        np.sort(eigvals[:, solved_mask], axis=0),
+        np.sort(expected_eigvals[:, solved_mask], axis=0),
+        rtol=0,
+        atol=system.tolerance,
+    )
+    npt.assert_array_equal(eigvals[:, ~solved_mask], system.complex(0))
+    npt.assert_array_equal(eigvecs[..., ~solved_mask], system.complex(0))
+
+    # Normalisation, phase choice, and inverse are all part of the public data
+    solved_eigvecs = eigvecs[..., solved_mask]
+    npt.assert_allclose(
+        np.linalg.norm(solved_eigvecs, axis=1),
+        1,
+        rtol=0,
+        atol=system.tolerance,
+    )
+
+    largest_indices = np.abs(solved_eigvecs).argmax(axis=1, keepdims=True)
+    largest_components = np.take_along_axis(
+        solved_eigvecs,
+        largest_indices,
+        axis=1,
+    )
+    npt.assert_allclose(
+        largest_components.imag,
+        0,
+        rtol=0,
+        atol=system.tolerance,
+    )
+    assert np.all(largest_components.real >= -system.tolerance)
+
+    vectors = solved_eigvecs.transpose(2, 1, 0)
+    inverse = eigvecs_inverse[..., solved_mask].transpose(2, 1, 0)
+    identity = np.broadcast_to(
+        np.eye(system.number_of_fields, dtype=system.complex),
+        (vectors.shape[0], system.number_of_fields, system.number_of_fields),
+    )
+    npt.assert_allclose(
+        inverse @ vectors,
+        identity,
+        rtol=0,
+        atol=system.tolerance,
+    )
+
+    # Compare the CUDA Pade result with a NumPy exponential of the CPU matrix
+    dt = system.dt_max
+    reference_matrices = np.moveaxis(
+        expected_matrix[..., solved_mask],
+        (0, 1),
+        (-2, -1),
+    )
+    rates, reference_vectors = np.linalg.eig(reference_matrices)
+    reference_inverse = np.linalg.inv(reference_vectors)
+    exact_propagator = (
+        reference_vectors * np.exp(-dt * rates)[:, np.newaxis, :]
+    ) @ reference_inverse
+
+    propagator = system.compute_linear_propagator(dt=dt)
+    solved_propagator = np.moveaxis(
+        propagator[..., solved_mask],
+        (0, 1),
+        (-2, -1),
+    )
+
+    assert propagator.shape == expected_shape
+    assert propagator.dtype == np.dtype(system.complex)
+    npt.assert_allclose(
+        solved_propagator,
+        exact_propagator,
+        rtol=0,
+        atol=system.tolerance,
+    )
+    npt.assert_array_equal(
+        propagator[..., ~solved_mask],
+        system.complex(0),
+    )
+
+
+@pytest.mark.gpu
+def test_field_history_realspace_and_restart_data(ready_fourier_system):
+    """
+    Field history feeds real-space reconstruction and restart serialization.
+    """
+
+    system = ready_fourier_system
+
+    # Distinct valid states expose both directions of the circular history
+    history_values = [
+        system.fields_initial * system.complex(index + 1)
+        for index in range(system.fields_history_size)
+    ]
+    for fields, values in zip(system.fields, history_values, strict=True):
+        fields.set(values)
+
+    for current_step in range(2 * system.fields_history_size):
+        system.current_step = system.int(current_step)
+        current_index = current_step % system.fields_history_size
+        previous_index = (current_step - 1) % system.fields_history_size
+
+        assert system.get_fields() is system.fields[current_index]
+        assert system.get_fields(1) is system.fields[previous_index]
+
+    current_fields = cp.asnumpy(system.get_fields())
+
+    # The CPU and GPU inverse transforms must reconstruct the same real fields
+    system.realspace_fields = None
+    system.get_realspace_fields_cpu()
+    realspace_cpu = system.realspace_fields.copy()
+    cached_realspace = system.realspace_fields
+
+    system.get_realspace_fields_gpu()
+    assert system.realspace_fields is cached_realspace
+
+    system.begin_time_step()
+    assert system.realspace_fields is None
+
+    system.get_realspace_fields_gpu()
+    realspace_gpu = system.realspace_fields
+
+    assert realspace_gpu.shape == (system.number_of_fields, *system.full_tuple)
+    assert np.all(np.isfinite(realspace_gpu))
+    npt.assert_allclose(
+        realspace_gpu,
+        realspace_cpu,
+        rtol=0,
+        atol=system.tolerance,
+    )
+
+    # Restart data is a host snapshot of the same current Fourier state
+    restart_data = system.get_restart_data()["fields"]
+
+    assert restart_data["dimension_names"] == (
+        "number_of_fields",
+        "nz",
+        "nx",
+        "half_ny",
+    )
+    assert restart_data["data"].shape == current_fields.shape
+    assert restart_data["data"].dtype == np.dtype(system.complex)
+    npt.assert_array_equal(restart_data["data"], current_fields)
+
+    # Later device changes must not mutate the serialized host snapshot
+    system.get_fields().fill(0)
+    npt.assert_array_equal(restart_data["data"], current_fields)
