@@ -12,7 +12,7 @@ from flucs.input import InvalidFlucsInputFileError
 from flucs.solvers import FlucsSolverState
 from tests.support.support import create_test_solver_system
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 ###############################################################################

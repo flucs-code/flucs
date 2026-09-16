@@ -23,7 +23,7 @@ EXPECTED_ORDERS = {
     "rk4": 4,
     "ssprk3": 3,
 }
-ORDER_TOLERANCE = 0.25
+ORDER_TOLERANCE = 0.1
 
 TIMESTEP_SIZES = 2.0 ** -np.arange(7, 11)
 REFERENCE_TIMESTEP_SIZE = 2.0**-12
@@ -299,6 +299,7 @@ def _run_solution(method, systems, initial_fields, dt):
 
 
 @pytest.mark.gpu
+@pytest.mark.long
 @pytest.mark.parametrize("method", tuple(EXPECTED_ORDERS))
 def test_timestepper_convergence(
     method,

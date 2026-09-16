@@ -203,6 +203,7 @@ def _dealiasing_product(
 ###############################################################################
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("updates", "expected_method", "expected_truncation", "expected_memory"),
     [
@@ -303,6 +304,7 @@ def test_dealiasing_configuration(
         assert constant in definitions
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("updates", "error_type", "message"),
     [
@@ -387,6 +389,7 @@ def test_fourier_configuration_rejects_invalid_options(
         )
 
 
+@pytest.mark.cpu
 def test_fourier_geometry_shells_and_solved_modes(
     test_system,
     tmp_path,
@@ -475,6 +478,7 @@ def test_fourier_geometry_shells_and_solved_modes(
     )
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("current_dt", "cfl_rate", "expected_dt"),
     [
@@ -514,6 +518,7 @@ def test_continuous_timestep_control(
     )
 
 
+@pytest.mark.cpu
 def test_discrete_timestep_control(test_system, tmp_path, precision):
     """
     Discrete timestep control reduces, increases, or retains one timestep.
@@ -582,6 +587,7 @@ def test_discrete_timestep_control(test_system, tmp_path, precision):
     assert system.sub_cfl_steps == 1
 
 
+@pytest.mark.cpu
 def test_timestep_update_interrupts_below_minimum(
     test_system,
     tmp_path,
@@ -680,6 +686,7 @@ def _assert_restart_modes_match(source_fields, result):
                 npt.assert_array_equal(result[:, iz, ix, ky], expected)
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     "grid_change",
     [
@@ -748,6 +755,7 @@ def test_restart_grid_remapping(
     _assert_restart_modes_match(source_fields, result)
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("restart_data", "message"),
     [
@@ -776,6 +784,7 @@ def test_restart_grid_rejects_missing_data(
         system.prepare_restart_data()
 
 
+@pytest.mark.cpu
 def test_restart_grid_rejects_incompatible_field_count(
     test_system,
     tmp_path,
@@ -1058,6 +1067,7 @@ def test_field_history_realspace_and_restart_data(ready_fourier_system):
 
 
 @pytest.mark.gpu
+@pytest.mark.long
 @pytest.mark.parametrize(
     ("n_unpadded", "is_safe"),
     [
@@ -1098,6 +1108,7 @@ def test_two_thirds_dealiasing_boundary(
 
 
 @pytest.mark.gpu
+@pytest.mark.long
 @pytest.mark.parametrize(
     ("radius_squared", "is_safe"),
     [
@@ -1137,6 +1148,7 @@ def test_spherical_phase_shift_dealiasing_boundary(
 
 
 @pytest.mark.gpu
+@pytest.mark.long
 @pytest.mark.parametrize(
     ("max_sum", "is_safe"),
     [
@@ -1176,6 +1188,7 @@ def test_polyhedral_phase_shift_dealiasing_boundary(
 
 
 @pytest.mark.gpu
+@pytest.mark.long
 @pytest.mark.parametrize("truncation", ("spherical", "polyhedral"))
 def test_phase_shift_memory_models_agree(
     test_system,

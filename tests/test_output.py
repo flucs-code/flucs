@@ -187,6 +187,7 @@ def _create_output_system(
 ###############################################################################
 
 
+@pytest.mark.cpu
 def test_text_output_runs_the_diagnostic_and_writes_rows(
     test_system,
     tmp_path,
@@ -270,6 +271,7 @@ def test_text_output_runs_the_diagnostic_and_writes_rows(
         output.format_data([1.0])
 
 
+@pytest.mark.cpu
 def test_netcdf_output_round_trip_preserves_layout_and_values(
     test_system,
     tmp_path,
@@ -404,6 +406,7 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
     )
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("diagnostics", "available", "error", "message"),
     [

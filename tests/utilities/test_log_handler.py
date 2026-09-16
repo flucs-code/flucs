@@ -9,7 +9,7 @@ import pytest
 
 from flucs.utilities.log_handler import FlucsLogHandler
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 ###############################################################################

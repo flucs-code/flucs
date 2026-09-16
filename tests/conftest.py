@@ -31,9 +31,19 @@ def pytest_addoption(parser):
         help="Show FLUCS-specific pytest help and exit.",
     )
     group.addoption(
+        "--cpu",
+        action="store_true",
+        help="Run only CPU tests.",
+    )
+    group.addoption(
         "--gpu",
         action="store_true",
-        help="Include tests that require a working CUDA device.",
+        help="Run only GPU tests (requires a CUDA device).",
+    )
+    group.addoption(
+        "--long",
+        action="store_true",
+        help="Include long-running tests in the selected test classes.",
     )
     group.addoption(
         "--core",
@@ -66,8 +76,12 @@ def pytest_cmdline_main(config):  # Has to be called this for pytest discovery
         "  --solvers SOLVER [SOLVER ...]\n"
         "      Run core tests and tests for the selected solvers.\n"
         "      Use '--solvers all' to select every test solver.\n"
+        "  --cpu\n"
+        "      Run CPU tests only, without probing for a CUDA device.\n"
         "  --gpu\n"
-        "      Include GPU tests after checking for a usable CUDA device.\n"
+        "      Run GPU tests only after checking for a usable CUDA device.\n"
+        "  --long\n"
+        "      Include long-running tests in the selected test classes.\n"
         "  --flucs-help\n"
         "      Show this help and exit.\n"
         "\n"
@@ -75,16 +89,19 @@ def pytest_cmdline_main(config):  # Has to be called this for pytest discovery
         "\n"
         "Examples:\n"
         "  pytest\n"
+        "  pytest --cpu\n"
+        "  pytest --gpu\n"
+        "  pytest --gpu --long\n"
         "  pytest --core\n"
         "  pytest --solvers all\n"
-        "  pytest --solvers <name of solver> --gpu"
+        "  pytest --solvers <name of solver> --gpu --long"
     )
     return pytest.ExitCode.OK
 
 
-def _check_gpu() -> None:
+def _probe_gpu() -> tuple[bool, Exception | None]:
     """
-    Fail and report underlying CUDA error when GPU tests cannot run.
+    Return whether a CUDA device is usable and any underlying error.
     """
     # Import flucs
     flucs = importlib.import_module("flucs")
@@ -92,11 +109,7 @@ def _check_gpu() -> None:
 
     # Use the cupy import from FLUCS
     if flucs.cupy is None:
-        error = flucs_module.CUPY_IMPORT_ERROR
-        raise pytest.UsageError(
-            "GPU tests were requested, but CuPy could not initialise.\n"
-            f"Underlying error: {error!r}"
-        )
+        return False, flucs_module.CUPY_IMPORT_ERROR
 
     # Ensure that FLUCS's import hasn't failed
     try:
@@ -111,10 +124,9 @@ def _check_gpu() -> None:
         del probe
 
     except Exception as error:
-        raise pytest.UsageError(
-            "GPU tests were requested, but no usable CUDA device was found.\n"
-            f"Underlying error: {error!r}"
-        ) from error
+        return False, error
+
+    return True, None
 
 
 def pytest_configure(config):
@@ -123,6 +135,12 @@ def pytest_configure(config):
     """
     if config.getoption("--flucs-help"):
         return
+
+    # Explicit device selections are alternatives
+    cpu_only = config.getoption("--cpu")
+    gpu_only = config.getoption("--gpu")
+    if cpu_only and gpu_only:
+        raise pytest.UsageError("--cpu and --gpu cannot be used together")
 
     # Core tests are run by default with --solvers, so check for conflict
     requested_solvers = config.getoption("--solvers")
@@ -157,9 +175,45 @@ def pytest_configure(config):
         )
     config._flucs_selected_solvers = selected_solvers
 
-    # Make sure we can run the GPU tests if requested
-    if config.getoption("--gpu"):
-        _check_gpu()
+    # Resolve one device mode for collection
+    if cpu_only:
+        selected_devices = frozenset({"cpu"})
+        device_report = "CPU only (explicit --cpu)"
+    else:
+        gpu_available, gpu_error = _probe_gpu()
+        if gpu_only and not gpu_available:
+            raise pytest.UsageError(
+                "GPU tests were requested, but no usable CUDA device was "
+                "found.\n"
+                f"Underlying error: {gpu_error!r}"
+            )
+
+        if gpu_only:
+            selected_devices = frozenset({"gpu"})
+            device_report = "GPU only (explicit --gpu)"
+        elif gpu_available:
+            selected_devices = frozenset({"cpu", "gpu"})
+            device_report = "CPU and GPU"
+        else:
+            selected_devices = frozenset({"cpu"})
+            device_report = "CPU only (no usable CUDA device detected)"
+
+    config._flucs_selected_devices = selected_devices
+    config._flucs_device_report = device_report
+
+
+def pytest_report_header(config):
+    """
+    Report the resolved FLUCS device and duration selections.
+    """
+    if not hasattr(config, "_flucs_selected_devices"):
+        return None
+
+    long_report = "included" if config.getoption("--long") else "excluded"
+    return [
+        f"FLUCS devices: {config._flucs_device_report}",
+        f"FLUCS long tests: {long_report}",
+    ]
 
 
 def _solver_marker_name(marker) -> str:
@@ -193,6 +247,46 @@ def _resolve_node_ownership(node):
     except ValueError as error:
         nodeid = getattr(node, "nodeid", node.name)
         raise pytest.UsageError(f"{nodeid} {error}") from error
+
+
+def _resolve_device_class(node) -> str:
+    """
+    Validate and return the single device class assigned to a test item.
+    """
+    cpu_markers = list(node.iter_markers("cpu"))
+    gpu_markers = list(node.iter_markers("gpu"))
+    device_markers = (*cpu_markers, *gpu_markers)
+    nodeid = getattr(node, "nodeid", node.name)
+
+    if len(device_markers) != 1:
+        raise pytest.UsageError(
+            f"{nodeid} must have exactly one of the cpu and gpu markers"
+        )
+
+    marker = device_markers[0]
+    if marker.args or marker.kwargs:
+        raise pytest.UsageError(
+            f"{nodeid} device markers do not accept arguments"
+        )
+
+    return "cpu" if cpu_markers else "gpu"
+
+
+def _is_long_test(node) -> bool:
+    """
+    Validate the optional duration marker and return whether it is present.
+    """
+    markers = list(node.iter_markers("long"))
+    nodeid = getattr(node, "nodeid", node.name)
+
+    if len(markers) > 1:
+        raise pytest.UsageError(f"{nodeid} must have at most one long marker")
+    if markers and (markers[0].args or markers[0].kwargs):
+        raise pytest.UsageError(
+            f"{nodeid} long markers do not accept arguments"
+        )
+
+    return bool(markers)
 
 
 def _resolve_runtime_precisions(node):
@@ -233,7 +327,8 @@ def pytest_collection_modifyitems(config, items):
     """
 
     # Validate ownership and deselect tests outside the requested selection
-    include_gpu = config.getoption("--gpu")
+    selected_devices = config._flucs_selected_devices
+    include_long = config.getoption("--long")
     core_only = config.getoption("--core")
     selected_solvers = config._flucs_selected_solvers
 
@@ -244,6 +339,8 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         # Resolve ownership once so collection and parametrization agree
         ownership = _resolve_node_ownership(item)
+        device_class = _resolve_device_class(item)
+        is_long = _is_long_test(item)
 
         # Precision restrictions apply only to complete runtime fixtures
         if list(item.iter_markers("runtime_precision")):
@@ -254,7 +351,8 @@ def pytest_collection_modifyitems(config, items):
                 )
             _resolve_runtime_precisions(item)
 
-        include_item = include_gpu or item.get_closest_marker("gpu") is None
+        include_item = device_class in selected_devices
+        include_item = include_item and (include_long or not is_long)
 
         # Apply the same shared ownership policy used for parametrization
         include_item = include_item and is_test_selected(
@@ -296,7 +394,7 @@ def pytest_generate_tests(metafunc):
                         marks=(
                             pytest.mark.gpu
                             if system.runtime_requires_gpu
-                            else ()
+                            else pytest.mark.cpu
                         ),
                         id=f"{system.solver_name}-{precision.name}",
                     )

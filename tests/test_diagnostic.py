@@ -68,6 +68,7 @@ class _ExampleDiagnostic(FlucsDiagnostic):
 ###############################################################################
 
 
+@pytest.mark.cpu
 def test_diagnostic_initialisation_options_and_cache_lifecycle(
     test_system,
     tmp_path,

@@ -1,6 +1,6 @@
 name: tests
 
-# Does not run GPU tests -- these should be run manually on a GPU machine.
+# Runs the explicitly CPU-only suite on GitHub-hosted runners.
 
 on:
   push:
@@ -41,4 +41,4 @@ jobs:
       run: uv sync --no-dev --group=test
 
     - name: Run tests
-      run: uv run pytest
+      run: uv run pytest --cpu

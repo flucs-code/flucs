@@ -123,19 +123,30 @@ both the `format` and `check` commands will also apply recursively if run on a d
 (such as `flucs/src`). 
 
 [Pytest](https://docs.pytest.org/en/stable/) is used to test the project. By
-default, the test suite runs all CPU-only tests and deselects tests that require
-a GPU:
+default, the test suite checks for a usable CUDA device. It runs the standard
+CPU and GPU tests when one is available and otherwise runs only the standard
+CPU tests:
 
 ```console
 $ pytest
 ```
 
-GPU tests are marked separately and must be requested explicitly. The `--gpu`
-option is additive, so this runs both the CPU and GPU tests after checking that
-a working CUDA device is available:
+Every test is marked explicitly as either `cpu` or `gpu`. The corresponding
+flags select only that class; they are mutually exclusive, and explicit GPU
+selection fails clearly if CUDA is unavailable:
 
 ```console
+$ pytest --cpu
 $ pytest --gpu
+```
+
+Long-running tests are marked separately and excluded from standard runs. The
+`--long` flag includes them without changing the selected device or ownership
+classes. For example, this runs all GPU tests, including the timestepper
+convergence test:
+
+```console
+$ pytest --gpu --long
 ```
 
 Tests for shared FLUCS functionality are marked as `core`, while tests owned by
@@ -149,10 +160,10 @@ $ pytest --solvers all
 ```
 
 The `--solvers` option accepts one or more available solver names. Selecting
-solvers also runs the applicable core tests. Add `--gpu` to any of these
-commands to include GPU tests. Core tests that require a system are exercised
-against each selected solver's standalone test system; without a solver
-selection, every available test system is used.
+solvers also runs the applicable core tests. Add `--cpu` or `--gpu` to select a
+device class and `--long` to include long-running tests. Core tests that require
+a system are exercised against each selected solver's standalone test system;
+without a solver selection, every available test system is used.
 
 Individual files or directories can still be supplied using the usual Pytest
 syntax, for example:
@@ -160,6 +171,7 @@ syntax, for example:
 ```console
 $ pytest tests/utilities
 $ pytest tests/test_flucs.py --gpu
+$ pytest tests/solvers/fourier --gpu --long
 ```
 
 For a concise list of the FLUCS-specific options and the currently available

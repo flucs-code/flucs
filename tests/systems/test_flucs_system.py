@@ -19,6 +19,7 @@ pytestmark = pytest.mark.core
 ###############################################################################
 
 
+@pytest.mark.cpu
 def test_precision_tolerance_follows_machine_precision(precision):
     """
     The shared tolerance remains anchored to each floating-point precision.
@@ -64,6 +65,7 @@ class _ScheduledOutput:
         self.write_calls += 1
 
 
+@pytest.mark.cpu
 def test_system_coordinates_diagnostics_output_and_interruption(
     test_system,
     tmp_path,

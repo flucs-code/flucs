@@ -9,7 +9,7 @@ import pytest
 from flucs.utilities.cupy import KernelCollection, KernelWrapper, ModuleOptions
 from tests.support.support import create_test_solver_system
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 ###############################################################################

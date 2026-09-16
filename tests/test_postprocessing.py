@@ -13,7 +13,7 @@ import flucs
 from flucs.postprocessing import FlucsPostProcessing
 from tests.support.support import write_test_input
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 def _write_output(nc_path, test_system, precision):

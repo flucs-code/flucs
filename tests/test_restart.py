@@ -91,6 +91,7 @@ def _use_numpy_restart_arrays(monkeypatch):
 ###############################################################################
 
 
+@pytest.mark.cpu
 def test_restart_round_trip_scheduling_backups_and_reconstruction(
     test_system,
     tmp_path,
@@ -275,6 +276,7 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     ) == str(system.input)
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("backup_count", "expected_backup_times"),
     [
@@ -326,6 +328,7 @@ def test_restart_applies_each_backup_policy(
     ] == expected_backup_times
 
 
+@pytest.mark.cpu
 def test_restart_rejects_ambiguous_or_unsafe_configuration(
     test_system,
     tmp_path,

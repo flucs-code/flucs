@@ -28,6 +28,7 @@ pytestmark = pytest.mark.core
 ###############################################################################
 
 
+@pytest.mark.cpu
 def test_test_system_registry_is_temporary_and_complete(monkeypatch):
     """
     The complete test overlay restores both original registry objects exactly.
@@ -66,6 +67,7 @@ def test_test_system_registry_is_temporary_and_complete(monkeypatch):
     assert flucs.systems is original_package_systems
 
 
+@pytest.mark.cpu
 def test_solver_lookup_and_unknown_plugins(test_system):
     """
     Registered plugins can be loaded and missing plugins give useful errors.
@@ -83,6 +85,7 @@ def test_solver_lookup_and_unknown_plugins(test_system):
         flucs.get_system_type("Missing")
 
 
+@pytest.mark.cpu
 def test_test_ownership_resolves_compatible_systems():
     """
     Ownership validation keeps core and solver parametrization consistent.
@@ -136,6 +139,7 @@ def test_test_ownership_resolves_compatible_systems():
         resolve_test_ownership(0, ("MissingSolver",), systems)
 
 
+@pytest.mark.cpu
 def test_list_solvers_and_systems(monkeypatch, capsys):
     """
     Plugin listings are grouped, sorted, and include their distributions.
@@ -172,6 +176,7 @@ def test_list_solvers_and_systems(monkeypatch, capsys):
     assert "zeta-package" in output
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("argv", "expected_flucs", "expected_postprocess"),
     [
@@ -212,6 +217,7 @@ def test_parse_cli_arguments(
     assert postprocess_args == expected_postprocess
 
 
+@pytest.mark.cpu
 def test_main_defaults_to_run_and_combines_overrides(monkeypatch, tmp_path):
     """
     The CLI defaults to running and combines repeated override options.

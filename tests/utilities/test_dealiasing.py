@@ -21,6 +21,7 @@ pytestmark = pytest.mark.core
 ###############################################################################
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("n", "primes", "expected"),
     [
@@ -115,6 +116,7 @@ def _assert_dealiased_multiplication(
     )
 
 
+@pytest.mark.cpu
 @pytest.mark.parametrize(
     ("shape", "dimensions"),
     [

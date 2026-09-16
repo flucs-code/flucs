@@ -51,7 +51,9 @@ filterwarnings = [
 ]
 markers = [
   "core: shared FLUCS core functionality",
+  "cpu: does not require a working CUDA device",
   "gpu: requires a working CUDA device",
+  "long: excluded by default because the test takes substantial time",
   "runtime_precision(name): restrict a runtime test to one precision",
   "solver(name): functionality owned by a named solver entry point",
 ]

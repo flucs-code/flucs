@@ -9,7 +9,7 @@ import flucs
 from flucs.input import FlucsInput
 from tests.support.support import write_runtime_input, write_test_input
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 ###############################################################################

@@ -8,7 +8,7 @@ import pytest
 
 from flucs.utilities.clean_directory import clean_directory
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 ###############################################################################

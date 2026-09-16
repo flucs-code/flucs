@@ -6,7 +6,7 @@ import pytest
 
 from flucs.utilities.messages import flucsprint, format_seconds
 
-pytestmark = pytest.mark.core
+pytestmark = [pytest.mark.core, pytest.mark.cpu]
 
 
 ###############################################################################
