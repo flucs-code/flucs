@@ -141,13 +141,7 @@ $ pytest --gpu
 ```
 
 Slow-running tests are marked separately and excluded from standard runs. The
-`--slow` flag includes them without changing the selected device or ownership
-classes. For example, this runs all GPU tests, including the timestepper
-convergence test:
-
-```console
-$ pytest --gpu --slow
-```
+`--slow` flag includes them without changing the type of test selected above.
 
 Tests for shared FLUCS functionality are marked as `core`, while tests owned by
 a particular solver are associated with that solver's entry-point name. These
@@ -160,8 +154,7 @@ $ pytest --solvers all
 ```
 
 The `--solvers` option accepts one or more available solver names. Selecting
-solvers also runs the applicable core tests. Add `--cpu` or `--gpu` to select a
-device class and `--slow` to include slow-running tests. Core tests that require
+solvers also runs the applicable core tests. Core tests that require
 a system are exercised against each selected solver's standalone test system;
 without a solver selection, every available test system is used.
 
