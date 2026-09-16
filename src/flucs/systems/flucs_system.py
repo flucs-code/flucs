@@ -240,6 +240,8 @@ class FlucsSystem(ABC):
             if isinstance(output, FlucsOutputNC):
                 output.group_number = output_group
 
+        flucsprint(f"netCDF output group: {output_group}")
+
     def write_output(self, force=False):
         self.steps_until_next_write -= 1
         if self.steps_until_next_write > 0 and not force:
