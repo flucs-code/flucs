@@ -12,6 +12,7 @@ import toml
 import flucs.solvers.fourier.fourier_system as fourier_system_module
 from flucs import cupy as cp
 from flucs.input import InvalidFlucsInputFileError
+from flucs.utilities.dealiasing import dealiased_multiplication_rfft
 from tests.support.support import (
     TEST_PRECISIONS,
     TEST_SYSTEMS,
@@ -109,6 +110,92 @@ def ready_fourier_system(compiled_fourier_system):
     system.solver.timestepper.ready()
 
     return system
+
+
+def _dealiasing_product(
+    io_path,
+    test_system,
+    precision,
+    grid_size,
+    dealiasing_updates,
+):
+    """
+    Compare one compiled Fourier operation with the padded reference product.
+    """
+
+    # Compile the real nonlinear operation selected by this input
+    nz, nx, ny = grid_size
+    _, solver, system = create_test_solver_system(
+        io_path,
+        test_system,
+        precision=precision,
+        updates={
+            "dimensions": {
+                "nz": nz,
+                "nx": nx,
+                "ny": ny,
+            },
+            "setup": {"check_linear_matrix": False},
+            "forcing": {"method": ""},
+            "dealiasing": {
+                "check_errors": True,
+                **dealiasing_updates,
+            },
+        },
+    )
+    system.setup()
+    solver.timestepper.setup()
+    system.compile_cupy_module()
+
+    try:
+        # Every configuration receives the same fixed-seed physical fields
+        random = np.random.default_rng(7412)
+        fields = random.standard_normal((2, *system.full_tuple)).astype(
+            system.float
+        )
+        fields_fourier = cp.fft.rfftn(
+            cp.asarray(fields),
+            axes=(-3, -2, -1),
+            norm="forward",
+        )
+
+        solved_mask = system.get_solved_grid_mask().astype(bool)
+        solved_mask_gpu = cp.asarray(solved_mask)
+        fields_fourier[:, ~solved_mask_gpu] = 0
+
+        # Exercise the configured two-thirds or phase-shift implementation
+        system.check_dealiasing_errors_operation(
+            current_dt=0,
+            current_time=0,
+            current_step=0,
+            input_array=fields_fourier,
+            calculate_cfl=False,
+        )
+        product = system.check_dealiasing_errors_output[0].copy()
+        product[~solved_mask_gpu] = 0
+
+        # Twice-padding supplies an independent alias-free reference
+        reference = dealiased_multiplication_rfft(
+            fields_fourier[0],
+            fields_fourier[1],
+            nx=system.nx,
+            ny=system.ny,
+            nz=system.nz,
+            padded_nx=2 * system.nx,
+            padded_ny=2 * system.ny,
+            padded_nz=2 * system.nz,
+        )
+        reference[~solved_mask_gpu] = 0
+
+        error = float(cp.max(cp.abs(product - reference)))
+        return (
+            error,
+            cp.asnumpy(product),
+            cp.asnumpy(reference),
+            system,
+        )
+    finally:
+        system.kernels.unbind()
 
 
 ###############################################################################
@@ -968,3 +1055,172 @@ def test_field_history_realspace_and_restart_data(ready_fourier_system):
     # Later device changes must not mutate the serialized host snapshot
     system.get_fields().fill(0)
     npt.assert_array_equal(restart_data["data"], current_fields)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    ("n_unpadded", "is_safe"),
+    [
+        pytest.param(21, True, id="below-boundary"),
+        pytest.param(23, True, id="at-boundary"),
+        pytest.param(25, False, id="above-boundary"),
+    ],
+)
+def test_two_thirds_dealiasing_boundary(
+    test_system,
+    tmp_path,
+    precision,
+    n_unpadded,
+    is_safe,
+):
+    """
+    Two-thirds padding succeeds through its maximum retained bandwidth.
+    """
+
+    error, _, _, system = _dealiasing_product(
+        tmp_path,
+        test_system,
+        precision,
+        grid_size=(36, 36, 36),
+        dealiasing_updates={
+            "method": "two-thirds",
+            "nz_unpadded": n_unpadded,
+            "nx_unpadded": n_unpadded,
+            "ny_unpadded": n_unpadded,
+        },
+    )
+
+    # Safe cases are round-off limited; the next bandwidth must visibly alias
+    if is_safe:
+        assert error <= system.tolerance
+    else:
+        assert error > system.tolerance
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    ("radius_squared", "is_safe"),
+    [
+        pytest.param(0.221, True, id="below-boundary"),
+        pytest.param(0.222, True, id="at-boundary"),
+        pytest.param(0.223, False, id="above-boundary"),
+    ],
+)
+def test_spherical_phase_shift_dealiasing_boundary(
+    test_system,
+    tmp_path,
+    precision,
+    radius_squared,
+    is_safe,
+):
+    """
+    Spherical phase shifting fails only beyond its safe theoretical shell.
+    """
+
+    error, _, _, system = _dealiasing_product(
+        tmp_path,
+        test_system,
+        precision,
+        grid_size=(36, 36, 36),
+        dealiasing_updates={
+            "method": "phase-shift",
+            "truncation": "spherical",
+            "radius_squared": radius_squared,
+        },
+    )
+
+    # The adjacent shell admitted above 2/9 produces resolvable aliasing
+    if is_safe:
+        assert error <= system.tolerance
+    else:
+        assert error > system.tolerance
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    ("max_sum", "is_safe"),
+    [
+        pytest.param(0.665, True, id="below-boundary"),
+        pytest.param(0.666, True, id="at-boundary"),
+        pytest.param(0.667, False, id="above-boundary"),
+    ],
+)
+def test_polyhedral_phase_shift_dealiasing_boundary(
+    test_system,
+    tmp_path,
+    precision,
+    max_sum,
+    is_safe,
+):
+    """
+    Polyhedral phase shifting fails only beyond its safe theoretical limit.
+    """
+
+    error, _, _, system = _dealiasing_product(
+        tmp_path,
+        test_system,
+        precision,
+        grid_size=(36, 36, 36),
+        dealiasing_updates={
+            "method": "phase-shift",
+            "truncation": "polyhedral",
+            "max_sum": max_sum,
+        },
+    )
+
+    # The adjacent shell admitted above 2/3 produces resolvable aliasing
+    if is_safe:
+        assert error <= system.tolerance
+    else:
+        assert error > system.tolerance
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("truncation", ("spherical", "polyhedral"))
+def test_phase_shift_memory_models_agree(
+    test_system,
+    tmp_path,
+    precision,
+    truncation,
+):
+    """
+    Every phase-shift memory model implements the same safe product.
+    """
+
+    cutoff = (
+        {"radius_squared": 0.222}
+        if truncation == "spherical"
+        else {"max_sum": 0.666}
+    )
+    results = []
+    for memory in ("standard", "low_memory", "in_place"):
+        error, product, reference, system = _dealiasing_product(
+            tmp_path / memory,
+            test_system,
+            precision,
+            grid_size=(30, 30, 30),
+            dealiasing_updates={
+                "method": "phase-shift",
+                "truncation": truncation,
+                "memory": memory,
+                **cutoff,
+            },
+        )
+
+        assert error <= system.tolerance
+        npt.assert_allclose(
+            product,
+            reference,
+            rtol=0,
+            atol=system.tolerance,
+        )
+        results.append(product)
+
+    # Agreement with one reference also makes cross-model drift explicit
+    for result in results[1:]:
+        npt.assert_allclose(
+            result,
+            results[0],
+            rtol=0,
+            atol=system.tolerance,
+        )

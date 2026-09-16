@@ -51,7 +51,7 @@ padded_primes = [2, 3]
 truncation = ""
 
 # Dealiasing radius^2 for the spherical truncation.
-# The optimal value is 2/9 ~ 0.222 
+# The optimal value is 2/9 ~ 0.222
 radius_squared = -1.0
 
 # Dealiasing max sum for polyhedral truncation.
