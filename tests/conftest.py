@@ -178,7 +178,7 @@ def pytest_configure(config):
     # Resolve one device mode for collection
     if cpu_only:
         selected_devices = frozenset({"cpu"})
-        device_report = "CPU only (explicit --cpu)"
+        device_report = "--cpu only"
     else:
         gpu_available, gpu_error = _probe_gpu()
         if gpu_only and not gpu_available:
@@ -190,13 +190,13 @@ def pytest_configure(config):
 
         if gpu_only:
             selected_devices = frozenset({"gpu"})
-            device_report = "GPU only"
+            device_report = "--gpu only"
         elif gpu_available:
             selected_devices = frozenset({"cpu", "gpu"})
-            device_report = "CPU and GPU"
+            device_report = "--cpu and --gpu"
         else:
             selected_devices = frozenset({"cpu"})
-            device_report = "CPU only"
+            device_report = "--cpu only"
 
     config._flucs_selected_devices = selected_devices
     config._flucs_device_report = device_report
