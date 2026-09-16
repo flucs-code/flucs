@@ -182,6 +182,11 @@ def _create_output_system(
     return system
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_text_output_runs_the_diagnostic_and_writes_rows(
     test_system,
     tmp_path,
@@ -399,6 +404,65 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
     )
 
 
+@pytest.mark.parametrize(
+    ("diagnostics", "available", "error", "message"),
+    [
+        pytest.param(
+            [1],
+            {"scalar": _ScalarDiagnostic},
+            TypeError,
+            "Each diagnostic must be specified",
+            id="invalid-entry",
+        ),
+        pytest.param(
+            ["missing"],
+            {"scalar": _ScalarDiagnostic},
+            KeyError,
+            "Diagnostic 'missing' is not available",
+            id="unknown-diagnostic",
+        ),
+        pytest.param(
+            ["array"],
+            {"array": _ArrayDiagnostic},
+            ValueError,
+            "text output supports only scalar variables",
+            id="array-in-text",
+        ),
+    ],
+)
+def test_output_rejects_invalid_diagnostic_configuration(
+    test_system,
+    tmp_path,
+    monkeypatch,
+    diagnostics,
+    available,
+    error,
+    message,
+):
+    """
+    Invalid diagnostic declarations fail before an output run begins.
+    """
+
+    # Resolve each invalid declaration against an actual TestSystem
+    output_name = "time"
+    system = _create_output_system(
+        tmp_path,
+        test_system,
+        monkeypatch,
+        output_name,
+        "text",
+        diagnostics,
+        available,
+    )
+    with pytest.raises(error, match=message):
+        FlucsOutput(output_name, system)
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+
 @pytest.mark.runtime_precision("single")
 def test_runtime_outputs_preserve_configured_data(runtime_run):
     """
@@ -519,57 +583,3 @@ def test_runtime_outputs_preserve_configured_data(runtime_run):
 
         else:
             pytest.fail(f"Unsupported runtime output type: {type(output)}")
-
-
-@pytest.mark.parametrize(
-    ("diagnostics", "available", "error", "message"),
-    [
-        pytest.param(
-            [1],
-            {"scalar": _ScalarDiagnostic},
-            TypeError,
-            "Each diagnostic must be specified",
-            id="invalid-entry",
-        ),
-        pytest.param(
-            ["missing"],
-            {"scalar": _ScalarDiagnostic},
-            KeyError,
-            "Diagnostic 'missing' is not available",
-            id="unknown-diagnostic",
-        ),
-        pytest.param(
-            ["array"],
-            {"array": _ArrayDiagnostic},
-            ValueError,
-            "text output supports only scalar variables",
-            id="array-in-text",
-        ),
-    ],
-)
-def test_output_rejects_invalid_diagnostic_configuration(
-    test_system,
-    tmp_path,
-    monkeypatch,
-    diagnostics,
-    available,
-    error,
-    message,
-):
-    """
-    Invalid diagnostic declarations fail before an output run begins.
-    """
-
-    # Resolve each invalid declaration against an actual TestSystem
-    output_name = "time"
-    system = _create_output_system(
-        tmp_path,
-        test_system,
-        monkeypatch,
-        output_name,
-        "text",
-        diagnostics,
-        available,
-    )
-    with pytest.raises(error, match=message):
-        FlucsOutput(output_name, system)

@@ -23,6 +23,11 @@ from tests.support.support import (
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_test_system_registry_is_temporary_and_complete(monkeypatch):
     """
     The complete test overlay restores both original registry objects exactly.
@@ -251,6 +256,11 @@ def test_main_defaults_to_run_and_combines_overrides(monkeypatch, tmp_path):
             "double",
         ],
     )
+
+
+###############################################################################
+# GPU tests
+###############################################################################
 
 
 @pytest.mark.gpu

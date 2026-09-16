@@ -12,6 +12,11 @@ from tests.support.support import create_test_solver_system
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_module_options_public_workflow():
     # Register options
     options = ModuleOptions()
@@ -79,3 +84,10 @@ def test_kernel_collection_lifecycle(test_system, tmp_path):
     # Remove refrence to kernel and check it is unbound
     system.kernels.unbind()
     assert not hasattr(wrapper, "kernel")
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None

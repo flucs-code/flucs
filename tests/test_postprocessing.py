@@ -91,6 +91,11 @@ def _write_output(nc_path, test_system, precision):
     return state_names
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_postprocessing_discovers_and_loads_netcdf_data(
     test_system,
     tmp_path,
@@ -292,3 +297,10 @@ def test_postprocessing_saves_figures_and_parses_common_arguments(
             suffix="png",
             conflict_strategy="invalid",
         )
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None

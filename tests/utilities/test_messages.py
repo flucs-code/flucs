@@ -9,6 +9,11 @@ from flucs.utilities.messages import flucsprint, format_seconds
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 @pytest.mark.parametrize(
     ("seconds", "verbose", "expected"),
     [
@@ -40,3 +45,10 @@ def test_flucsprint_prefixes_and_validation(capsys):
     # Check input validation for message_type
     with pytest.raises(ValueError, match="Invalid message_type 'debug'"):
         flucsprint("invalid", message_type="debug")
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None

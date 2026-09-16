@@ -12,6 +12,11 @@ from tests.support.support import write_runtime_input, write_test_input
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_input_resolves_defaults_and_constructs_selected_system(
     test_system,
     tmp_path,
@@ -122,3 +127,10 @@ def test_input_rejects_invalid_parameters(
 
     with pytest.raises(error, match=message):
         FlucsInput(input_path, override=override)
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None

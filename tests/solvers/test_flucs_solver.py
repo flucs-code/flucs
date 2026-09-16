@@ -15,6 +15,11 @@ from tests.support.support import create_test_solver_system
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_solver_constructs_timesteppers_and_handles_signals(
     test_system,
     tmp_path,
@@ -86,3 +91,10 @@ def test_solver_constructs_timesteppers_and_handles_signals(
             test_system,
             updates={"timestepping": {"method": "missing"}},
         )
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None

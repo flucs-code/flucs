@@ -11,6 +11,11 @@ from flucs.utilities.clean_directory import clean_directory
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_clean_directory_without_candidates(tmp_path, monkeypatch, capsys):
     # Set up a file that should not be deleted
     (tmp_path / "keep.txt").write_text("keep")
@@ -78,3 +83,10 @@ def test_clean_directory_confirmation(
     else:
         assert "Cleaning aborted." in captured
         assert "Cleanup complete." not in captured
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None

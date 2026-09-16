@@ -86,6 +86,11 @@ def _use_numpy_restart_arrays(monkeypatch):
     )
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_restart_round_trip_scheduling_backups_and_reconstruction(
     test_system,
     tmp_path,
@@ -270,6 +275,118 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     ) == str(system.input)
 
 
+@pytest.mark.parametrize(
+    ("backup_count", "expected_backup_times"),
+    [
+        pytest.param(0, [], id="no-backups"),
+        pytest.param(1, [1.0], id="one-backup"),
+    ],
+)
+def test_restart_applies_each_backup_policy(
+    test_system,
+    tmp_path,
+    monkeypatch,
+    backup_count,
+    expected_backup_times,
+):
+    """
+    Zero and one-backup policies replace or retain the preceding restart.
+    """
+
+    # Write two generations through the selected TestSystem
+    _use_numpy_restart_arrays(monkeypatch)
+    system = _create_restart_system(
+        tmp_path,
+        test_system,
+        backup_count=backup_count,
+    )
+    monkeypatch.setattr(
+        system,
+        "get_restart_data",
+        lambda: {
+            "state": {
+                "data": np.array(
+                    [system.current_time],
+                    dtype=system.float,
+                )
+            }
+        },
+    )
+    restart = FlucsRestart(system)
+    restart.write_restart(force=True)
+    system.current_time = 2.0
+    restart.write_restart(force=True)
+
+    # The current file survives while only the requested history is retained
+    assert _read_restart_time(tmp_path / "restart.nc") == 2.0
+    assert not (tmp_path / "restart.temp.nc").exists()
+    backup_paths = sorted(tmp_path.glob("restart.backup.*.nc"))
+    assert [
+        _read_restart_time(backup_path) for backup_path in backup_paths
+    ] == expected_backup_times
+
+
+def test_restart_rejects_ambiguous_or_unsafe_configuration(
+    test_system,
+    tmp_path,
+):
+    """
+    Invalid restart sources and output policies fail before data is changed.
+    """
+
+    # Selecting both restart mechanisms is inherently ambiguous
+    restart_path = tmp_path / "restart.nc"
+    restart_path.touch()
+    conflicting = _create_restart_system(
+        tmp_path,
+        test_system,
+        restart_if_exists=True,
+        restart_from="restart.nc",
+    )
+    with pytest.raises(
+        InvalidFlucsInputFileError,
+        match="cannot be specified simultaneously",
+    ):
+        FlucsRestart(conflicting)
+
+    # Explicit sources must exist rather than silently starting from scratch
+    restart_path.unlink()
+    missing = _create_restart_system(
+        tmp_path,
+        test_system,
+        restart_from="missing.nc",
+    )
+    with pytest.raises(InvalidFlucsInputFileError, match="cannot be found"):
+        FlucsRestart(missing)
+
+    # Both sides of the permitted backup-count interval are enforced
+    for backup_count in (-1, 101):
+        invalid_backups = _create_restart_system(
+            tmp_path,
+            test_system,
+            backup_count=backup_count,
+        )
+        with pytest.raises(
+            InvalidFlucsInputFileError,
+            match="backup_count must be an integer between 0 and 100",
+        ):
+            FlucsRestart(invalid_backups)
+
+    # Existing state is never overwritten without an explicit restart request
+    restart_path.touch()
+    unsafe_write = _create_restart_system(tmp_path, test_system)
+    with pytest.raises(
+        InvalidFlucsInputFileError,
+        match=r"remove existing 'restart[.]nc' manually",
+    ):
+        FlucsRestart(unsafe_write)
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+
 @pytest.mark.runtime_precision("single")
 def test_runtime_restart_restores_the_completed_test_system(
     runtime_run,
@@ -413,110 +530,3 @@ def test_runtime_restart_restores_the_completed_test_system(
     prepared_data = as_numpy(fresh_system.prepare_restart_data())
     assert prepared_data.size > 0
     assert np.all(np.isfinite(prepared_data))
-
-
-@pytest.mark.parametrize(
-    ("backup_count", "expected_backup_times"),
-    [
-        pytest.param(0, [], id="no-backups"),
-        pytest.param(1, [1.0], id="one-backup"),
-    ],
-)
-def test_restart_applies_each_backup_policy(
-    test_system,
-    tmp_path,
-    monkeypatch,
-    backup_count,
-    expected_backup_times,
-):
-    """
-    Zero and one-backup policies replace or retain the preceding restart.
-    """
-
-    # Write two generations through the selected TestSystem
-    _use_numpy_restart_arrays(monkeypatch)
-    system = _create_restart_system(
-        tmp_path,
-        test_system,
-        backup_count=backup_count,
-    )
-    monkeypatch.setattr(
-        system,
-        "get_restart_data",
-        lambda: {
-            "state": {
-                "data": np.array(
-                    [system.current_time],
-                    dtype=system.float,
-                )
-            }
-        },
-    )
-    restart = FlucsRestart(system)
-    restart.write_restart(force=True)
-    system.current_time = 2.0
-    restart.write_restart(force=True)
-
-    # The current file survives while only the requested history is retained
-    assert _read_restart_time(tmp_path / "restart.nc") == 2.0
-    assert not (tmp_path / "restart.temp.nc").exists()
-    backup_paths = sorted(tmp_path.glob("restart.backup.*.nc"))
-    assert [
-        _read_restart_time(backup_path) for backup_path in backup_paths
-    ] == expected_backup_times
-
-
-def test_restart_rejects_ambiguous_or_unsafe_configuration(
-    test_system,
-    tmp_path,
-):
-    """
-    Invalid restart sources and output policies fail before data is changed.
-    """
-
-    # Selecting both restart mechanisms is inherently ambiguous
-    restart_path = tmp_path / "restart.nc"
-    restart_path.touch()
-    conflicting = _create_restart_system(
-        tmp_path,
-        test_system,
-        restart_if_exists=True,
-        restart_from="restart.nc",
-    )
-    with pytest.raises(
-        InvalidFlucsInputFileError,
-        match="cannot be specified simultaneously",
-    ):
-        FlucsRestart(conflicting)
-
-    # Explicit sources must exist rather than silently starting from scratch
-    restart_path.unlink()
-    missing = _create_restart_system(
-        tmp_path,
-        test_system,
-        restart_from="missing.nc",
-    )
-    with pytest.raises(InvalidFlucsInputFileError, match="cannot be found"):
-        FlucsRestart(missing)
-
-    # Both sides of the permitted backup-count interval are enforced
-    for backup_count in (-1, 101):
-        invalid_backups = _create_restart_system(
-            tmp_path,
-            test_system,
-            backup_count=backup_count,
-        )
-        with pytest.raises(
-            InvalidFlucsInputFileError,
-            match="backup_count must be an integer between 0 and 100",
-        ):
-            FlucsRestart(invalid_backups)
-
-    # Existing state is never overwritten without an explicit restart request
-    restart_path.touch()
-    unsafe_write = _create_restart_system(tmp_path, test_system)
-    with pytest.raises(
-        InvalidFlucsInputFileError,
-        match=r"remove existing 'restart[.]nc' manually",
-    ):
-        FlucsRestart(unsafe_write)

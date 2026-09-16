@@ -63,6 +63,11 @@ class _ExampleDiagnostic(FlucsDiagnostic):
         self.save_data("reference", 1.0 + 2.0j)
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_diagnostic_initialisation_options_and_cache_lifecycle(
     test_system,
     tmp_path,
@@ -167,6 +172,11 @@ def test_diagnostic_initialisation_options_and_cache_lifecycle(
     # One clear prepares every variable for another round of output
     diagnostic.clear()
     assert all(not var.data_cache for var in diagnostic.vars.values())
+
+
+###############################################################################
+# GPU tests
+###############################################################################
 
 
 @pytest.mark.runtime_precision("single")

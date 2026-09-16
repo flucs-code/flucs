@@ -14,6 +14,11 @@ from tests.support.support import create_test_solver_system
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_precision_tolerance_follows_machine_precision(precision):
     """
     The shared tolerance remains anchored to each floating-point precision.
@@ -142,6 +147,11 @@ def test_system_coordinates_diagnostics_output_and_interruption(
     assert system.solver.interrupted is True
     assert not stop_path.exists()
     print_time_estimate.assert_called_once_with()
+
+
+###############################################################################
+# GPU tests
+###############################################################################
 
 
 @pytest.mark.gpu

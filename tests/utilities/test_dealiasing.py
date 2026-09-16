@@ -16,6 +16,11 @@ from flucs.utilities.dealiasing import (
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 @pytest.mark.parametrize(
     ("n", "primes", "expected"),
     [
@@ -53,31 +58,7 @@ def _low_mode_fields(shape):
     return first, second
 
 
-@pytest.mark.parametrize(
-    ("backend_name", "shape", "dimensions"),
-    [
-        pytest.param(
-            "numpy",
-            (5, 7, 9),
-            {},
-            id="numpy-inferred-3d",
-        ),
-        pytest.param(
-            "numpy",
-            (1, 8, 10),
-            {"nz": 1, "nx": 8, "ny": 10},
-            id="numpy-explicit-2d-even",
-        ),
-        pytest.param(
-            "cupy",
-            (5, 7, 9),
-            {},
-            marks=pytest.mark.gpu,
-            id="cupy-inferred-3d",
-        ),
-    ],
-)
-def test_dealiased_multiplication(
+def _assert_dealiased_multiplication(
     monkeypatch,
     precision,
     backend_name,
@@ -131,4 +112,52 @@ def test_dealiased_multiplication(
         expected,
         rtol=precision.tolerance,
         atol=precision.tolerance,
+    )
+
+
+@pytest.mark.parametrize(
+    ("shape", "dimensions"),
+    [
+        pytest.param((5, 7, 9), {}, id="inferred-3d"),
+        pytest.param(
+            (1, 8, 10),
+            {"nz": 1, "nx": 8, "ny": 10},
+            id="explicit-2d-even",
+        ),
+    ],
+)
+def test_dealiased_multiplication_numpy(
+    monkeypatch,
+    precision,
+    shape,
+    dimensions,
+):
+    """
+    NumPy dealiased products retain their shape, dtype, and values.
+    """
+    _assert_dealiased_multiplication(
+        monkeypatch,
+        precision,
+        "numpy",
+        shape,
+        dimensions,
+    )
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+
+@pytest.mark.gpu
+def test_dealiased_multiplication_cupy(monkeypatch, precision):
+    """
+    CuPy dealiased products follow the same contract as the NumPy path.
+    """
+    _assert_dealiased_multiplication(
+        monkeypatch,
+        precision,
+        "cupy",
+        (5, 7, 9),
+        {},
     )

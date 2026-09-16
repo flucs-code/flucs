@@ -111,6 +111,11 @@ def ready_fourier_system(compiled_fourier_system):
     return system
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 @pytest.mark.parametrize(
     ("updates", "expected_method", "expected_truncation", "expected_memory"),
     [
@@ -707,7 +712,7 @@ def test_restart_grid_rejects_incompatible_field_count(
 
 
 ###############################################################################
-# Shared GPU lifecycle tests
+# GPU tests
 ###############################################################################
 
 

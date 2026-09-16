@@ -12,6 +12,11 @@ from flucs.utilities.log_handler import FlucsLogHandler
 pytestmark = pytest.mark.core
 
 
+###############################################################################
+# CPU tests
+###############################################################################
+
+
 def test_log_handler_redirects_and_restores_streams(capsys):
     # Create in-memory text stream to prevent writing
     log = StringIO()
@@ -42,3 +47,10 @@ def test_log_handler_redirects_and_restores_streams(capsys):
     assert "standard output" in log.getvalue()
     assert "standard error" in log.getvalue()
     assert "RuntimeError: sentinel" in log.getvalue()
+
+
+###############################################################################
+# GPU tests
+###############################################################################
+
+# None
