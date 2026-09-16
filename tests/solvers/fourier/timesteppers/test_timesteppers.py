@@ -31,6 +31,7 @@ TIME_INTERVAL = 0.5
 
 SPINUP_TIMESTEP = 0.02
 
+
 def _system_updates(method, *, baseline_run=False, hyperdissipation=None):
     """
     Return the common nonlinear problem with method-specific integration.
