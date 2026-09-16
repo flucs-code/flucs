@@ -944,8 +944,8 @@ class FourierReductions:
                     spectrum = base_reduction(*args)
                     cumulative[0] = spectrum[0]
                     cumulative[1 : paired_size + 1] = (
-                        + spectrum[1  : +paired_size + 1]
-                        + spectrum[-1 : -paired_size - 1 : -1]
+                        +spectrum[1 : +paired_size + 1]
+                        +spectrum[-1 : -paired_size - 1 : -1]
                     )
 
                     # Even grids have one unpaired Nyquist coefficient

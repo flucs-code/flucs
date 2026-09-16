@@ -1,5 +1,11 @@
 """
 Tests for the shared FourierSystem reduction machinery.
+
+TODO: Define the contract for complex Cartesian reductions that sum over the
+R2C ky half-axis. Doubling positive-ky values matches the current
+implementation, but a general complex quantity requires the conjugate value at
+the reflected (kz, kx) mode. All current production callers request real
+outputs, so the complex tests retain the existing behaviour for now.
 """
 
 from __future__ import annotations
@@ -21,8 +27,9 @@ from tests.support.support import (
 pytestmark = pytest.mark.solver("FourierSolver")
 
 
-# An asymmetric grid and unrelated box lengths expose axis and scale mix-ups
-GRID_SIZE = (12, 14, 18)
+# Mixed grid parity and unrelated box lengths expose branch, axis, and
+# scale mix-ups
+GRID_SIZE = (13, 14, 19)
 BOX_SIZE = (3.7, 5.2, 6.9)
 
 CARTESIAN_AXES = {
@@ -39,47 +46,53 @@ CUMULATIVE_DIMENSIONS = {
     "kx_cumulative": "kx",
     "ky_cumulative": "ky",
 }
-
-KPERP_SHELLS = {
-    "nkperp": 8,
-    "kperp_min": -0.4,
-    "kperp_max": 9.2,
-}
-KMOD_SHELLS = {
-    "nkmod": 8,
-    "kmod_min": -0.6,
-    "kmod_max": 13.0,
+SHELL_DIMENSIONS = {
+    "kzkperp": ("kz", "kperp"),
+    "kperp": ("kperp",),
+    "kmod": ("kmod",),
+    "kperp_cumulative": ("kperp",),
+    "kmod_cumulative": ("kmod",),
 }
 
-# Each row declares (kz mode, kx mode, ky mode, kperp bin, kmod bin).
-# None marks a mode outside the corresponding test shell range.
-SHELL_PROBES = (
+# Each row declares (kz mode, kx mode, ky mode, kperp bin, kmod bin), so tests
+# can verify that the declared bins match the expected radii.
+SHELL_MODES = (
     (+0, +0, +0, +0, +0),
     (+1, +0, +0, +0, +1),
     (-1, +0, +0, +0, +1),
     (+0, +1, +0, +1, +1),
     (+0, -1, +0, +1, +1),
-    (+0, +0, +1, +1, +0),
-    (+1, +1, +1, +1, +1),
-    (-1, -1, +1, +1, +1),
-    (+2, +1, +2, +2, +2),
-    (-2, -1, +2, +2, +2),
-    (+3, +2, +1, +2, +3),
-    (-3, -2, +1, +2, +3),
-    (+1, +3, +4, +4, +3),
-    (-1, -3, +4, +4, +3),
-    (+4, +1, +3, +2, +4),
-    (-4, -1, +3, +2, +4),
-    (+2, +5, +1, +5, +4),
-    (-2, -5, +1, +5, +4),
-    (+5, +2, +6, +5, +6),
-    (-5, -2, +6, +5, +6),
-    (+3, +6, +7, None, +6),
-    (-3, -6, +7, None, +6),
-    (+5, +6, +8, None, None),
-    (-5, -6, +8, None, None),
-    (+4, +5, +7, +7, +6),
-    (-4, -5, +7, +7, +6),
+    (+1, +1, +1, +1, +2),
+    (-1, -1, +1, +1, +2),
+    (+2, +1, +2, +2, +4),
+    (-2, -1, +2, +2, +4),
+    (+3, +2, +1, +2, +6),
+    (-3, -2, +1, +2, +6),
+    (+1, +3, +4, +5, +5),
+    (-1, -3, +4, +5, +5),
+    (+4, +1, +3, +3, +8),
+    (-4, -1, +3, +3, +8),
+    (+2, +5, +1, +6, +7),
+    (-2, -5, +1, +6, +7),
+    (+5, +2, +6, +6, +11),
+    (-5, -2, +6, +6, +11),
+    (+3, +6, +7, +10, +11),
+    (-3, -6, +7, +10, +11),
+    (+5, +6, +8, +11, +14),
+    (-5, -6, +8, +11, +14),
+    (+4, +5, +7, +9, +12),
+    (-4, -5, +7, +9, +12),
+)
+
+# Sparse modes prescribe known contributions to every cumulative direction.
+# The x-Nyquist probe exercises the unpaired even-grid branch, while z is odd.
+CUMULATIVE_MODES = (
+    (+0, +0, +0),
+    (+1, +2, +0),
+    (-1, -3, +1),
+    (+4, -7, +2),
+    (-5, +5, +7),
+    (+6, -6, +9),
 )
 
 
@@ -104,17 +117,6 @@ def _system_updates():
         },
         "forcing": {"method": ""},
     }
-
-
-def _reduction_kwargs(output):
-    """
-    Return the explicitly controlled shell grid for one reduction.
-    """
-    if output in ("kzkperp", "kperp", "kperp_cumulative"):
-        return KPERP_SHELLS
-    if output in ("kmod", "kmod_cumulative"):
-        return KMOD_SHELLS
-    return {}
 
 
 def _dense_components(system, complex_output):
@@ -208,26 +210,36 @@ def _analytic_cartesian_reduction(components, retained_axes, dtype):
     return expected
 
 
-def _expected_cumulative(spectrum, dimension, full_size):
+def _cumulative_data_and_expected(system, dtype):
     """
-    Fold one known Cartesian spectrum onto absolute wavenumbers and integrate.
+    Construct sparse modes with prescribed absolute-wavenumber contributions.
     """
-    if dimension == "ky":
-        folded = spectrum.copy()
-        folded[1:] *= 2
-        return np.cumsum(folded, dtype=spectrum.dtype)
+    data = np.zeros(system.half_tuple, dtype=dtype)
+    contributions = {
+        "kz": np.zeros(system.half_nz, dtype=dtype),
+        "kx": np.zeros(system.half_nx, dtype=dtype),
+        "ky": np.zeros(system.half_ny, dtype=dtype),
+    }
+    scalar = dtype.type(0)
 
-    paired_size = (full_size - 1) // 2
-    folded = np.empty(full_size // 2 + 1, dtype=spectrum.dtype)
-    folded[0] = spectrum[0]
-    folded[1 : paired_size + 1] = (
-        spectrum[1 : paired_size + 1] + spectrum[-1 : -paired_size - 1 : -1]
-    )
+    for index, (mz, mx, my) in enumerate(CUMULATIVE_MODES):
+        value = _probe_value(index, dtype)
+        data[mz % system.nz, mx % system.nx, my] = value
 
-    if full_size % 2 == 0:
-        folded[-1] = spectrum[paired_size + 1]
+        # Positive ky represents both signs in the real-to-complex layout
+        # Mirrors the current CUDA kernel implementation for complex outputs
+        physical_value = value if my == 0 else 2 * value
+        contributions["kz"][abs(mz)] += physical_value
+        contributions["kx"][abs(mx)] += physical_value
+        contributions["ky"][my] += physical_value
+        scalar += physical_value
 
-    return np.cumsum(folded, dtype=spectrum.dtype)
+    expected = {
+        f"{dimension}_cumulative": np.cumsum(values, dtype=dtype)
+        for dimension, values in contributions.items()
+    }
+
+    return data, expected, scalar
 
 
 def _probe_value(index, dtype):
@@ -241,22 +253,14 @@ def _probe_value(index, dtype):
     return dtype.type(real)
 
 
-def _assert_declared_shell(radius, expected_bin, options, prefix):
+def _assert_declared_shell(radius, expected_bin, count, minimum, maximum):
     """
     Ensure the physical probe radius lies inside its declared test bin.
     """
-    count = options[f"n{prefix}"]
-    minimum = options[f"{prefix}_min"]
-    maximum = options[f"{prefix}_max"]
-
-    if expected_bin is None:
-        assert radius < minimum or radius >= maximum
-        return
-
     width = (maximum - minimum) / count
     lower = minimum + expected_bin * width
     upper = lower + width
-    assert lower < radius < upper
+    assert lower <= radius < upper
 
 
 def _shell_data_and_expected(system, dtype):
@@ -265,16 +269,16 @@ def _shell_data_and_expected(system, dtype):
     """
     data = np.zeros(system.half_tuple, dtype=dtype)
     expected_kzkperp = np.zeros(
-        (system.nz, KPERP_SHELLS["nkperp"]),
+        (system.nz, system.shell_nkperp),
         dtype=dtype,
     )
-    expected_kmod = np.zeros(KMOD_SHELLS["nkmod"], dtype=dtype)
+    expected_kmod = np.zeros(system.shell_nkmod, dtype=dtype)
 
     Lz = system.input["dimensions.Lz"]
     Lx = system.input["dimensions.Lx"]
     Ly = system.input["dimensions.Ly"]
 
-    for index, (mz, mx, my, kperp_bin, kmod_bin) in enumerate(SHELL_PROBES):
+    for index, (mz, mx, my, kperp_bin, kmod_bin) in enumerate(SHELL_MODES):
         iz = mz % system.nz
         ix = mx % system.nx
         value = _probe_value(index, dtype)
@@ -286,25 +290,31 @@ def _shell_data_and_expected(system, dtype):
         ky = 2 * np.pi * my / Ly
         kperp = np.sqrt(kx**2 + ky**2)
         kmod = np.sqrt(kz**2 + kx**2 + ky**2)
+
         _assert_declared_shell(
             kperp,
             kperp_bin,
-            KPERP_SHELLS,
-            "kperp",
+            system.shell_nkperp,
+            system.shell_kperp_min,
+            system.shell_kperp_max,
         )
-        _assert_declared_shell(kmod, kmod_bin, KMOD_SHELLS, "kmod")
+        _assert_declared_shell(
+            kmod,
+            kmod_bin,
+            system.shell_nkmod,
+            system.shell_kmod_min,
+            system.shell_kmod_max,
+        )
 
         # Shell reductions reconstruct the missing negative-ky coefficient at
         # the reflected (kz, kx) location.
-        if kperp_bin is not None:
-            expected_kzkperp[iz, kperp_bin] += value
-            if my > 0:
-                expected_kzkperp[-mz % system.nz, kperp_bin] += np.conj(value)
+        expected_kzkperp[iz, kperp_bin] += value
+        if my > 0:
+            expected_kzkperp[-mz % system.nz, kperp_bin] += np.conj(value)
 
-        if kmod_bin is not None:
-            expected_kmod[kmod_bin] += value
-            if my > 0:
-                expected_kmod[kmod_bin] += np.conj(value)
+        expected_kmod[kmod_bin] += value
+        if my > 0:
+            expected_kmod[kmod_bin] += np.conj(value)
 
     expected_kperp = np.sum(expected_kzkperp, axis=0, dtype=dtype)
     return data, expected_kzkperp, expected_kperp, expected_kmod
@@ -353,7 +363,6 @@ def compiled_reductions(request, tmp_path_factory):
                 functor=f"NOP_Functor<{cuda_type}>",
                 input_args=f"const {cuda_type}*",
                 complex_output=output_type == "complex",
-                **_reduction_kwargs(output),
             )
 
     system.compile_cupy_module()
@@ -433,40 +442,18 @@ def test_cartesian_cumulative_reductions(compiled_reductions):
         ("real", np.dtype(system.float)),
         ("complex", np.dtype(system.complex)),
     ):
-        # Construct test data
-        components = _dense_components(
+        # Construct prescribed contributions on signed Fourier modes
+        data_cpu, expected_outputs, scalar = _cumulative_data_and_expected(
             system,
-            complex_output=output_type == "complex",
+            dtype,
         )
-        data_cpu = _dense_data(components, dtype)
 
         # Initialise GPU array
         data = cp.asarray(data_cpu)
 
-        # Get a scalar reference for final cumulative value
-        scalar = _analytic_cartesian_reduction(components, (), dtype)[0]
-
         for output, dimension in CUMULATIVE_DIMENSIONS.items():
-
-            # Get axis and spectrum
-            axis = {"kz": 0, "kx": 1, "ky": 2}[dimension]
-            spectrum = _analytic_cartesian_reduction(
-                components,
-                (axis,),
-                dtype,
-            )
-            full_size = {
-                "kz": system.nz,
-                "kx": system.nx,
-                "ky": system.ny,
-            }[dimension]
-
             # Perform cumulative reduction
-            expected = _expected_cumulative(
-                spectrum,
-                dimension,
-                full_size,
-            )
+            expected = expected_outputs[output]
             result = cp.asnumpy(
                 compiled_reductions.functions[output_type, output](data)
             )
@@ -507,7 +494,7 @@ def test_shell_and_shell_cumulative_reductions(compiled_reductions):
     for output_type, dtype in (
         ("real", np.dtype(system.float)),
         ("complex", np.dtype(system.complex)),
-    ):  
+    ):
         # Construct test data
         data, expected_kzkperp, expected_kperp, expected_kmod = (
             _shell_data_and_expected(system, dtype)
@@ -516,7 +503,7 @@ def test_shell_and_shell_cumulative_reductions(compiled_reductions):
             "kzkperp": expected_kzkperp,
             "kperp": expected_kperp,
             "kmod": expected_kmod,
-            "kperp_cumulative": np.cumsum(expected_kperp,dtype=dtype),
+            "kperp_cumulative": np.cumsum(expected_kperp, dtype=dtype),
             "kmod_cumulative": np.cumsum(expected_kmod, dtype=dtype),
         }
 
@@ -527,6 +514,14 @@ def test_shell_and_shell_cumulative_reductions(compiled_reductions):
             result = cp.asnumpy(
                 compiled_reductions.functions[output_type, output](data_gpu)
             ).reshape(expected.shape)
+
+            # The default shell metadata describes the actual reduction result
+            dimensions = compiled_reductions.reductions.get_dimensions(output)
+
+            assert tuple(dimensions) == SHELL_DIMENSIONS[output]
+            assert result.shape == tuple(
+                coordinate.size for coordinate in dimensions.values()
+            )
 
             assert result.dtype == dtype
             npt.assert_allclose(
