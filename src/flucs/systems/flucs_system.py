@@ -231,10 +231,7 @@ class FlucsSystem(ABC):
         output_group = -1
         for output in self.output_heap:
             if isinstance(output, FlucsOutputNC):
-                output_group = max(
-                    output_group,
-                    output.get_next_group()
-                )
+                output_group = max(output_group, output.get_next_group())
 
         for output in self.output_heap:
             if isinstance(output, FlucsOutputNC):
@@ -333,7 +330,7 @@ class FlucsSystem(ABC):
                 continue
 
             self.add_output(FlucsOutput(name=output_name, system=self))
-        
+
         self.setup_netcdf_output_group()
 
     def compile_cupy_module(self) -> None:

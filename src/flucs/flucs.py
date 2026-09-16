@@ -163,6 +163,7 @@ def run_flucs(input_path: pl.Path, override: list | None = None):
 
             solver.run()
 
+
 def write_default_input(system_name: str):
     """
     Creates a default input file.
@@ -187,6 +188,7 @@ def write_default_input(system_name: str):
 
     with open(input_file_path, "w") as file:
         file.write(str(default_input))
+
 
 def main():
     """
