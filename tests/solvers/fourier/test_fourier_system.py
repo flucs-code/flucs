@@ -70,7 +70,7 @@ def compiled_fourier_system(request, tmp_path_factory):
         updates={
             "setup": {
                 "linear": True,
-                "check_linear_matrix": False,
+                "check_linear_matrix": True,
             },
             "forcing": {"method": ""},
         },
@@ -118,6 +118,7 @@ def _dealiasing_product(
     precision,
     grid_size,
     dealiasing_updates,
+    setup_updates=None,
 ):
     """
     Compare one compiled Fourier operation with the padded reference product.
@@ -135,7 +136,10 @@ def _dealiasing_product(
                 "nx": nx,
                 "ny": ny,
             },
-            "setup": {"check_linear_matrix": False},
+            "setup": {
+                "check_linear_matrix": False,
+                **(setup_updates or {}),
+            },
             "forcing": {"method": ""},
             "dealiasing": {
                 "check_errors": True,
@@ -807,6 +811,80 @@ def test_restart_grid_rejects_incompatible_field_count(
         system.prepare_restart_data()
 
 
+@pytest.mark.cpu
+def test_initial_conditions_are_projected_onto_fourier_grid(
+    test_system,
+    tmp_path,
+    precision,
+    monkeypatch,
+):
+    """
+    Initial data is reshaped, truncated, and made Fourier-real.
+    """
+
+    _, _, system = create_test_solver_system(
+        tmp_path,
+        test_system,
+        precision=precision,
+        updates={"forcing": {"method": ""}},
+    )
+
+    # Supply the state normally established by setup without allocating a GPU
+    solved_mask = _expected_two_thirds_mask(system)
+    system.solved_grid_mask = solved_mask.astype(system.float)
+    system.restart_manager = SimpleNamespace(data=None)
+
+    # Provide random initial data so the check is independent of the method
+    random = np.random.default_rng(1729)
+    generated_fields = (
+        random.standard_normal((system.number_of_fields, system.half_size))
+        + 1j
+        * random.standard_normal((system.number_of_fields, system.half_size))
+    ).astype(system.complex)
+
+    monkeypatch.setattr(
+        system,
+        "_set_initial_conditions",
+        lambda: setattr(system, "fields_initial", generated_fields.copy()),
+    )
+
+    # Set initial conditions and check the data is well-formed
+    system.setup_initial_conditions()
+    fields = system.fields_initial
+
+    assert fields.shape == (system.number_of_fields, *system.half_tuple)
+    assert fields.dtype == np.dtype(system.complex)
+    npt.assert_array_equal(fields[:, ~solved_mask], system.complex(0))
+
+    # Solved positive-ky modes do not need projection and remain untouched
+    positive_ky_mask = solved_mask.copy()
+    positive_ky_mask[:, :, 0] = False
+    generated_fields = generated_fields.reshape(fields.shape)
+
+    npt.assert_array_equal(
+        fields[:, positive_ky_mask],
+        generated_fields[:, positive_ky_mask],
+    )
+
+    # The ky=0 plane is projected onto the Fourier reality condition
+    conjugate_iz = (-np.arange(system.nz)) % system.nz
+    conjugate_ix = (-np.arange(system.nx)) % system.nx
+    fields_ky0 = fields[:, :, :, 0]
+
+    npt.assert_allclose(
+        fields_ky0,
+        np.conj(
+            fields_ky0[
+                :,
+                conjugate_iz[:, None],
+                conjugate_ix[None, :],
+            ]
+        ),
+        rtol=0,
+        atol=system.tolerance,
+    )
+
+
 ###############################################################################
 # GPU tests
 ###############################################################################
@@ -999,6 +1077,34 @@ def test_linear_matrix_eigensystem_and_propagator(ready_fourier_system):
 
 
 @pytest.mark.gpu
+def test_linear_matrix_health_check_rejects_inconsistent_reference(
+    ready_fourier_system,
+    monkeypatch,
+):
+    """
+    The linear health check rejects a disagreeing system reference matrix.
+    """
+
+    # Create an incorrect reference by adding a constant
+    system = ready_fourier_system
+    reference = system.compute_linear_matrix_reference().copy()
+    reference += system.complex(1.0)
+
+    # Replace the independent TestSystem reference with a known disagreement
+    monkeypatch.setattr(
+        system,
+        "compute_linear_matrix_reference",
+        lambda: reference,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="linear matrix computed by CUDA disagrees",
+    ):
+        system._check_linear_matrix()
+
+
+@pytest.mark.gpu
 def test_field_history_realspace_and_restart_data(ready_fourier_system):
     """
     Field history feeds real-space reconstruction and restart serialization.
@@ -1064,6 +1170,40 @@ def test_field_history_realspace_and_restart_data(ready_fourier_system):
     # Later device changes must not mutate the serialized host snapshot
     system.get_fields().fill(0)
     npt.assert_array_equal(restart_data["data"], current_fields)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
+def test_fft_wrappers_execute_dealiased_operations(
+    test_system,
+    tmp_path,
+    precision,
+    fft_wrapper,
+):
+    """
+    Both FFT wrappers produce the same alias-free Fourier product.
+    """
+
+    # Use same initial conditions and dealiasing
+    error, product, reference, system = _dealiasing_product(
+        tmp_path,
+        test_system,
+        precision,
+        grid_size=(12, 12, 12),
+        dealiasing_updates={"method": "two-thirds"},
+        setup_updates={"fft_wrapper": fft_wrapper},
+    )
+
+    assert system.input["setup.fft_wrapper"] == fft_wrapper
+    assert system.use_cupy_fft is (fft_wrapper == "cupy")
+    assert error <= system.tolerance
+    
+    npt.assert_allclose(
+        product,
+        reference,
+        rtol=0,
+        atol=system.tolerance,
+    )
 
 
 @pytest.mark.gpu
