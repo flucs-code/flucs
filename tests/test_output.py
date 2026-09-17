@@ -294,8 +294,14 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         {"array": _ArrayDiagnostic},
         precision,
     )
-    output = FlucsOutput(output_name, system)
+    
+    system.setup_output()
+    assert system.output_heap is not None
+    assert len(system.output_heap) == 1
+
+    output = system.output_heap[0]
     assert type(output) is FlucsOutputNC
+    assert output.group_number == 0
 
     # Ready writes static metadata, while executions cache evolving arrays
     system.solver.state = FlucsSolverState.RUNNING
