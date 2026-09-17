@@ -266,9 +266,7 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help=(
-            "Runs the appropriate solver using input.toml from --io_path."
-        ),
+        help=("Runs the appropriate solver using input.toml from --io_path."),
     )
 
     operation_modes.add_argument(
