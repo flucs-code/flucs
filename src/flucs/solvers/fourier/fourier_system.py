@@ -49,6 +49,9 @@ class FourierSystem(FlucsSystem):
     methods.
     """
 
+    # Solver
+    solver_name = "FourierSolver"
+
     # Whether we use CuPy's built-in cuFFT interface or our own
     use_cupy_fft: bool
 
