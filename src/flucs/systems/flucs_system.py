@@ -1,4 +1,5 @@
-"""Definition of the abstract base for any flucs system.
+"""
+Definition of the abstract base for any flucs system.
 
 Outlines the basic functionality of any system using
 abstract methods.
@@ -13,14 +14,14 @@ import importlib
 import pathlib as pl
 import sys
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
 from flucs import FlucsInput
 from flucs import cupy as cp
 from flucs.diagnostic import FlucsDiagnostic
-from flucs.output import FlucsOutput
+from flucs.output import FlucsOutput, FlucsOutputNC
 from flucs.restart import FlucsRestart
 from flucs.utilities.cupy import KernelCollection, ModuleOptions
 from flucs.utilities.messages import flucsprint, format_seconds
@@ -41,7 +42,12 @@ class FlucsSystem(ABC):
     float: type
     complex: type
     int: type
+    netcdf_precision: str
     tolerance: float
+
+    # Naming convention for complex variables stored in NetCDF files
+    netcdf_real_suffix: ClassVar[str] = "_real"
+    netcdf_imag_suffix: ClassVar[str] = "_imag"
 
     # Variables to that keep track of time
     current_step: int
@@ -128,6 +134,13 @@ class FlucsSystem(ABC):
 
             flucs_input.load_toml_str(contents, default=True)
 
+    @staticmethod
+    def precision_tolerance(float_type: type) -> np.floating:
+        """
+        Return the baseline numerical tolerance for a floating-point type.
+        """
+        return float_type(np.finfo(float_type).eps * 64.0)
+
     def _set_precision(self):
         """
         Interprets the precision parameter and sets types accordingly.
@@ -136,16 +149,18 @@ class FlucsSystem(ABC):
             case "single":
                 self.float = np.float32
                 self.complex = np.complex64
+                self.netcdf_precision = "f4"
             case "double":
                 self.float = np.float64
                 self.complex = np.complex128
+                self.netcdf_precision = "f8"
                 self.module_options.define_flag("DOUBLE_PRECISION")
 
         # We always use 64-bit integers
         self.int = np.int64
 
         # Get float error tolerance
-        self.tolerance = self.float(np.finfo(self.float).eps * 64.0)
+        self.tolerance = self.precision_tolerance(self.float)
 
         # Print precision info
         flucsprint(
@@ -219,6 +234,28 @@ class FlucsSystem(ABC):
         self.final_time = self.float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestart(self)
+
+    def setup_netcdf_output_group(self) -> None:
+        """
+        Goes through all the netCDF outputs and
+        decides what group number to use.
+        """
+        if not self.output_heap:
+            return
+
+        output_group = -1
+        for output in self.output_heap:
+            if isinstance(output, FlucsOutputNC):
+                output_group = max(output_group, output.get_next_group())
+
+        for output in self.output_heap:
+            if isinstance(output, FlucsOutputNC):
+                output.group_number = output_group
+
+        # If output_group is still -1, then none of the
+        # outputs are FlucsOutputNC
+        if output_group > -1:
+            flucsprint(f"netCDF output group: {output_group}")
 
     def write_output(self, force=False):
         self.steps_until_next_write -= 1
@@ -308,6 +345,8 @@ class FlucsSystem(ABC):
                 continue
 
             self.add_output(FlucsOutput(name=output_name, system=self))
+
+        self.setup_netcdf_output_group()
 
     def compile_cupy_module(self) -> None:
         """

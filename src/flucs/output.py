@@ -143,9 +143,7 @@ class FlucsOutput(ABC):
         self.save_steps = self.system.input[f"output.{self.name}.save_steps"]
 
         # Set the precision of the netcdf outputs
-        self.netcdf_precision = (
-            "f4" if self.system.float is np.float32 else "f8"
-        )
+        self.netcdf_precision = self.system.netcdf_precision
 
         self._add_diagnostics_from_input()
 
@@ -188,16 +186,13 @@ class FlucsOutputText(FlucsOutput):
                 column_names.append(f"{var.name:>{self.column_width}}")
 
         file_existed = self.filepath.exists()
-        columns_n = len(self.timing_data_column_names) + len(self.diagnostics)
-        total_data_width = columns_n * self.column_width + (
-            columns_n - 1
-        ) * len(self.column_pad)
+        header = self.column_pad.join(column_names)
 
         with open(self.filepath, "a", encoding="utf-8") as file:
             if file_existed:
-                file.write("-" * total_data_width)
+                file.write("-" * len(header))
                 file.write("\n")
-            file.write(self.column_pad.join(column_names))
+            file.write(header)
             file.write("\n")
 
     def _add_diagnostics_from_input(self):
@@ -305,20 +300,26 @@ class FlucsOutputNC(FlucsOutput):
 
     # netCDF4 group to write to
     group_name: str
+    group_number: int
     group: Group
+
+    def get_next_group(self):
+        with Dataset(self.filepath, "r+", format="NETCDF4") as dataset:
+            if hasattr(self, "group_name"):
+                raise ValueError(
+                    f"Output {self.name} has already "
+                    f"set up group '{self.group_name}'."
+                )
+
+            group_number = max(
+                [-1] + [int(name) for name in dataset.groups.keys()]
+            )
+        return group_number + 1
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
         if not hasattr(self, "group_name"):
-            # We are yet to initialise the group
-            # Go through the file and pick group_name to be an integer that is
-            # equal to the largest one found + 1
-            group_number = max(
-                [-1] + [int(name) for name in dataset.groups.keys()]
-            )
-            group_number += 1
-
-            self.group_name = str(group_number)
+            self.group_name = str(self.group_number)
             group = dataset.createGroup(self.group_name)
             group.createDimension("time", None)
             group.createVariable("time", self.netcdf_precision, ("time",))
@@ -340,9 +341,9 @@ class FlucsOutputNC(FlucsOutput):
 
     def _createDimension(  # noqa: N802
         self,
-        rootgrp: Dataset or Group,
+        rootgrp: Dataset | Group,
         dim_name: str,
-        dim_size: int or None,
+        dim_size: int | None,
         dim_data,
     ):
         """
@@ -426,7 +427,6 @@ class FlucsOutputNC(FlucsOutput):
         routines).
 
         """
-
         with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
             self._setup_group()
 
@@ -451,27 +451,34 @@ class FlucsOutputNC(FlucsOutput):
 
                     # Create variable
                     if var.is_complex:
+                        real_name = (
+                            f"{var.name}{self.system.netcdf_real_suffix}"
+                        )
+                        imag_name = (
+                            f"{var.name}{self.system.netcdf_imag_suffix}"
+                        )
+
                         # Complex variables are stored as two separate netCDF4
                         # vars for the real and imaginary parts with suffixes
                         # _real and _imag, respectively.
                         diagnostic_group.createVariable(
-                            f"{var.name}_real",
+                            real_name,
                             self.netcdf_precision,
                             var_shape,
                         )
                         diagnostic_group.createVariable(
-                            f"{var.name}_imag",
+                            imag_name,
                             self.netcdf_precision,
                             var_shape,
                         )
 
                         # If time-independent, write data now
                         if not var.is_time_dependent:
-                            diagnostic_group[f"{var.name}_real"][:] = np.array(
+                            diagnostic_group[real_name][:] = np.array(
                                 var.data_cache[-1]
                             )[:].real
 
-                            diagnostic_group[f"{var.name}_imag"][:] = np.array(
+                            diagnostic_group[imag_name][:] = np.array(
                                 var.data_cache[-1]
                             )[:].imag
 
@@ -528,10 +535,16 @@ class FlucsOutputNC(FlucsOutput):
                     # If scalar diagnostic, this is much easier
                     if len(var.shape) == 0:
                         if var.is_complex:
-                            diagnostic_group[f"{var.name}_real"][
+                            real_name = (
+                                f"{var.name}{self.system.netcdf_real_suffix}"
+                            )
+                            imag_name = (
+                                f"{var.name}{self.system.netcdf_imag_suffix}"
+                            )
+                            diagnostic_group[real_name][
                                 first_index:last_index
                             ] = np.asarray(var.data_cache).real
-                            diagnostic_group[f"{var.name}_imag"][
+                            diagnostic_group[imag_name][
                                 first_index:last_index
                             ] = np.asarray(var.data_cache).imag
                         else:
@@ -540,11 +553,17 @@ class FlucsOutputNC(FlucsOutput):
                             ] = np.asarray(var.data_cache).real
                     else:
                         if var.is_complex:
+                            real_name = (
+                                f"{var.name}{self.system.netcdf_real_suffix}"
+                            )
+                            imag_name = (
+                                f"{var.name}{self.system.netcdf_imag_suffix}"
+                            )
                             for i in range(times_to_write):
-                                diagnostic_group[f"{var.name}_real"][
+                                diagnostic_group[real_name][
                                     first_index + i, :
                                 ] = var.data_cache[i][:].real
-                                diagnostic_group[f"{var.name}_imag"][
+                                diagnostic_group[imag_name][
                                     first_index + i, :
                                 ] = var.data_cache[i][:].imag
                         else:

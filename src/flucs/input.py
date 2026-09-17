@@ -200,7 +200,11 @@ class FlucsInput:
                         f"for parameter '{k}'."
                     ) from e
 
-    def __init__(self, filepath: pl.Path, override: list | None = None):
+    def __init__(
+        self,
+        filepath: pl.Path | str | None = None,
+        override: list | None = None,
+    ):
         """
         Initialises defaults and loads from file.
         """
@@ -209,6 +213,10 @@ class FlucsInput:
         self._input_dict = {}
         self._default_input_dict = {}
         self._initialised = False
+
+        if filepath is None:
+            # Create empty input
+            return
 
         # Store input filepath
         self.input_path = pl.Path(filepath)

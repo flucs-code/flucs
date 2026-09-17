@@ -1,9 +1,9 @@
-[time]
-max_cfl = 0.2  # Maximum allowed CFL number
-dt_mult_increase = 1.10 # Factor by which the timestep is allowed to increase
-dt_mult_decrease = 0.75 # Factor by which the timestep is decreased (only used if precomputing)
-dt_mult_steps = 10000  # Number of steps before the timestep can be increased
-dt_method = "continuous"
+[setup]
+# If true, run a linear-only simulation
+linear = false
+
+# Whether to perform some predefined health checks (e.g., linear spectrum against a reference)
+check_linear_matrix = true
 
 [dimensions] 
 nx = -1
@@ -14,7 +14,6 @@ nz = -1
 Lx = -1.0
 Ly = -1.0
 Lz = -1.0
-
 
 [dealiasing]
 # Currently supported methods are
@@ -54,6 +53,10 @@ truncation = ""
 # The optimal value is 2/9 ~ 0.222
 radius_squared = -1.0
 
+# Dealiasing max sum for polyhedral truncation.
+# The optimal value is 2/3 ~ 0.666
+max_sum = -1.0
+
 # Memory model for the dealiasing scheme.
 #
 # Two-thirds accepts only "standard".
@@ -71,13 +74,6 @@ memory = "standard"
 # Check errors
 check_errors = false
 
-[setup]
-# If true, run a linear-only simulation
-linear = false
-
-# Whether to perform some predefined health checks (e.g., linear spectrum against a reference)
-check_linear_matrix = true
-
 [timestepping]
 # Currently supported are ab3, rk4, and ssprk3
 method = "ab3"
@@ -87,6 +83,13 @@ linear_pade_degree = 4  # [1,1] is Crank-Nicolson
 
 # Whether the linear matrix should be computed each time step or precomputed
 precompute_linear_matrix = false
+
+[time]
+max_cfl = 0.2  # Maximum allowed CFL number
+dt_mult_increase = 1.10 # Factor by which the timestep is allowed to increase
+dt_mult_decrease = 0.75 # Factor by which the timestep is decreased (only used if precomputing)
+dt_mult_steps = 10000  # Number of steps before the timestep can be increased
+dt_method = "continuous"
 
 [init]
 # for method = "white_noise"
