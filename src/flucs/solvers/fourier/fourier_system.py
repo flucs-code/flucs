@@ -49,6 +49,9 @@ class FourierSystem(FlucsSystem):
     methods.
     """
 
+    # Solver
+    solver_name = "FourierSolver"
+
     # Whether we use CuPy's built-in cuFFT interface or our own
     use_cupy_fft: bool
 
@@ -684,6 +687,14 @@ class FourierSystem(FlucsSystem):
             raise InvalidFlucsInputFileError(
                 f"'{fft_wrapper}' is not a valid "
                 "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
+            )
+
+        if (
+            fft_wrapper == "cupy"
+            and self.input["dealiasing.memory"] == "in_place"
+        ):
+            raise InvalidFlucsInputFileError(
+                "Cannot use cupy fft_wrapper with in_place memory setup."
             )
 
         self.use_cupy_fft = fft_wrapper == "cupy"

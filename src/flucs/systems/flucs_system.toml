@@ -1,8 +1,3 @@
-[time]
-dt_max = 0.01  # integration time step
-dt_min = 1e-8
-tfinal = 10.0  # final time
-
 [setup]
 solver = ""  # name of the solver
 system = ""  # name of the system of equations
@@ -22,8 +17,13 @@ time_estimate_writes = 10
 # cuFFT wrapper. Supported values are 'cupy' or 'flucs'
 fft_wrapper = "flucs"
 
-[timestepping]
-method = "ab3"
+[parameters]
+# Any user-defined parameters go here
+
+[time]
+dt_max = 0.01  # integration time step
+dt_min = 1e-8
+tfinal = 10.0  # final time
 
 [init]
 rand_seed = 113  # seed for random-number generation
