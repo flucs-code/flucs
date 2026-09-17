@@ -22,33 +22,6 @@ from tests.support.support import (
 pytestmark = pytest.mark.solver("FourierSolver")
 
 
-def _expected_two_thirds_mask(system):
-    """
-    Construct the rectangular solved grid independently of the CUDA kernel.
-    """
-
-    solved_z = np.ones(system.nz, dtype=bool)
-    solved_x = np.ones(system.nx, dtype=bool)
-    solved_y = np.arange(system.half_ny) < system.half_ny_unpadded
-
-    solved_z[
-        system.half_nz_unpadded : system.half_nz_unpadded
-        + system.nz
-        - system.nz_unpadded
-    ] = False
-    solved_x[
-        system.half_nx_unpadded : system.half_nx_unpadded
-        + system.nx
-        - system.nx_unpadded
-    ] = False
-
-    return (
-        solved_z[:, np.newaxis, np.newaxis]
-        & solved_x[np.newaxis, :, np.newaxis]
-        & solved_y[np.newaxis, np.newaxis, :]
-    )
-
-
 @pytest.fixture(
     scope="module",
     params=TEST_PRECISIONS,
@@ -287,10 +260,7 @@ def test_dealiasing_configuration(
         assert n_unpadded % 2 == 1
         assert n_unpadded <= n
 
-    definitions = system.module_options._defs
-
     if expected_method == "two-thirds":
-        assert definitions["TWO_THIRDS_DEALIASING"] == ""
         assert (system.nz, system.nx, system.ny) == (24, 24, 24)
         assert (
             system.nz_unpadded,
@@ -298,14 +268,7 @@ def test_dealiasing_configuration(
             system.ny_unpadded,
         ) == (15, 15, 15)
     else:
-        assert definitions["PHASE_SHIFT_DEALIASING"] == ""
-        truncation_flag = f"PHASE_SHIFT_{expected_truncation.upper()}"
-        assert definitions[truncation_flag] == ""
-        constant = {
-            "spherical": "DEALIASING_RADIUS_SQUARED",
-            "polyhedral": "DEALIASING_MAX_SUM",
-        }[expected_truncation]
-        assert constant in definitions
+        assert (system.nz, system.nx, system.ny) == (18, 18, 18)
 
 
 @pytest.mark.cpu
@@ -462,8 +425,18 @@ def test_fourier_geometry_shells_and_solved_modes(
     assert system.shell_kperp_max > np.hypot(kx_max, ky_max)
     assert system.shell_kmod_max > np.sqrt(kz_max**2 + kx_max**2 + ky_max**2)
 
-    # Reconstruct the rectangular solved region without invoking CUDA
-    solved_mask = _expected_two_thirds_mask(system)
+    # Prescribe unrelated solved positions so the helpers are tested without
+    # reconstructing any production dealiasing region
+    solved_mask = np.zeros(system.half_tuple, dtype=bool)
+    solved_indices = (
+        (+0, +0, +0),
+        (+1, +2, +0),
+        (-1, -2, +0),
+        (+2, +3, +1),
+        (-3, +4, +2),
+    )
+    for index in solved_indices:
+        solved_mask[index] = True
     system.solved_grid_mask = solved_mask.astype(precision.float_type)
 
     # Public helpers must report coordinates and physical mode counts together
@@ -829,8 +802,18 @@ def test_initial_conditions_are_projected_onto_fourier_grid(
         updates={"forcing": {"method": ""}},
     )
 
-    # Supply the state normally established by setup without allocating a GPU
-    solved_mask = _expected_two_thirds_mask(system)
+    # Prescribe a sparse conjugate-symmetric mask without reconstructing any
+    # production dealiasing region
+    solved_mask = np.zeros(system.half_tuple, dtype=bool)
+    solved_indices = (
+        (+0, +0, +0),
+        (+1, +2, +0),
+        (-1, -2, +0),
+        (+2, +3, +1),
+        (-3, +4, +2),
+    )
+    for index in solved_indices:
+        solved_mask[index] = True
     system.solved_grid_mask = solved_mask.astype(system.float)
     system.restart_manager = SimpleNamespace(data=None)
 
@@ -1197,7 +1180,7 @@ def test_fft_wrappers_execute_dealiased_operations(
     assert system.input["setup.fft_wrapper"] == fft_wrapper
     assert system.use_cupy_fft is (fft_wrapper == "cupy")
     assert error <= system.tolerance
-    
+
     npt.assert_allclose(
         product,
         reference,

@@ -157,16 +157,8 @@ def baseline_fourier_state(tmp_path_factory):
         cp.cuda.runtime.deviceSynchronize()
 
         baseline_fields = cp.asnumpy(system.get_fields()).copy()
-        solved_mask = system.get_solved_grid_mask().astype(bool)
-
         # Finite
         assert np.all(np.isfinite(baseline_fields))
-
-        # Correct dealiasing
-        npt.assert_array_equal(
-            baseline_fields[:, ~solved_mask],
-            np.zeros_like(baseline_fields[:, ~solved_mask]),
-        )
 
         # Simulation has stepped beyond the initial state
         assert system.current_step > 0

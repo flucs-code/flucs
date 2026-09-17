@@ -99,7 +99,7 @@ def test_forcing_range_contract(
     expected_physical_count,
 ):
     """
-    Production OU forcing exposes each shared analytical mode range.
+    CUDA forcing acts on only the modes selected by the shared host range.
     """
 
     _, _, system = create_test_solver_system(
@@ -200,11 +200,13 @@ def test_forcing_updates_only_the_analytical_range(test_system, tmp_path):
 
         # Host and CUDA selection agree on the analytically isolated modes
         npt.assert_array_equal(forcing.forcing_range_mask, expected_mask)
+
         assert not np.any(expected_mask & ~solved_mask)
         assert all(
             np.linalg.norm(field[expected_mask]) > system.tolerance
             for field in fields
         )
+
         npt.assert_array_equal(
             fields[:, ~expected_mask],
             system.complex(0),
@@ -214,6 +216,7 @@ def test_forcing_updates_only_the_analytical_range(test_system, tmp_path):
         conjugate_iz = (-np.arange(system.nz)) % system.nz
         conjugate_ix = (-np.arange(system.nx)) % system.nx
         fields_ky0 = fields[:, :, :, 0]
+
         npt.assert_allclose(
             fields_ky0,
             np.conj(

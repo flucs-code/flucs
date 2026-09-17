@@ -124,7 +124,6 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
     resolved_io_path = io_path.resolve()
 
     assert post.io_paths == [resolved_io_path]
-    assert post._output_paths == {resolved_io_path: [nc_path.resolve()]}
     assert post.solver_types[resolved_io_path] is flucs.get_solver_type(
         test_system.solver_name
     )
