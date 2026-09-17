@@ -296,7 +296,6 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
     )
     output = FlucsOutput(output_name, system)
     assert type(output) is FlucsOutputNC
-    assert output.netcdf_precision == precision.netcdf_precision
 
     # Ready writes static metadata, while executions cache evolving arrays
     system.solver.state = FlucsSolverState.RUNNING

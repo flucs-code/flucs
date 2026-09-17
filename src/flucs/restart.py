@@ -33,7 +33,6 @@ class FlucsRestart:
     write_restart_file: bool = False
     write_path: pl.Path
     steps_until_write: int = 0
-    netcdf_precision: str
 
     # Handling backup files
     backup_temp: pl.Path
@@ -45,9 +44,6 @@ class FlucsRestart:
 
     def __init__(self, system: FlucsSystem):
         self.system = system
-
-        # Follow the precision contract established by the parent system
-        self.netcdf_precision = self.system.netcdf_precision
 
         self._decide_initial_path()
         self._load_restart_data()
@@ -336,13 +332,13 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable("current_time", self.netcdf_precision, ())[
-                ...
-            ] = self.system.float(self.system.current_time)
+            ds.createVariable(
+                "current_time", self.system.netcdf_precision, ()
+            )[...] = self.system.float(self.system.current_time)
 
-            ds.createVariable("current_dt", self.netcdf_precision, ())[...] = (
-                self.system.float(self.system.current_dt)
-            )
+            ds.createVariable(
+                "current_dt", self.system.netcdf_precision, ()
+            )[...] = self.system.float(self.system.current_dt)
 
             # Arrays
             for var_name, var_dict in restart_data.items():
@@ -368,19 +364,21 @@ class FlucsRestart:
                     imag_name = f"{var_name}{self.system.netcdf_imag_suffix}"
                     v_r = ds.createVariable(
                         real_name,
-                        self.netcdf_precision,
+                        self.system.netcdf_precision,
                         tuple(dim_names),
                     )
                     v_i = ds.createVariable(
                         imag_name,
-                        self.netcdf_precision,
+                        self.system.netcdf_precision,
                         tuple(dim_names),
                     )
                     v_r[:] = var_data.real
                     v_i[:] = var_data.imag
                 else:
                     v = ds.createVariable(
-                        var_name, self.netcdf_precision, tuple(dim_names)
+                        var_name,
+                        self.system.netcdf_precision,
+                        tuple(dim_names),
                     )
                     v[:] = var_data
 

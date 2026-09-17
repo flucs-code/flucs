@@ -142,7 +142,6 @@ def test_restart_round_trip_scheduling_backups_and_reconstruction(
     }
     monkeypatch.setattr(system, "get_restart_data", lambda: restart_data)
     restart = FlucsRestart(system)
-    assert restart.netcdf_precision == precision.netcdf_precision
 
     # Even a forced write is suppressed outside the production solver state
     system.solver.state = FlucsSolverState.TIMING
