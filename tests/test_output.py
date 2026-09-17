@@ -294,7 +294,7 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         {"array": _ArrayDiagnostic},
         precision,
     )
-    
+
     system.setup_output()
     assert system.output_heap is not None
     assert len(system.output_heap) == 1
@@ -409,6 +409,76 @@ def test_netcdf_output_round_trip_preserves_layout_and_values(
         for diagnostic in output.diagnostics
         for var in diagnostic.vars.values()
     )
+
+
+@pytest.mark.cpu
+def test_netcdf_outputs_use_one_available_group(
+    test_system,
+    tmp_path,
+    capsys,
+):
+    """
+    Every NetCDF output in one run uses the same next available group.
+    """
+
+    # Give the two output files different existing group histories
+    existing_groups = {
+        "0d": ("0", "1"),
+        "1d": ("0", "1", "2", "3"),
+    }
+    for output_name, group_names in existing_groups.items():
+        filepath = tmp_path / f"output.{output_name}.nc"
+        with Dataset(filepath, "w", format="NETCDF4") as dataset:
+            for group_name in group_names:
+                dataset.createGroup(group_name)
+
+    _, _, system = create_test_solver_system(
+        tmp_path,
+        test_system,
+        updates={
+            "output": {
+                "time": {
+                    "type": "text",
+                    "save_steps": 2,
+                    "diags": [],
+                },
+                "0d": {
+                    "type": "netcdf4",
+                    "save_steps": 2,
+                    "diags": [],
+                },
+                "1d": {
+                    "type": "netcdf4",
+                    "save_steps": 2,
+                    "diags": [],
+                },
+            }
+        },
+    )
+
+    # Output setup selects the largest next group once for the whole run
+    capsys.readouterr()
+    system.setup_output()
+    output_message = capsys.readouterr().out
+    outputs = {output.name: output for output in system.output_heap or ()}
+
+    assert output_message.count("netCDF output group: 4") == 1
+    assert isinstance(outputs["time"], FlucsOutputText)
+    assert not hasattr(outputs["time"], "group_number")
+    assert outputs["0d"].group_number == 4
+    assert outputs["1d"].group_number == 4
+
+    # Production setup writes that selected group to both NetCDF files
+    system.solver.state = FlucsSolverState.RUNNING
+    for output in outputs.values():
+        output.ready()
+    for output_name, group_names in existing_groups.items():
+        with Dataset(
+            outputs[output_name].filepath,
+            "r",
+            format="NETCDF4",
+        ) as dataset:
+            assert set(dataset.groups) == {*group_names, "4"}
 
 
 @pytest.mark.cpu

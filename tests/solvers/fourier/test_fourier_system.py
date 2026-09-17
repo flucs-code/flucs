@@ -1313,14 +1313,16 @@ def test_polyhedral_phase_shift_dealiasing_boundary(
 @pytest.mark.gpu
 @pytest.mark.slow
 @pytest.mark.parametrize("truncation", ("spherical", "polyhedral"))
+@pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
 def test_phase_shift_memory_models_agree(
     test_system,
     tmp_path,
     precision,
     truncation,
+    fft_wrapper,
 ):
     """
-    Every phase-shift memory model implements the same safe product.
+    Supported FFT and memory models implement the same safe product.
     """
 
     cutoff = (
@@ -1330,8 +1332,31 @@ def test_phase_shift_memory_models_agree(
     )
     results = []
     for memory in ("standard", "low_memory", "in_place"):
+        operation_path = tmp_path / fft_wrapper / memory
+        if fft_wrapper == "cupy" and memory == "in_place":
+            with pytest.raises(
+                InvalidFlucsInputFileError,
+                match=(
+                    "Cannot use cupy fft_wrapper with in_place memory setup"
+                ),
+            ):
+                _dealiasing_product(
+                    operation_path,
+                    test_system,
+                    precision,
+                    grid_size=(30, 30, 30),
+                    dealiasing_updates={
+                        "method": "phase-shift",
+                        "truncation": truncation,
+                        "memory": memory,
+                        **cutoff,
+                    },
+                    setup_updates={"fft_wrapper": fft_wrapper},
+                )
+            continue
+
         error, product, reference, system = _dealiasing_product(
-            tmp_path / memory,
+            operation_path,
             test_system,
             precision,
             grid_size=(30, 30, 30),
@@ -1341,6 +1366,7 @@ def test_phase_shift_memory_models_agree(
                 "memory": memory,
                 **cutoff,
             },
+            setup_updates={"fft_wrapper": fft_wrapper},
         )
 
         assert error <= system.tolerance

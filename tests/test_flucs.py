@@ -8,9 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import create_autospec, sentinel
 
 import pytest
+import toml
 
 import flucs
 import flucs.flucs as flucs_module
+from flucs.input import FlucsInput
 from flucs.solvers import FlucsSolver
 from tests.support.support import (
     TEST_SYSTEMS,
@@ -264,6 +266,56 @@ def test_main_defaults_to_run_and_combines_overrides(monkeypatch, tmp_path):
     )
 
 
+@pytest.mark.cpu
+def test_main_initializes_reloadable_default_input(
+    monkeypatch,
+    tmp_path,
+    test_system,
+):
+    """
+    The CLI writes complete system defaults without replacing existing input.
+    """
+
+    # --memory is a global option and remains accepted outside run mode
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "flucs",
+            "--init",
+            test_system.system_name,
+            "--io_path",
+            str(tmp_path),
+            "--memory",
+        ],
+    )
+    flucs_module.main()
+
+    # The generated file contains the complete merged defaults for the system
+    input_path = tmp_path / "input.toml"
+    generated_contents = input_path.read_text(encoding="utf-8")
+    generated_input = toml.loads(generated_contents)
+
+    expected_input = FlucsInput()
+    test_system.system_type.load_defaults(expected_input)
+    expected_input["setup.system"] = test_system.system_name
+    expected_input["setup.solver"] = test_system.solver_name
+
+    assert generated_input == toml.loads(str(expected_input))
+    assert generated_input["setup"]["solver"] == test_system.solver_name
+    assert generated_input["setup"]["system"] == test_system.system_name
+    assert "parameters" in generated_input
+
+    # The generated defaults are directly usable through the public loader
+    reloaded_input = FlucsInput(input_path)
+    assert toml.loads(str(reloaded_input)) == generated_input
+
+    # Repeating --init refuses to overwrite the existing file
+    with pytest.raises(ValueError, match=r"input[.]toml already exists"):
+        flucs_module.main()
+    assert input_path.read_text(encoding="utf-8") == generated_contents
+
+
 ###############################################################################
 # GPU tests
 ###############################################################################
@@ -291,7 +343,7 @@ def test_main_profiles_memory(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["flucs", "--io_path", str(tmp_path), "--memory"],
+        ["flucs", "--run", "--io_path", str(tmp_path), "--memory"],
     )
 
     # Empty the pool so that the hook observes a fresh device allocation
