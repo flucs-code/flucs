@@ -49,6 +49,9 @@ class FourierSystem(FlucsSystem):
     methods.
     """
 
+    # Solver
+    solver_name = "FourierSolver"
+
     # Whether we use CuPy's built-in cuFFT interface or our own
     use_cupy_fft: bool
 
@@ -376,10 +379,14 @@ class FourierSystem(FlucsSystem):
             case "polyhedral":
                 self.module_options.define_flag("PHASE_SHIFT_POLYHEDRAL")
 
-                # Set to largest multiple of 1/scale that is strictly below
-                # the theoretical pairwise limit of 2/(nonlinear_order + 1)
-                denominator = nonlinear_order + 1
-                max_sum = ((2 * scale - 1) // denominator) / scale
+                # Set dealiasing max sum
+                if self.input["dealiasing.max_sum"] > 0:
+                    max_sum = self.input["dealiasing.max_sum"]
+                else:
+                    # Set to largest multiple of 1/scale that is strictly below
+                    # the theoretical pairwise limit of 2/(nonlinear_order + 1)
+                    denominator = nonlinear_order + 1
+                    max_sum = ((2 * scale - 1) // denominator) / scale
 
                 self.module_options.define_float(
                     "DEALIASING_MAX_SUM",
@@ -513,7 +520,7 @@ class FourierSystem(FlucsSystem):
         nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
 
         # Maximum kperp from bin width
-        bin_width = (
+        bin_width = self.float(
             dkperp
             if nkperp_from_dkperp <= self.cuda_block_size
             else (kperp_max - kperp_min) / nkperp
@@ -575,7 +582,7 @@ class FourierSystem(FlucsSystem):
         nkmod = min(nkmod_from_dkmod, self.cuda_block_size)
 
         # Maximum kmod from bin width
-        bin_width = (
+        bin_width = self.float(
             dkmod
             if nkmod_from_dkmod <= self.cuda_block_size
             else (kmod_max - kmod_min) / nkmod
@@ -680,6 +687,14 @@ class FourierSystem(FlucsSystem):
             raise InvalidFlucsInputFileError(
                 f"'{fft_wrapper}' is not a valid "
                 "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
+            )
+
+        if (
+            fft_wrapper == "cupy"
+            and self.input["dealiasing.memory"] == "in_place"
+        ):
+            raise InvalidFlucsInputFileError(
+                "Cannot use cupy fft_wrapper with in_place memory setup."
             )
 
         self.use_cupy_fft = fft_wrapper == "cupy"
@@ -2199,7 +2214,7 @@ class FourierSystem(FlucsSystem):
                 :, solved_grid_mask_ky0
             ]
         )
-        flucsprint(f"Inititial condition reality error: {error:.3e}")
+        flucsprint(f"Initial condition reality error: {error:.3e}")
 
     # -------------------------------------------------------------------------
     # Health checks
@@ -2228,11 +2243,6 @@ class FourierSystem(FlucsSystem):
 
         if not self.input["dealiasing.check_errors"]:
             return
-
-        # TODO a test of the dealiasing boundaries should be written, in which
-        # the padded values or radius are changed, and all of this code moved
-        # into said function.
-        # This should be both for two-thirds and phase-shifted dealiasing.
 
         solved_modes_mask = self.get_solved_grid_mask()
         solved_modes_mask = cp.array(solved_modes_mask)
@@ -2779,7 +2789,7 @@ class FourierSystem(FlucsSystem):
         # If the restart fields are the same shape as current fields, return
         target_shape = (self.number_of_fields, *self.half_tuple)
         if restart_fields.shape == target_shape:
-            return restart_fields
+            return restart_fields.astype(self.complex, copy=False)
 
         # Error if the restart fields are not compatible with the current fields
         if restart_fields.shape[0] != self.number_of_fields:
@@ -2797,7 +2807,7 @@ class FourierSystem(FlucsSystem):
         # Initialise with zeros
         initial_fields = np.zeros(
             target_shape,
-            dtype=restart_fields.dtype,
+            dtype=self.complex,
         )
 
         # Copy over the nonzero modes

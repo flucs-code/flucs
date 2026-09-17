@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import importlib.metadata
 import pathlib as pl
@@ -5,6 +7,7 @@ import subprocess
 import sys
 from datetime import datetime
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING
 
 from flucs.input import FlucsInput
 from flucs.utilities.clean_directory import clean_directory
@@ -22,6 +25,9 @@ except Exception as exc:
     print(f"CuPy not found! {CUPY_IMPORT_ERROR}")
 else:
     CUPY_IMPORT_ERROR = None
+
+if TYPE_CHECKING:
+    from flucs.solvers import FlucsSolver
 
 FLUCS_HEADER = rf"""
 {HORIZONTAL_SEPARATOR}
@@ -135,7 +141,9 @@ def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
     return argv, None
 
 
-def run_flucs(input_path: pl.Path, override: list | None = None):
+def run_flucs(
+    input_path: pl.Path, override: list | None = None
+) -> tuple[FlucsInput, FlucsSolver]:
     """
     Construct FlucsInput then call the appropriate solver.
 
@@ -163,8 +171,11 @@ def run_flucs(input_path: pl.Path, override: list | None = None):
 
             solver.run()
 
+    # Return the input and solver for debugging purposes
+    return flucs_input, solver
 
-def write_default_input(system_name: str):
+
+def write_default_input(system_name: str, io_path: pl.Path):
     """
     Creates a default input file.
 
@@ -172,22 +183,32 @@ def write_default_input(system_name: str):
     ----------
     system_name : str
         Name of the FlucsSystem.
+    io_path : pl.Path
+        Path to the i/o directory where the input file will be created.
 
     """
-    input_file_path = pl.Path("./input.toml")
+    input_file_path = io_path / "input.toml"
 
     if input_file_path.exists():
         raise ValueError(
-            "input.toml already exists in the current directory. "
-            "Please remove it manually if you want to "
-            "write a default-input file."
+            "input.toml already exists in the specified directory. "
+            "Please remove it manually if you want to write a default-input "
+            "file."
         )
 
-    default_input = FlucsInput(filepath=None)
-    get_system_type(system_name).load_defaults(default_input)
+    # Get system type
+    system_type = get_system_type(system_name)
 
-    with open(input_file_path, "w") as file:
-        file.write(str(default_input))
+    # Get default inputs
+    default_input = FlucsInput(filepath=None)
+    system_type.load_defaults(default_input)
+
+    # Set the system to be the requested one, and the solver automatically
+    default_input["setup.system"] = system_name
+    default_input["setup.solver"] = system_type.solver_name
+
+    # Write to file
+    input_file_path.write_text(str(default_input), encoding="utf-8")
 
 
 def main():
@@ -207,8 +228,10 @@ def main():
         type=str,
         default=pl.Path.cwd(),
         required=False,
-        help="Path to the i/o directory, which must contain 'input.toml'. "
-        "If no path is specified, will assume the current working directory.",
+        help=(
+            "Path to the i/o directory, which must contain 'input.toml'. "
+            "If no path is specified, assumes the current working directory."
+        ),
     )
 
     parser.add_argument(
@@ -217,13 +240,15 @@ def main():
         nargs="+",
         action="extend",
         required=False,
-        help="Additional arguments to override input-file parameters. Must be "
-        "specified in TOML grouping format: e.g., to override the value "
-        "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'.",
+        help=(
+            "Additional arguments to override input-file parameters. Must be "
+            "specified in TOML grouping format: e.g., to override the value "
+            "of dt_max in group time to be 0.01, specify 'time.dt_max 0.01'."
+        ),
     )
 
     parser.add_argument(
-        "--memory-profile",
+        "--memory",
         "-m",
         action="store_true",
         default=False,
@@ -241,17 +266,18 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Runs the appropriate solver using input.toml from --io_path.",
+        help=("Runs the appropriate solver using input.toml from --io_path."),
     )
 
     operation_modes.add_argument(
-        "--init-input",
+        "--init",
+        "-i",
         type=str,
         metavar="SYSTEM_NAME",
         required=False,
         help=(
-            "Writes input.toml that contains the "
-            "defaults for the specified FlucsSystem."
+            "Writes input.toml that contains the defaults for the specified "
+            "FlucsSystem to --io_path."
         ),
     )
 
@@ -261,8 +287,10 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Lists the solvers and systems that can be run in the "
-        "current installation.",
+        help=(
+            "Lists the solvers and systems that can be run in the "
+            "current installation."
+        ),
     )
 
     operation_modes.add_argument(  # TODO
@@ -280,8 +308,10 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="Remove 'output.*' and 'restart.*' files in the current directory "
-        "and exit.",
+        help=(
+            "Remove 'output.*' and 'restart.*' files in the current directory "
+            "and exit."
+        ),
     )
 
     operation_modes.add_argument(
@@ -290,8 +320,10 @@ def main():
         action="store_true",
         default=False,
         required=False,
-        help="List post-processing scripts for the specified i/o directory, "
-        "or run a given script using '-p <integer> <script arguments>'.",
+        help=(
+            "List post-processing scripts for the specified i/o directory, "
+            "or run a given script using '-p <integer> <script arguments>'."
+        ),
     )
 
     operation_modes.add_argument(
@@ -322,8 +354,10 @@ def main():
         "-r",
         type=str,
         required=False,
-        help="Reconstruct the input file from the specified restart file. "
-        "Note that --override is ignored.",
+        help=(
+            "Reconstruct the input file from the specified restart file. "
+            "Note that --override is ignored."
+        ),
     )
 
     # Parse command-line arguments
@@ -335,7 +369,7 @@ def main():
     if not any(
         (
             args.run,
-            args.init_input,
+            args.init,
             args.list,
             args.test,
             args.clean,
@@ -356,21 +390,25 @@ def main():
         if not input_path.exists():
             raise FileNotFoundError(f"Input file not found in {io_path} ")
 
-        if args.memory_profile:
+        if args.memory:
             hook = LineProfileHook()
             with hook:
                 run_flucs(input_path, args.override)
             cupy.cuda.get_current_stream().synchronize()
-            flucsprint("Memory report from CuPy's LineProfileHook:")
-            hook.print_report()
+
+            log_path = io_path / "output.log"
+            with open(log_path, "a", encoding="utf-8") as log_file:
+                with FlucsLogHandler(log_file, keep_stdout=True):
+                    flucsprint("Memory report from CuPy's LineProfileHook:")
+                    hook.print_report(file=sys.stdout)
             return
 
         run_flucs(input_path, args.override)
         return
 
     # Write a default input file
-    if args.init_input:
-        write_default_input(args.init_input)
+    if args.init:
+        write_default_input(args.init, io_path)
 
     # List installed solvers and systems
     if args.list:
