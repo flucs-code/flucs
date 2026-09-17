@@ -689,6 +689,14 @@ class FourierSystem(FlucsSystem):
                 "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
             )
 
+        if (
+            fft_wrapper == "cupy"
+            and self.input["dealiasing.memory"] == "in_place"
+        ):
+            raise InvalidFlucsInputFileError(
+                "Cannot use cupy fft_wrapper with in_place memory setup."
+            )
+
         self.use_cupy_fft = fft_wrapper == "cupy"
 
         if self.use_cupy_fft:
