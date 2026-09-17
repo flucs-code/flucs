@@ -295,6 +295,29 @@ def main():
     )
 
     operation_modes.add_argument(
+        "--follow",
+        nargs="*",
+        metavar="COLUMN",
+        default=None,
+        help="Dynamically plot columns from output.time.txt. If no columns "
+        "are specified, plot all columns except time, step, dt, and cfl.",
+    )
+
+    parser.add_argument(
+        "--dt-cfl",
+        action="store_true",
+        default=False,
+        help="With --follow, plot dt and cfl in a separate figure.",
+    )
+
+    parser.add_argument(
+        "--one-panel",
+        action="store_true",
+        default=False,
+        help="With --follow, plot selected columns on a single panel.",
+    )
+
+    operation_modes.add_argument(
         "--reconstruct",
         "-r",
         type=str,
@@ -318,9 +341,13 @@ def main():
             args.clean,
             args.reconstruct,
             args.postprocess,
+            args.follow is not None,
         )
     ):
         args.run = True
+
+    if (args.dt_cfl or args.one_panel) and args.follow is None:
+        parser.error("--dt-cfl and --one-panel can only be used with --follow")
 
     # Launch the solver
     if args.run:
@@ -395,5 +422,17 @@ def main():
         subprocess.run(
             [sys.executable, str(script_path), *subprocess_args],
             check=True,
+        )
+        return
+
+    # Live text-output plotting
+    if args.follow is not None:
+        from flucs.follow import follow
+
+        follow(
+            io_path,
+            args.follow,
+            plot_dt_cfl=args.dt_cfl,
+            one_panel=args.one_panel,
         )
         return
