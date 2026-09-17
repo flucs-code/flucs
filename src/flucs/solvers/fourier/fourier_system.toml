@@ -53,6 +53,10 @@ truncation = ""
 # The optimal value is 2/9 ~ 0.222
 radius_squared = -1.0
 
+# Dealiasing max sum for polyhedral truncation.
+# The optimal value is 2/3 ~ 0.666
+max_sum = -1.0
+
 # Memory model for the dealiasing scheme.
 #
 # Two-thirds accepts only "standard".

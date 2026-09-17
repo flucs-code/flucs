@@ -1,4 +1,5 @@
-"""Definition of the abstract base for any flucs system.
+"""
+Definition of the abstract base for any flucs system.
 
 Outlines the basic functionality of any system using
 abstract methods.
@@ -13,7 +14,7 @@ import importlib
 import pathlib as pl
 import sys
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -41,7 +42,12 @@ class FlucsSystem(ABC):
     float: type
     complex: type
     int: type
+    netcdf_precision: str
     tolerance: float
+
+    # Naming convention for complex variables stored in NetCDF files
+    netcdf_real_suffix: ClassVar[str] = "_real"
+    netcdf_imag_suffix: ClassVar[str] = "_imag"
 
     # Variables to that keep track of time
     current_step: int
@@ -128,6 +134,13 @@ class FlucsSystem(ABC):
 
             flucs_input.load_toml_str(contents, default=True)
 
+    @staticmethod
+    def precision_tolerance(float_type: type) -> np.floating:
+        """
+        Return the baseline numerical tolerance for a floating-point type.
+        """
+        return float_type(np.finfo(float_type).eps * 64.0)
+
     def _set_precision(self):
         """
         Interprets the precision parameter and sets types accordingly.
@@ -136,16 +149,18 @@ class FlucsSystem(ABC):
             case "single":
                 self.float = np.float32
                 self.complex = np.complex64
+                self.netcdf_precision = "f4"
             case "double":
                 self.float = np.float64
                 self.complex = np.complex128
+                self.netcdf_precision = "f8"
                 self.module_options.define_flag("DOUBLE_PRECISION")
 
         # We always use 64-bit integers
         self.int = np.int64
 
         # Get float error tolerance
-        self.tolerance = self.float(np.finfo(self.float).eps * 64.0)
+        self.tolerance = self.precision_tolerance(self.float)
 
         # Print precision info
         flucsprint(
