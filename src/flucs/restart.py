@@ -332,13 +332,13 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable(
-                "current_time", self.system.netcdf_precision, ()
-            )[...] = self.system.float(self.system.current_time)
+            ds.createVariable("current_time", self.system.netcdf_precision, ())[
+                ...
+            ] = self.system.float(self.system.current_time)
 
-            ds.createVariable(
-                "current_dt", self.system.netcdf_precision, ()
-            )[...] = self.system.float(self.system.current_dt)
+            ds.createVariable("current_dt", self.system.netcdf_precision, ())[
+                ...
+            ] = self.system.float(self.system.current_dt)
 
             # Arrays
             for var_name, var_dict in restart_data.items():

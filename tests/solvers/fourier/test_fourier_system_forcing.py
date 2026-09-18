@@ -71,9 +71,7 @@ def _analytical_mode_mask(system, modes):
     ("range_updates", "expected_modes", "expected_physical_count"),
     [
         pytest.param(
-            {
-                "range_kmod": [1.0, 1.4]
-            },
+            {"range_kmod": [1.0, 1.4]},
             ISOTROPIC_MODES,
             6,
             id="isotropic",

@@ -358,9 +358,7 @@ class FlucsOutputNC(FlucsOutput):
             group.createVariable(
                 "time", self.system.netcdf_precision, ("time",)
             )
-            group.createVariable(
-                "dt", self.system.netcdf_precision, ("time",)
-            )
+            group.createVariable("dt", self.system.netcdf_precision, ("time",))
 
             # Set attributes
             group.setncattr(
