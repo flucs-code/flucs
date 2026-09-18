@@ -141,6 +141,7 @@ def plot_1d_vs_dimension(post, args):
     ax.set_xlabel(dimension_name)
     ax.set_ylabel(f"|{variable_name}|")
 
+    ax.set_ylim(ymin=1e-12)
     ax.set_xscale("log")
     ax.set_yscale("log")
 

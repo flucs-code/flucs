@@ -38,10 +38,18 @@ $\texttt{FLUCS}$ may then be installed using `pip`:
 $ pip install -e .[cuda13]
 ```
 
-Including `[cuda13]` in the above command will install [`cupy`](https://cupy.dev/) 
-for CUDA version 13. This may instead be replaced with `[cuda12]` or `[cuda11]` for 
-those using older CUDA toolkits. A CUDA installation is required in order to access
-most of the functionality of the library.
+Including `[cuda13]` in the above command will install
+[`cupy`](https://cupy.dev/) and
+[`nvmath-python`](https://docs.nvidia.com/cuda/nvmath-python/) for CUDA version
+13. The latter provides the low-level cuFFT bindings used by the default FLUCS
+FFT-plan wrapper, which allows multiple plans to share a caller-managed work
+area. Users of CUDA version 12 should instead install with `[cuda12]`.
+
+The `[cuda11]` extra installs the corresponding CuPy package, but does not
+currently include `nvmath-python`. For the complete dependency set used by the
+default native FLUCS FFT-plan wrapper, use the `[cuda12]` or `[cuda13]` extra.
+A CUDA installation is required in order to access most of the functionality
+of the library.
 
 When you are finished, the virtual environment can be deactivated using:
 
@@ -54,7 +62,7 @@ For users of `uv`, the equivalent recommended steps are:
 ```console
 $ uv venv
 $ source .venv/bin/activate
-$ uv sync --extra cuda13    # Or cuda12, cuda11
+$ uv sync --extra cuda13    # Or cuda12
 $ deactivate
 ```
 
@@ -104,7 +112,7 @@ To format a specific file:
 $ ruff format <path to file>
 ```
 
-To lint the a specific file:
+To lint a specific file:
 
 ```console
 $ ruff check <path to file> [--fix]
@@ -113,3 +121,55 @@ $ ruff check <path to file> [--fix]
 The `--fix` flag is optional, and will automatically correct many issues. Note that 
 both the `format` and `check` commands will also apply recursively if run on a directory 
 (such as `flucs/src`). 
+
+[Pytest](https://docs.pytest.org/en/stable/) is used to test the project. By
+default, the test suite checks for a usable CUDA device. It runs the standard
+CPU and GPU tests when one is available and otherwise runs only the standard
+CPU tests:
+
+```console
+$ pytest
+```
+
+Every test is marked explicitly as either `cpu` or `gpu`. The corresponding
+flags select only that class; they are mutually exclusive, and explicit GPU
+selection fails clearly if CUDA is unavailable:
+
+```console
+$ pytest --cpu
+$ pytest --gpu
+```
+
+Slow-running tests are marked separately and excluded from standard runs. The
+`--slow` flag includes them without changing the type of test selected above.
+
+Tests for shared FLUCS functionality are marked as `core`, while tests owned by
+a particular solver are associated with that solver's entry-point name. These
+groups can be selected using:
+
+```console
+$ pytest --core
+$ pytest --solvers FourierSolver
+$ pytest --solvers all
+```
+
+The `--solvers` option accepts one or more available solver names. Selecting
+solvers also runs the applicable core tests. Core tests that require
+a system are exercised against each selected solver's standalone test system;
+without a solver selection, every available test system is used.
+
+Individual files or directories can still be supplied using the usual Pytest
+syntax, for example:
+
+```console
+$ pytest tests/utilities
+$ pytest tests/test_flucs.py --gpu
+$ pytest tests/solvers/fourier --gpu --slow
+```
+
+For a concise list of the FLUCS-specific options and the currently available
+test solvers, run:
+
+```console
+$ pytest --flucs-help
+```

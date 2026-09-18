@@ -45,12 +45,37 @@ docs = [
 [tool.ruff]
 line-length = 80
 
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+filterwarnings = [
+  "ignore:numpy[.]ndarray size changed, may indicate binary incompatibility[.] Expected 16 from C header, got 96 from PyObject:RuntimeWarning",
+]
+markers = [
+  "core: shared FLUCS core functionality",
+  "cpu: does not require a working CUDA device",
+  "gpu: requires a working CUDA device",
+  "slow: excluded by default because the test takes substantial time",
+  "runtime_precision(name): restrict a runtime test to one precision",
+  "solver(name): functionality owned by a named solver entry point",
+]
+
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+# Temporary: expose tests.support for the TestFourierSystem CLI entry point.
+# Restore this to where = ["src"] when temporary registration is removed.
+where = ["src", "."]
+include = ["flucs*", "tests", "tests.support*"]
+
+# These two tables are temporary companions to the test-system entry point.
+[tool.setuptools.package-dir]
+"" = "src"
+tests = "tests"
+
+[tool.setuptools.package-data]
+"tests.support.fourier" = ["*.cu", "*.toml"]
 
 [tool.setuptools_scm]
 write_to = "src/flucs/_version.py"   # create this at build/install time
@@ -59,8 +84,10 @@ fallback_version = "0.0"
 [project.entry-points."flucs.solvers"]
 FourierSolver = "flucs.solvers.fourier.fourier_solver:FourierSolver"
 
-# [project.entry-points."flucs.systems"]
-# ColdITG2DFourier = "flucs.systems.cold_itg_2d_fourier.cold_itg_2d_fourier:ColdITG2DFourier"
+# Temporary registration for interactive development of the Fourier test
+# support system. Remove this once the test suite owns registration entirely.
+[project.entry-points."flucs.systems"]
+TestFourierSystem = "tests.support.fourier:TestFourierSystem"
 
 [project.entry-points."flucs.output"]
 netcdf4 = "flucs.output:FlucsOutputNC"
@@ -83,4 +110,4 @@ select = [
 exclude = [
   "**/_version.py", # Auto-generated file
 ]
-ignore = ["N806"]
+ignore = ["N806", "N815"]
