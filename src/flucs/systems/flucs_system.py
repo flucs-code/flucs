@@ -478,7 +478,7 @@ class FlucsSystem(ABC):
         cp.cuda.get_current_stream().synchronize()
 
         # Clean unused blocks
-        cp.get_default_memory_pool().free_all_blocks()   
+        cp.get_default_memory_pool().free_all_blocks()
 
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """

@@ -191,7 +191,7 @@ def print_webagg_connection_instructions() -> None:
     Start the WebAgg listener and report how to reach it over SSH.
 
     Initialising the application here makes Matplotlib select and bind its
-    port before plt.show() starts the blocking server event loop. 
+    port before plt.show() starts the blocking server event loop.
     """
     from matplotlib.backends.backend_webagg import WebAggApplication
 
