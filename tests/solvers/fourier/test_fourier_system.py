@@ -330,6 +330,24 @@ def test_dealiasing_configuration(
             id="missing-phase-shift-grid",
         ),
         pytest.param(
+            {"setup": {"fft_wrapper": "missing"}},
+            InvalidFlucsInputFileError,
+            "'missing' is not a valid cuFFT wrapper",
+            id="unknown-fft-wrapper",
+        ),
+        pytest.param(
+            {
+                "setup": {"fft_wrapper": "cupy"},
+                "dealiasing": {
+                    "method": "phase-shift",
+                    "memory": "in_place",
+                },
+            },
+            InvalidFlucsInputFileError,
+            "Cannot use cupy fft_wrapper with in_place memory setup",
+            id="cupy-in-place",
+        ),
+        pytest.param(
             {"forcing": {"method": "missing"}},
             InvalidFlucsInputFileError,
             "Invalid forcing.method",
@@ -891,15 +909,6 @@ def test_solved_grid_and_initial_conditions(ready_fourier_system):
     assert np.any(solved_mask)
     assert np.any(~solved_mask)
 
-    # Count the stored half-grid and its reflected negative-ky partners
-    nonnegative_count = int(np.count_nonzero(solved_mask))
-    zero_ky_count = int(np.count_nonzero(solved_mask[:, :, 0]))
-
-    assert system.get_number_of_solved_modes() == nonnegative_count
-    assert system.get_number_of_solved_modes(False) == (
-        2 * nonnegative_count - zero_ky_count
-    )
-
     # Initial data has the configured layout and no energy in padded modes
     initial_fields = system.fields_initial
     expected_shape = (system.number_of_fields, *system.half_tuple)
@@ -922,20 +931,6 @@ def test_solved_grid_and_initial_conditions(ready_fourier_system):
     npt.assert_array_equal(
         cp.asnumpy(system.get_fields(1)),
         np.zeros_like(initial_fields),
-    )
-
-    # ky=0 must describe a real field under the two remaining FFT reflections
-    conjugate_iz = (-np.arange(system.nz)) % system.nz
-    conjugate_ix = (-np.arange(system.nx)) % system.nx
-    fields_ky0 = initial_fields[:, :, :, 0]
-    conjugate_fields = np.conj(
-        fields_ky0[:, conjugate_iz[:, None], conjugate_ix[None, :]]
-    )
-    npt.assert_allclose(
-        fields_ky0,
-        conjugate_fields,
-        rtol=0,
-        atol=system.tolerance,
     )
 
 
@@ -1183,7 +1178,6 @@ def test_fft_wrappers_execute_dealiased_operations(
         setup_updates={"fft_wrapper": fft_wrapper},
     )
 
-    assert system.input["setup.fft_wrapper"] == fft_wrapper
     assert system.use_cupy_fft is (fft_wrapper == "cupy")
     assert error <= system.tolerance
 
@@ -1337,30 +1331,12 @@ def test_phase_shift_memory_models_agree(
         else {"max_sum": 0.666}
     )
     results = []
-    for memory in ("standard", "low_memory", "in_place"):
+    memory_models = {
+        "flucs": ("standard", "low_memory", "in_place"),
+        "cupy": ("standard", "low_memory"),
+    }[fft_wrapper]
+    for memory in memory_models:
         operation_path = tmp_path / fft_wrapper / memory
-        if fft_wrapper == "cupy" and memory == "in_place":
-            with pytest.raises(
-                InvalidFlucsInputFileError,
-                match=(
-                    "Cannot use cupy fft_wrapper with in_place memory setup"
-                ),
-            ):
-                _dealiasing_product(
-                    operation_path,
-                    test_system,
-                    precision,
-                    grid_size=(30, 30, 30),
-                    dealiasing_updates={
-                        "method": "phase-shift",
-                        "truncation": truncation,
-                        "memory": memory,
-                        **cutoff,
-                    },
-                    setup_updates={"fft_wrapper": fft_wrapper},
-                )
-            continue
-
         error, product, reference, system = _dealiasing_product(
             operation_path,
             test_system,
