@@ -1,4 +1,6 @@
-"""Dynamically plot variables from ``output.time.txt``."""
+"""
+Dynamically plot variables from output.time.txt.
+"""
 
 from __future__ import annotations
 
