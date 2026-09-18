@@ -146,17 +146,14 @@ class TimeOutputReader:
                 line_hash = hash(line)
                 if line_hash not in self._malformed_lines:
                     flucsprint(
-                        f"Skipping non-numeric row in {self.path}: "
-                        f"{line!r}.",
+                        f"Skipping non-numeric row in {self.path}: {line!r}.",
                         source=SOURCE,
                         message_type="warning",
                     )
                     self._malformed_lines.add(line_hash)
                 continue
 
-            for column, token, value in zip(
-                columns, tokens, row, strict=True
-            ):
+            for column, token, value in zip(columns, tokens, row, strict=True):
                 values[column].append(value)
                 if "j" in token.lower():
                     complex_columns.add(column)
@@ -220,6 +217,7 @@ def dynamic_time_plots(
     """
     Follow selected variables from one or more i/o directories.
     """
+
     def _poll_readers() -> bool:
         """
         Poll every directory and report whether any data changed.
@@ -246,9 +244,7 @@ def dynamic_time_plots(
             time_values = np.asarray(reader.values["time"]).real
 
             for variable in variables:
-                real_line, imaginary_line = lines[
-                    (reader.io_path, variable)
-                ]
+                real_line, imaginary_line = lines[(reader.io_path, variable)]
 
                 if variable not in reader.columns:
                     warning_key = (reader.path, reader.generation, variable)
@@ -348,9 +344,7 @@ def dynamic_time_plots(
         ax.grid(True)
 
         for reader, color in zip(readers, colors, strict=True):
-            (real_line,) = ax.plot(
-                [], [], color=color, label="_nolegend_"
-            )
+            (real_line,) = ax.plot([], [], color=color, label="_nolegend_")
             (imaginary_line,) = ax.plot(
                 [],
                 [],
@@ -369,7 +363,7 @@ def dynamic_time_plots(
     waiting_paths = set()
     reported_missing: set[tuple[pl.Path, int, str]] = set()
 
-    # A canvas timer schedules polling inside the active event loop and works 
+    # A canvas timer schedules polling inside the active event loop and works
     # for both WebAgg and desktop GUI backends.
     timer = figure.canvas.new_timer(
         interval=round(POLL_INTERVAL_SECONDS * 1000)
