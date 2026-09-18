@@ -942,7 +942,7 @@ def test_solved_grid_and_initial_conditions(ready_fourier_system):
 @pytest.mark.gpu
 def test_linear_matrix_eigensystem_and_propagator(ready_fourier_system):
     """
-    CUDA linear quantities agree with independent TestSystem references.
+    CUDA linear quantities agree with references and are released after checks.
     """
 
     system = ready_fourier_system
@@ -1057,6 +1057,12 @@ def test_linear_matrix_eigensystem_and_propagator(ready_fourier_system):
         propagator[..., ~solved_mask],
         system.complex(0),
     )
+
+    # The complete health check releases its temporary linear quantities
+    system._check_linear_matrix()
+    assert system.linear_matrix is None
+    assert system.linear_eigensystem is None
+    assert system.linear_propagator is None
 
 
 @pytest.mark.gpu

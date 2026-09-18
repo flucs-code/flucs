@@ -2,7 +2,7 @@
 Tests for the shared FLUCS system lifecycle.
 """
 
-from unittest.mock import create_autospec
+from unittest.mock import Mock, call, create_autospec
 
 import numpy as np
 import pytest
@@ -161,9 +161,10 @@ def test_system_reuses_temporary_arrays_and_reports_memory(
     test_system,
     tmp_path,
     precision,
+    monkeypatch,
 ):
     """
-    Temporary arrays and memory reports follow the active CUDA device.
+    Temporary arrays and memory management follow the active CUDA device.
     """
 
     # Only construct the TestSystem; these helpers need no CUDA compilation
@@ -212,3 +213,19 @@ def test_system_reuses_temporary_arrays_and_reports_memory(
     )
 
     assert cp.cuda.Device().id == initial_device
+
+    # Cleanup synchronises before releasing unused blocks from the active pool
+    events = Mock()
+    stream = Mock(spec_set=["synchronize"])
+    memory_pool = Mock(spec_set=["free_all_blocks"])
+    events.attach_mock(stream.synchronize, "synchronize")
+    events.attach_mock(memory_pool.free_all_blocks, "free_all_blocks")
+
+    monkeypatch.setattr(cp.cuda, "get_current_stream", lambda: stream)
+    monkeypatch.setattr(cp, "get_default_memory_pool", lambda: memory_pool)
+
+    system.clean_cupy_memory()
+
+    assert events.mock_calls == [call.synchronize(), call.free_all_blocks()]
+    assert bool(cp.all(complex_array == 0))
+    assert bool(cp.all(real_array == 0))

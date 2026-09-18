@@ -3,6 +3,7 @@ Tests for diagnostic scheduling and output serialization.
 """
 
 from typing import ClassVar
+from unittest.mock import Mock
 
 import numpy as np
 import numpy.testing as npt
@@ -10,6 +11,7 @@ import pytest
 import toml
 from netCDF4 import Dataset
 
+import flucs.output as output_module
 from flucs.diagnostic import FlucsDiagnostic, FlucsDiagnosticVariable
 from flucs.output import (
     FlucsOutput,
@@ -479,6 +481,120 @@ def test_netcdf_outputs_use_one_available_group(
             format="NETCDF4",
         ) as dataset:
             assert set(dataset.groups) == {*group_names, "4"}
+
+
+@pytest.mark.cpu
+def test_netcdf_output_retries_without_losing_cached_data(
+    test_system,
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """
+    NetCDF writes recover from transient errors and preserve failed batches.
+    """
+
+    # Set up one real NetCDF output before intercepting later file opens
+    output_name = "time"
+    system = _create_output_system(
+        tmp_path,
+        test_system,
+        monkeypatch,
+        output_name,
+        "netcdf4",
+        ["scalar"],
+        {"scalar": _ScalarDiagnostic},
+    )
+    system.setup_output()
+    output = system.output_heap[0]
+
+    system.solver.state = FlucsSolverState.RUNNING
+    output.ready()
+    system.current_step = 1
+    system.current_time = 0.25
+    system.current_cfl = 0.2
+    output.execute()
+
+    # Keep retries immediate while retaining the configured delay in messages
+    sleep = Mock()
+    monkeypatch.setattr(output_module, "NC_MAX_RETRIES", 2)
+    monkeypatch.setattr(output_module, "NC_RETRY_DELAY", 0.01)
+    monkeypatch.setattr(output_module, "sleep", sleep)
+
+    # Two temporary failures are followed by an ordinary successful write
+    transient_attempts = 0
+
+    def _transient_dataset(*args, **kwargs):
+        nonlocal transient_attempts
+        transient_attempts += 1
+        if transient_attempts <= 2:
+            raise OSError("temporarily unavailable")
+        return Dataset(*args, **kwargs)
+
+    monkeypatch.setattr(output_module, "Dataset", _transient_dataset)
+    capsys.readouterr()
+    output.write()
+    transient_messages = capsys.readouterr().out
+
+    assert transient_attempts == 3
+    assert sleep.call_count == 2
+    assert transient_messages.count("Retrying in 0.01 s") == 2
+    assert output.time_cache == []
+
+    # Exhausting the limit raises without discarding the unwritten batch
+    system.current_step = 2
+    system.current_time = 0.5
+    system.current_cfl = 0.3
+    output.execute()
+    cached_times = output.time_cache.copy()
+    cached_diagnostics = [
+        variable.data_cache.copy()
+        for diagnostic in output.diagnostics
+        for variable in diagnostic.vars.values()
+    ]
+
+    failed_attempts = 0
+
+    def _unavailable_dataset(*args, **kwargs):
+        nonlocal failed_attempts
+        failed_attempts += 1
+        raise OSError("temporarily unavailable")
+
+    monkeypatch.setattr(output_module, "Dataset", _unavailable_dataset)
+    sleep.reset_mock()
+    capsys.readouterr()
+    with pytest.raises(OSError, match="after 2 retries") as error:
+        output.write()
+    failed_messages = capsys.readouterr().out
+
+    assert isinstance(error.value.__cause__, OSError)
+    assert failed_attempts == 3
+    assert sleep.call_count == 2
+    assert failed_messages.count("Retrying in 0.01 s") == 2
+    assert output.time_cache == cached_times
+    assert [
+        variable.data_cache
+        for diagnostic in output.diagnostics
+        for variable in diagnostic.vars.values()
+    ] == cached_diagnostics
+
+    # A later successful open writes each retained value exactly once
+    monkeypatch.setattr(output_module, "Dataset", Dataset)
+    output.write()
+    with Dataset(output.filepath, "r", format="NETCDF4") as dataset:
+        npt.assert_allclose(
+            dataset.groups[output.group_name].variables["time"][:],
+            [0.25, 0.5],
+            rtol=0,
+            atol=system.tolerance,
+        )
+
+    assert output.time_cache == []
+    assert all(
+        not variable.data_cache
+        for diagnostic in output.diagnostics
+        for variable in diagnostic.vars.values()
+    )
 
 
 @pytest.mark.cpu

@@ -153,6 +153,7 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
         "diagnostic/grid/value",
         fill_value=-1.0,
     )
+
     npt.assert_allclose(
         values,
         np.concatenate(
@@ -164,16 +165,21 @@ def test_postprocessing_discovers_and_loads_netcdf_data(
         rtol=precision.tolerance,
         atol=precision.tolerance,
     )
+
     assert values.dtype == np.dtype(precision.float_type)
     assert boundaries == [2]
+
     npt.assert_allclose(
         dimensions[0]["position"],
         [-1.0, 1.0],
         rtol=precision.tolerance,
         atol=precision.tolerance,
     )
+
     assert dimensions[0]["position"].dtype == np.dtype(precision.float_type)
+
     npt.assert_array_equal(dimensions[0]["component"], np.arange(3))
+
     assert dimensions[0]["component"].dtype == np.dtype(precision.float_type)
     assert dimensions[1] == {}
 
@@ -226,7 +232,7 @@ def test_postprocessing_saves_figures_and_parses_common_arguments(
     Figure saving honours conflicts and the common parser resolves paths.
     """
 
-    # Saving only needs a destination; plugin discovery is exercised above
+    # Saving only needs a destination
     io_path = tmp_path / "run"
     io_path.mkdir()
 
