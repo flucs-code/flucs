@@ -43,6 +43,7 @@ class TimeOutputReader:
         # identifies the latest appended output group within that file.
         self._signature: tuple[int, int, int, int] | None = None
         self._group_key: tuple[int, int, int] | None = None
+        self._malformed_lines: set[int] = set()
 
     def poll(self) -> bool:
         """
@@ -53,6 +54,7 @@ class TimeOutputReader:
         except FileNotFoundError:
             self._signature = None
             self._group_key = None
+            self._malformed_lines.clear()
             return False
 
         signature = (
@@ -78,6 +80,7 @@ class TimeOutputReader:
         except FileNotFoundError:
             self._signature = None
             self._group_key = None
+            self._malformed_lines.clear()
             return False
 
         # Ignore a final row while it is still being written.
@@ -110,6 +113,14 @@ class TimeOutputReader:
                 f"Invalid header in {self.path}: column names must be unique."
             )
 
+        group_key = (path_stat.st_dev, path_stat.st_ino, group_start)
+        if file_was_truncated or group_key != self._group_key:
+            # Missing-variable and malformed-row warnings are reported once
+            # per output group.
+            self.generation += 1
+            self._group_key = group_key
+            self._malformed_lines.clear()
+
         values = {column: [] for column in columns}
         complex_columns = set()
 
@@ -118,22 +129,29 @@ class TimeOutputReader:
         for line in group_lines[1:]:
             tokens = line.split()
             if len(tokens) != len(columns):
-                flucsprint(
-                    f"Skipping malformed row in {self.path}: expected "
-                    f"{len(columns)} values, found {len(tokens)}.",
-                    source=SOURCE,
-                    message_type="warning",
-                )
+                line_hash = hash(line)
+                if line_hash not in self._malformed_lines:
+                    flucsprint(
+                        f"Skipping malformed row in {self.path}: expected "
+                        f"{len(columns)} values, found {len(tokens)}.",
+                        source=SOURCE,
+                        message_type="warning",
+                    )
+                    self._malformed_lines.add(line_hash)
                 continue
 
             try:
                 row = [complex(token) for token in tokens]
             except ValueError:
-                flucsprint(
-                    f"Skipping non-numeric row in {self.path}: {line!r}.",
-                    source=SOURCE,
-                    message_type="warning",
-                )
+                line_hash = hash(line)
+                if line_hash not in self._malformed_lines:
+                    flucsprint(
+                        f"Skipping non-numeric row in {self.path}: "
+                        f"{line!r}.",
+                        source=SOURCE,
+                        message_type="warning",
+                    )
+                    self._malformed_lines.add(line_hash)
                 continue
 
             for column, token, value in zip(
@@ -142,12 +160,6 @@ class TimeOutputReader:
                 values[column].append(value)
                 if "j" in token.lower():
                     complex_columns.add(column)
-
-        group_key = (path_stat.st_dev, path_stat.st_ino, group_start)
-        if file_was_truncated or group_key != self._group_key:
-            # Missing-variable warnings are reported once per output group.
-            self.generation += 1
-            self._group_key = group_key
 
         self.columns = columns
         self.values = values
