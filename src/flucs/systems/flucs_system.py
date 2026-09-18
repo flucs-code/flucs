@@ -470,6 +470,16 @@ class FlucsSystem(ABC):
         """
         self.kernels.bind()
 
+    def clean_cupy_memory(self) -> None:
+        """
+        Cleans the CuPy memory pool to free up unused memory.
+        """
+        # Ensure synchronised
+        cp.cuda.get_current_stream().synchronize()
+
+        # Clean unused blocks
+        cp.get_default_memory_pool().free_all_blocks()
+
     def get_memory_usage(self, devices=None, synchronize=True) -> dict:
         """
         Checks the memory usage on the current devices and returns a dictionary

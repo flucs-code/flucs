@@ -56,6 +56,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.system.compile_cupy_module()
         self.system.setup_initial_conditions()
         self.system.check_health()
+        self.system.clean_cupy_memory()
         self.system.get_memory_usage()
 
         # Timing

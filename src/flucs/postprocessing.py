@@ -27,7 +27,7 @@ class FlucsPostProcessing:
     output_files: list[str] | None
     _output_paths: dict[pl.Path, list[pl.Path]]
     save_directory: pl.Path | None
-    _script_paths: list[tuple[int, str, pl.Path]]
+    _script_paths: list[tuple[int, str | None, pl.Path]]
 
     # Solver and system for the outputs
     solver_names: dict[pl.Path, str]
@@ -61,14 +61,27 @@ class FlucsPostProcessing:
             self.solver_types[io_path] = flucs.get_solver_type(solver_name)
             self.system_types[io_path] = flucs.get_system_type(system_name)
 
-    def _get_script_paths(self) -> list[tuple[int, str, pl.Path]]:
+    def _get_script_paths(self) -> list[tuple[int, str | None, pl.Path]]:
         """
-        Gathers the paths to the relevant postprocessing scripts for each
-        solver and system used across all provided i/o directories and returns
-        them in a stable integer-addressable order.
+        Gathers shared postprocessing scripts followed by the relevant scripts
+        for each solver and system used across all provided i/o directories.
+        Returns them in a stable integer-addressable order.
         """
 
         self._script_paths = []
+
+        # Shared system scripts are available for every solver and system.
+        system_path = inspect.getfile(FlucsSystem)
+        shared_scripts_dir = pl.Path(system_path).parent / "postprocessing"
+        if shared_scripts_dir.exists():
+            for script in sorted(
+                shared_scripts_dir.glob("*.py"), key=lambda p: p.name.lower()
+            ):
+                # A None type name keeps shared scripts outside the labelled
+                # solver and system groups when the paths are printed.
+                self._script_paths.append(
+                    (len(self._script_paths), None, pl.Path(script))
+                )
 
         # Keep solver scripts ahead of system scripts in the printed order.
         ordered_types = []
@@ -121,9 +134,9 @@ class FlucsPostProcessing:
 
     def list_script_paths(self) -> None:
         """
-        Prints information about the postprocessing scripts to the
-        standard output for all solver/system types referenced by the
-        provided i/o directories.
+        Prints shared postprocessing scripts to the standard output, followed
+        by those for all solver/system types referenced by the provided i/o
+        directories.
         """
 
         script_paths = self._get_script_paths()
@@ -135,7 +148,7 @@ class FlucsPostProcessing:
             integer_width = len(str(len(script_paths) - 1))
             current_type = None
             for integer, type_name, path in script_paths:
-                if type_name != current_type:
+                if type_name is not None and type_name != current_type:
                     flucsprint(f"{self._indent}{type_name}:")
                     current_type = type_name
                 label = f"[{integer:>{integer_width}}]"

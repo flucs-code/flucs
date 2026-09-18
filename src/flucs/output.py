@@ -9,12 +9,14 @@ import datetime
 import pathlib as pl
 from abc import ABC, abstractmethod
 from importlib.metadata import entry_points
+from time import sleep
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from netCDF4 import Dataset, Group
 
 from flucs.solvers import FlucsSolverState
+from flucs.utilities.messages import flucsprint
 
 if TYPE_CHECKING:
     from flucs.diagnostic import FlucsDiagnostic
@@ -22,6 +24,10 @@ if TYPE_CHECKING:
 
 
 _registered_outputs = entry_points().select(group="flucs.output")
+
+# Timeout and max retries for opening a netCDF file
+NC_RETRY_DELAY = 3
+NC_MAX_RETRIES = 10
 
 
 def get_output_type(output_type: str):
@@ -301,7 +307,7 @@ class FlucsOutputNC(FlucsOutput):
     group: Group
 
     def get_next_group(self):
-        with Dataset(self.filepath, "r+", format="NETCDF4") as dataset:
+        with self._open_dataset() as dataset:
             if hasattr(self, "group_name"):
                 raise ValueError(
                     f"Output {self.name} has already "
@@ -312,6 +318,36 @@ class FlucsOutputNC(FlucsOutput):
                 [-1] + [int(name) for name in dataset.groups.keys()]
             )
         return group_number + 1
+
+    def _open_dataset(self):
+        """
+        Opens the output's netCDF file for writing.
+
+        If an OSError is encountered (usually due to file-system issues,
+        file locking, etc), waits a fixed timeout and tries again.
+
+        """
+
+        failed_attempts = 0
+        while True:
+            try:
+                return Dataset(self.filepath, "r+", format="NETCDF4")
+            except OSError as exc:
+                failed_attempts += 1
+
+                if failed_attempts > NC_MAX_RETRIES:
+                    raise OSError(
+                        f"Failed to open {self.filepath} "
+                        f"after {NC_MAX_RETRIES} retries."
+                    ) from exc
+
+                flucsprint(
+                    f"Failed to open {self.filepath}. "
+                    f"Retrying in {NC_RETRY_DELAY} s...",
+                    source=self,
+                )
+
+                sleep(NC_RETRY_DELAY)
 
     def _setup_group(self):
         dataset: Dataset = self.dataset
@@ -428,7 +464,7 @@ class FlucsOutputNC(FlucsOutput):
         routines).
 
         """
-        with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
+        with self._open_dataset() as self.dataset:
             self._setup_group()
 
             # Check if we already have all necessary dimensions
@@ -506,7 +542,7 @@ class FlucsOutputNC(FlucsOutput):
         if not self.time_cache:
             return
 
-        with Dataset(self.filepath, "r+", format="NETCDF4") as self.dataset:
+        with self._open_dataset() as self.dataset:
             self._setup_group()
 
             times_to_write = len(self.time_cache)
