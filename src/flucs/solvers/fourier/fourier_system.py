@@ -2386,6 +2386,11 @@ class FourierSystem(FlucsSystem):
                 message_type="warning",
             )
 
+        # Clean up memory
+        self.linear_matrix = None
+        self.linear_eigensystem = None
+        self.linear_propagator = None
+
     ###########################################################################
     # Solver execution
     ###########################################################################
