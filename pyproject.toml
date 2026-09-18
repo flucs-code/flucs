@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib",
     "netCDF4",
     "toml",  # Should use built-in tomllib when Python 3.11 is the minimum
+    "tornado",
 ]
 dynamic = ["version"]
 
