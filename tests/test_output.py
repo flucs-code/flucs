@@ -667,13 +667,6 @@ def test_runtime_outputs_preserve_configured_data(runtime_run):
     system = runtime_run.system
     outputs = tuple(system.output_heap or ())
     assert outputs
-    assert system.current_step > 0
-
-    # The public run helper records a complete user-facing runtime log
-    log_contents = (runtime_run.io_path / "output.log").read_text(
-        encoding="utf-8"
-    )
-    assert "Finished at time" in log_contents
 
     for output in outputs:
         assert output.filepath.is_file()

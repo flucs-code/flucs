@@ -199,3 +199,9 @@ def test_solver_completes_single_precision_runtime(runtime_run):
     # The final step is precisely the first one to reach or cross final_time
     assert system.current_time >= system.final_time
     assert system.current_time - system.current_dt < system.final_time
+
+    # Successful completion is also recorded through the public FLUCS log
+    log_contents = (runtime_run.io_path / "output.log").read_text(
+        encoding="utf-8"
+    )
+    assert "Finished at time" in log_contents

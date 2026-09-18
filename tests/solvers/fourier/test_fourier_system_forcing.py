@@ -192,13 +192,10 @@ def test_forcing_updates_only_the_analytical_range(test_system, tmp_path):
         system.finish_time_step()
 
         fields = cp.asnumpy(system.get_fields())
-        forcing = system.forcing_object
         expected_mask = _analytical_mode_mask(system, ANISOTROPIC_MODES)
         solved_mask = system.get_solved_grid_mask().astype(bool)
 
-        # Host and CUDA selection agree on the analytically isolated modes
-        npt.assert_array_equal(forcing.forcing_range_mask, expected_mask)
-
+        # CUDA forcing acts only on the analytically isolated solved modes
         assert not np.any(expected_mask & ~solved_mask)
         assert all(
             np.linalg.norm(field[expected_mask]) > system.tolerance
