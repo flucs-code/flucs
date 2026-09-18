@@ -187,6 +187,33 @@ def list_variables(readers: list[TimeOutputReader]) -> None:
         )
 
 
+def print_webagg_connection_instructions() -> None:
+    """
+    Start the WebAgg listener and report how to reach it over SSH.
+
+    Initialising the application here makes Matplotlib select and bind its
+    port before ``plt.show()`` starts the blocking server event loop.
+    """
+    from matplotlib.backends.backend_webagg import WebAggApplication
+
+    WebAggApplication.initialize()
+    port = WebAggApplication.port
+    address = WebAggApplication.address
+
+    # A wildcard listening address is not a valid SSH forwarding target.
+    # The loopback interface still reaches a server listening on all interfaces.
+    if address in {"0.0.0.0", "::"}:
+        address = "127.0.0.1"
+    forward_address = f"[{address}]" if ":" in address else address
+
+    flucsprint(
+        "If using SSH to a remote machine, first run this in a local "
+        "terminal (replacing USER and REMOTE_HOST):\n"
+        f"{INDENT}ssh -N -L "
+        f"{port}:{forward_address}:{port} USER@REMOTE_HOST\n",
+    )
+
+
 def dynamic_time_plots(
     readers: list[TimeOutputReader], variables: list[str]
 ) -> None:
@@ -355,6 +382,8 @@ def dynamic_time_plots(
             _update_plots()
 
         timer.start()
+        if plt.get_backend().lower() == "webagg":
+            print_webagg_connection_instructions()
         plt.show()
     except KeyboardInterrupt:
         pass
@@ -403,6 +432,7 @@ if __name__ == "__main__":
     # Change to MPLBACKEND=WebAgg before generating plots
     if args.webagg:
         plt.switch_backend("WebAgg")
+        plt.rcParams["webagg.open_in_browser"] = False
 
     # Initialise postprocessing object
     post = FlucsPostProcessing(
