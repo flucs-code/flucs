@@ -164,7 +164,7 @@ class FlucsSystem(ABC):
 
         # Print precision info
         flucsprint(
-            f"{str(self.input['setup.precision']).capitalize()} precision."
+            f"Precision: {str(self.input['setup.precision'])}"
         )
 
     def add_output(self, output: FlucsOutput):

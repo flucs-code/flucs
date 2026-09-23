@@ -288,7 +288,7 @@ class FourierSystem(FlucsSystem):
             f"({self.dealiasing_truncation}, {memory_model})"
         )
         message += (
-            " \nEquivalent unpadded grid (nz, nx, ny) = "
+            " \nEquivalent unpadded grid: (nz, nx, ny) = "
             f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
         )
 
@@ -839,7 +839,7 @@ class FourierSystem(FlucsSystem):
             )
 
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                message = f"Hyperdissipation in {component:<5}"
+                message = f"Hyperdissipation: {component:<5}"
                 modifiers = []
 
                 self.module_options.define_float(
