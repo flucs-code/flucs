@@ -73,12 +73,16 @@ class ModuleOptions:
     ----------
     options : tuple[str]
         A manually specified tuple of string options to be passed to the
-        compiler. By default, this is
-        ("--ptxas-options=-O3", "--use_fast_math").
+        compiler.
     """
 
     _defs: dict
-    options = ("--ptxas-options=-O3", "--use_fast_math", "-std=c++17")
+    options = (
+        "--ptxas-options=-O3", 
+        "--use_fast_math", 
+        "-std=c++17", 
+        # "-D__NV_NO_VECTOR_DEPRECATION_DIAG", # Uncomment if required
+    )
     name_expressions: list
 
     def __init__(self) -> None:
@@ -86,7 +90,9 @@ class ModuleOptions:
         self.name_expressions = []
 
     def add_compiler_option(self, option: str) -> None:
-        """Adds a compiler option."""
+        """
+        Adds a compiler option.
+        """
         self.options += (str(option),)
 
     def _define_constant(
