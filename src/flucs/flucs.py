@@ -141,7 +141,9 @@ def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
 
 
 def run_flucs(
-    input_path: pl.Path, override: list | None = None
+    input_path: pl.Path,
+    override: list | None = None,
+    timing_steps: int = 0,
 ) -> tuple[FlucsInput, FlucsSolver]:
     """
     Construct FlucsInput then call the appropriate solver.
@@ -168,7 +170,7 @@ def run_flucs(
 
             solver, _ = flucs_input.create_solver_system()
 
-            solver.run()
+            solver.run(timing_steps=timing_steps)
 
     # Return the input and solver for debugging purposes
     return flucs_input, solver
@@ -293,12 +295,15 @@ def main():
     )
 
     operation_modes.add_argument(  # TODO
-        "--test",
+        "--timing",
         "-t",
-        action="store_true",
+        nargs="?",
+        type=int,
+        metavar="STEPS_TO_TIME",
+        const=100,
         default=False,
         required=False,
-        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit.",
+        help="Runs STEPS_TO_TIME time steps (default is 100) then exits. No output is produced.",
     )
 
     operation_modes.add_argument(
@@ -347,13 +352,19 @@ def main():
             args.run,
             args.init,
             args.list,
-            args.test,
             args.clean,
             args.reconstruct,
             args.postprocess,
+            args.timing,
         )
     ):
         args.run = True
+
+    if args.timing:
+        args.run = True
+        timing_steps = int(args.timing)
+    else:
+        timing_steps = 0
 
     # Run the solver
     if args.run:
@@ -371,7 +382,7 @@ def main():
             # Run with profiler
             hook = LineProfileHook()
             with hook:
-                run_flucs(input_path, args.override)
+                run_flucs(input_path, args.override, timing_steps)
             cupy.cuda.get_current_stream().synchronize()
 
             # Append to log
@@ -381,7 +392,7 @@ def main():
                     flucsprint(format_memory_report(hook, verbose=False))
             return
 
-        run_flucs(input_path, args.override)
+        run_flucs(input_path, args.override, timing_steps)
         return
 
     # Write a default input file

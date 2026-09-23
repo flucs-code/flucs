@@ -40,11 +40,13 @@ class FlucsSolver(Generic[T_System], ABC):
     state: FlucsSolverState
     interrupted: bool = False
 
+    timing_steps: int
+
     timestepper: FlucsTimestepper[T_System]
     _supported_timesteppers: ClassVar[dict[str, type[FlucsTimestepper]]]
 
     @abstractmethod
-    def run(self) -> None:
+    def run(self, timing_steps: int = 0) -> None:
         """Main entry point for the solver."""
 
     @abstractmethod
