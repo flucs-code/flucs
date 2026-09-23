@@ -33,7 +33,6 @@ class FlucsRestart:
     write_restart_file: bool = False
     write_path: pl.Path
     steps_until_write: int = 0
-    netcdf_precision: str
 
     # Handling backup files
     backup_temp: pl.Path
@@ -45,11 +44,6 @@ class FlucsRestart:
 
     def __init__(self, system: FlucsSystem):
         self.system = system
-
-        # Set the precision for netCDF variables based on system float type
-        self.netcdf_precision = (
-            "f4" if self.system.float is np.float32 else "f8"
-        )
 
         self._decide_initial_path()
         self._load_restart_data()
@@ -147,13 +141,15 @@ class FlucsRestart:
 
             for name in var_names:
                 # Imaginary part handled simulatneously with real part
-                if name.endswith("_imag"):
+                if name.endswith(self.system.netcdf_imag_suffix):
                     continue
 
                 # Complex arrays stored as <base>_real and <base>_imag
-                if name.endswith("_real"):
-                    base_name = name.rstrip("_real")
-                    imag_name = base_name + "_imag"
+                if name.endswith(self.system.netcdf_real_suffix):
+                    base_name = name.removesuffix(
+                        self.system.netcdf_real_suffix
+                    )
+                    imag_name = f"{base_name}{self.system.netcdf_imag_suffix}"
 
                     v_r = ds.variables[name]
                     if imag_name in ds.variables:
@@ -336,13 +332,13 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable("current_time", self.netcdf_precision, ())[
+            ds.createVariable("current_time", self.system.netcdf_precision, ())[
                 ...
             ] = self.system.float(self.system.current_time)
 
-            ds.createVariable("current_dt", self.netcdf_precision, ())[...] = (
-                self.system.float(self.system.current_dt)
-            )
+            ds.createVariable("current_dt", self.system.netcdf_precision, ())[
+                ...
+            ] = self.system.float(self.system.current_dt)
 
             # Arrays
             for var_name, var_dict in restart_data.items():
@@ -364,21 +360,25 @@ class FlucsRestart:
                             ds.createDimension(dname, int(dsize))
 
                 if np.iscomplexobj(var_data):
+                    real_name = f"{var_name}{self.system.netcdf_real_suffix}"
+                    imag_name = f"{var_name}{self.system.netcdf_imag_suffix}"
                     v_r = ds.createVariable(
-                        f"{var_name}_real",
-                        self.netcdf_precision,
+                        real_name,
+                        self.system.netcdf_precision,
                         tuple(dim_names),
                     )
                     v_i = ds.createVariable(
-                        f"{var_name}_imag",
-                        self.netcdf_precision,
+                        imag_name,
+                        self.system.netcdf_precision,
                         tuple(dim_names),
                     )
                     v_r[:] = var_data.real
                     v_i[:] = var_data.imag
                 else:
                     v = ds.createVariable(
-                        var_name, self.netcdf_precision, tuple(dim_names)
+                        var_name,
+                        self.system.netcdf_precision,
+                        tuple(dim_names),
                     )
                     v[:] = var_data
 

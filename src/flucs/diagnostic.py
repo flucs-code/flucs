@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class FlucsDiagnosticVariable:
-    """Data and dimensions for a single output variable.
+    """
+    Data and dimensions for a single output variable.
     A FlucsDiagnostic has a set of FlucsDiagnosticVariable.
     """
 
@@ -41,7 +42,9 @@ class FlucsDiagnosticVariable:
 
 
 class FlucsDiagnostic(ABC):
-    """Prepares data to be written by a FlucsOutput."""
+    """
+    Prepares data to be written by a FlucsOutput.
+    """
 
     # Name of the diagnostic
     name: str
@@ -77,7 +80,9 @@ class FlucsDiagnostic(ABC):
         self.init_vars()
 
     def _load_options(self, options: dict) -> None:
-        """Loads options for the given diagnostic."""
+        """
+        Loads options for the given diagnostic.
+        """
 
         # Validate options
         for key in options:
@@ -103,22 +108,32 @@ class FlucsDiagnostic(ABC):
         self.vars[var_name].data_cache.append(data)
 
     def clear(self) -> None:
-        """Clears the memory cache of the diagnostic."""
+        """
+        Clears the memory cache of the diagnostic.
+        """
         for var in self.vars.values():
             var.data_cache.clear()
 
     def __hash__(self):
-        """Hash diagnostics using their name."""
+        """
+        Hash diagnostics using their name.
+        """
         return hash(self.name)
 
     @abstractmethod
     def init_vars(self) -> None:
-        """Initialises self.vars."""
+        """
+        Initialises self.vars.
+        """
 
     @abstractmethod
     def execute(self) -> None:
-        """Runs the diagnostic."""
+        """
+        Runs the diagnostic.
+        """
 
     @abstractmethod
     def ready(self) -> None:
-        """Called right before execution of the solver loop begins."""
+        """
+        Called right before execution of the solver loop begins.
+        """

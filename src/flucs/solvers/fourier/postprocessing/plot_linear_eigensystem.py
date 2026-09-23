@@ -7,7 +7,7 @@ import numpy as np
 from flucs.postprocessing import FlucsPostProcessing
 
 
-def plot_eigensystem(post):
+def plot_eigensystem(post, args):
     # Get valid files for the specified variable
     nc_paths = post.get_valid_netcdf_paths(
         "linear_eigensystem/eigvals_solver_real"
@@ -162,4 +162,4 @@ if __name__ == "__main__":
     )
 
     # Call function
-    plot_eigensystem(post)
+    plot_eigensystem(post, args)
