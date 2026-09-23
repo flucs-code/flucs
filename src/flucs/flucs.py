@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import os
 import pathlib as pl
 import subprocess
 import sys
@@ -45,6 +46,8 @@ FLUCS_HEADER = rf"""
 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 Version: {importlib.metadata.version("flucs")}
 """
+
+NSYS_ENV_VAR = "FLUCS_UNDER_NSYS"
 
 # Load lists of registered solvers and systems
 solvers = entry_points().select(group="flucs.solvers")
@@ -174,6 +177,37 @@ def run_flucs(
 
     # Return the input and solver for debugging purposes
     return flucs_input, solver
+
+def run_under_nsys(input_path: pl.Path):
+    env = os.environ.copy()
+    env[NSYS_ENV_VAR] = "1"
+
+    nsys_report_file = input_path / "flucs.nsys-rep"
+
+    if nsys_report_file.exists():
+        nsys_report_file.unlink()
+
+    profile_cmd = [
+        "nsys",
+        "profile",
+        "--trace=cuda,nvtx,osrt",
+        f"--output={str(nsys_report_file)}",
+        *sys.argv[:],
+    ]
+
+    subprocess.run(profile_cmd, env=env)
+
+    stats_cmd = [
+        "nsys",
+        "stats",
+        "--force-export=true",
+        # "--report", "cuda_gpu_kern_sum",
+        # "--report", "cuda_api_sum",
+        # "--report", "cuda_gpu_mem_time_sum",
+        str(nsys_report_file),
+    ]
+
+    subprocess.run(stats_cmd)
 
 
 def write_default_input(system_name: str, io_path: pl.Path):
@@ -361,6 +395,11 @@ def main():
         args.run = True
 
     if args.timing:
+        # Run under nsys
+        if os.environ.get("FLUCS_UNDER_NSYS") != "1":
+            run_under_nsys(io_path)
+            return
+
         args.run = True
         timing_steps = int(args.timing)
     else:
