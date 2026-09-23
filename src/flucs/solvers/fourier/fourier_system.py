@@ -2370,11 +2370,15 @@ class FourierSystem(FlucsSystem):
             where=np.abs(eigvals) > self.tolerance,
         )
 
+        # Product of dt and the error in the eigvals. Avoids division by dt
+        eigval_errors = np.abs(pade_eigvals - exact_eigvals)
+
         flucsprint(
             "Linear error:          "
-            f"(absolute, relative)         = "
+            f"(absolute, relative, eigval) = "
             f"({np.max(abs_errors):.3e}, "
-            f"{np.max(rel_errors):.3e})"
+            f"{np.max(rel_errors):.3e}, "
+            f"{np.max(eigval_errors):.3e})"
         )
 
         if np.max(rel_errors) > 1e-2:
