@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pathlib as pl
+from io import StringIO
 from typing import TYPE_CHECKING
 
 from flucs import cupy as cp
@@ -78,10 +80,10 @@ class ModuleOptions:
 
     _defs: dict
     options = (
-        "--ptxas-options=-O3", 
-        "--use_fast_math", 
-        "-std=c++17", 
-        # "-D__NV_NO_VECTOR_DEPRECATION_DIAG", # Uncomment if required
+        "--ptxas-options=-O3",
+        "--use_fast_math",
+        "-std=c++17",
+        # "-D__NV_NO_VECTOR_DEPRECATION_DIAG",  # Uncomment if required
     )
     name_expressions: list
 
@@ -302,3 +304,99 @@ class KernelCollection:
 
     def __bool__(self):
         return bool(self._kernels)
+
+
+def format_memory_report(hook, verbose: bool = False) -> str:
+    """
+    Formats allocations recorded by CuPy's LineProfileHook.
+
+    Parameters
+    ----------
+    hook
+        Instance of CuPy's LineProfileHook that has recorded memory
+        allocations.
+    verbose : bool
+        If True, returns the full report from CuPy's LineProfileHook.
+
+    Returns
+    -------
+    str
+        Formatted memory report.
+
+    """
+
+    # Simply return the full report
+    if verbose:
+        report = StringIO()
+        hook.print_report(file=report)
+        return report.getvalue()
+
+    # Initialise dictionary of allocations by function
+    allocations = {}
+
+    for frame in hook._memory_frames.values():
+        # Find allocations made directly by this frame
+        allocated = frame.used_bytes - sum(
+            child.used_bytes for child in frame.children
+        )
+
+        if allocated <= 0:
+            continue
+
+        # Find the nearest FLUCS function responsible for the allocation
+        owner = frame
+        while owner.stackframe is not None:
+            stackframe = owner.stackframe
+            path_parts = pl.Path(stackframe.filename).parts
+            is_flucs = any(
+                part == "flucs" or part.startswith("flucs_")
+                for part in path_parts
+            )
+
+            if is_flucs and not stackframe.name.startswith("<"):
+                break
+
+            owner = owner.parent
+
+        # Include the module name to distinguish functions with the same name
+        stackframe = owner.stackframe or frame.stackframe
+        function = f"{pl.Path(stackframe.filename).stem}.{stackframe.name}"
+
+        # All allocations attributed to this function
+        allocations[function] = allocations.get(function, 0) + allocated
+
+    # Sort functions by decreasing allocation
+    total = hook._root.used_bytes
+    rows = sorted(
+        allocations.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+    # Set table width
+    width = max(8, *(len(function) for function, _ in rows))
+    separator = "-" * (width + 25)
+
+    # Initialise table with header
+    lines = [
+        "GPU memory allocations (CuPy LineProfileHook)",
+        separator,
+        f"{'Function':<{width}}  {'Allocated':>12}  {'%':>7}",
+        separator,
+    ]
+
+    # Add allocation information
+    for function, allocated in rows:
+        percentage = 100 * allocated / total if total else 0
+        lines.append(
+            f"{function:<{width}}  "
+            f"{allocated / 1024**3:>9.3f} GB  "
+            f"{percentage:>7.3f}"
+        )
+
+    # Add total allocation
+    lines.extend(
+        [separator, f"{'Total':<{width}}  {total / 1024**3:>9.3f} GB", ""]
+    )
+
+    return "\n".join(lines)

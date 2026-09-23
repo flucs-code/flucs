@@ -5,7 +5,8 @@ from io import TextIOBase
 
 
 class FlucsLogHandler(TextIOBase, AbstractContextManager):
-    """Redirects stdout and stderr to a specified set of streams.
+    """
+    Redirects stdout and stderr to a specified set of streams.
     Used primarily to redirect print() statements to an additional log file.
 
     Attributes

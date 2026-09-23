@@ -16,7 +16,6 @@ from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
 
 try:
     import cupy as cupy
-    from cupy.cuda.memory_hooks import LineProfileHook
 
     cupy.fft.fft(cupy.zeros(1))  # quickly test if CuPy actually works
 except Exception as exc:
@@ -356,7 +355,7 @@ def main():
     ):
         args.run = True
 
-    # Launch the solver
+    # Run the solver
     if args.run:
         input_path = io_path / "input.toml"
 
@@ -364,16 +363,22 @@ def main():
             raise FileNotFoundError(f"Input file not found in {io_path} ")
 
         if args.memory:
+            # Local imports
+            from cupy.cuda.memory_hooks import LineProfileHook
+
+            from flucs.utilities.cupy import format_memory_report
+
+            # Run with profiler
             hook = LineProfileHook()
             with hook:
                 run_flucs(input_path, args.override)
             cupy.cuda.get_current_stream().synchronize()
 
+            # Append to log
             log_path = io_path / "output.log"
             with open(log_path, "a", encoding="utf-8") as log_file:
                 with FlucsLogHandler(log_file, keep_stdout=True):
-                    flucsprint("Memory report from CuPy's LineProfileHook:")
-                    hook.print_report(file=sys.stdout)
+                    flucsprint(format_memory_report(hook, verbose=False))
             return
 
         run_flucs(input_path, args.override)
