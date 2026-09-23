@@ -43,36 +43,45 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         self.timestepper.register_kernels()
 
     def run(self, timing_steps: int = 0):
-        """Run the main solver loop."""
+        """
+        Run the main solver loop.
+        """
+
+        # Set solver state
         self.timing_steps = timing_steps
+
+        if self.timing_steps:
+            self.state = FlucsSolverState.TIMING
+            timing = True
+        else:
+            self.state = FlucsSolverState.RUNNING
+            timing = False
 
         # Get the system ready
         self.system.setup()
         self.timestepper.setup()
 
-        self.system.setup_output()
+        if not timing:
+            self.system.setup_output()
+
         self.system.compile_cupy_module()
         self.system.setup_initial_conditions()
         self.system.check_health()
         self.system.clean_cupy_memory()
         self.system.get_memory_usage()
 
-        if timing_steps:
-            # Timing
-            flucsprint(
-                f"\nTiming {timing_steps:.3e} steps..."
-            )
-            self.state = FlucsSolverState.TIMING
-        else:
-            self.state = FlucsSolverState.RUNNING
+        if timing:
+            flucsprint(f"\nTiming {timing_steps:.3e} steps...")
 
+        # Ready and exceute the solver loop
         self.system.ready()
         self.timestepper.ready()
 
         self.system.initial_wallclock_time = datetime.datetime.now()
         time_taken = self._solver_loop()
 
-        if timing_steps:
+        # Report final results
+        if timing:
             flucsprint(
                 f"Timed {timing_steps:.3e} steps, "
                 f"taking  {time_taken:.3e} seconds.\n"
