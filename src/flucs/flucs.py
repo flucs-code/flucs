@@ -178,11 +178,12 @@ def run_flucs(
     # Return the input and solver for debugging purposes
     return flucs_input, solver
 
-def run_under_nsys(input_path: pl.Path):
+def run_under_nsys(io_path: pl.Path):
     env = os.environ.copy()
     env[NSYS_ENV_VAR] = "1"
 
-    nsys_report_file = input_path / "flucs.nsys-rep"
+    nsys_report_file = io_path / "flucs.nsys-rep"
+    nsys_stats_file = io_path / "flucs-stats"
 
     if nsys_report_file.exists():
         nsys_report_file.unlink()
@@ -201,14 +202,86 @@ def run_under_nsys(input_path: pl.Path):
         "nsys",
         "stats",
         "--force-export=true",
-        # "--report", "cuda_gpu_kern_sum",
-        # "--report", "cuda_api_sum",
-        # "--report", "cuda_gpu_mem_time_sum",
+        "--report", "cuda_gpu_kern_sum",
+        "--format", "csv",
+        "--output", nsys_stats_file,
         str(nsys_report_file),
     ]
 
-    subprocess.run(stats_cmd)
+    result = subprocess.run(
+        stats_cmd,
+        capture_output=True,
+        text=True,
+    )
 
+    gpu_kern_csv = io_path / "flucs-stats_cuda_gpu_kern_sum.csv"
+    log_path = io_path / "output.log"
+    with open(log_path, "a", encoding="utf-8") as log_file:
+        with FlucsLogHandler(log_file, keep_stdout=True):
+            print_gpu_kern_summary(gpu_kern_csv)
+
+def print_gpu_kern_summary(filename):
+    import csv
+
+    input_columns = [
+        "Time (%)",
+        "Total Time (ns)",
+        "Avg (ns)",
+        "Max (ns)",
+        "StdDev (ns)",
+        "Name",
+    ]
+
+    columns = [
+        "Time (%)",
+        "Total Time (us)",
+        "Avg (us)",
+        "Max (us)",
+        "StdDev (us)",
+        "Name",
+    ]
+
+    with open(filename, newline="") as f:
+        reader = csv.DictReader(f)
+
+        rows = []
+        for row in reader:
+            rows.append({
+                "Time (%)": row["Time (%)"],
+                "Total Time (us)": f"{float(row['Total Time (ns)']) / 1000:.3f}",
+                "Avg (us)": f"{float(row['Avg (ns)']) / 1000:.3f}",
+                "Max (us)": f"{float(row['Max (ns)']) / 1000:.3f}",
+                "StdDev (us)": f"{float(row['StdDev (ns)']) / 1000:.3f}",
+                "Name": row["Name"],
+            })
+
+    widths = {
+        column: max(
+            len(column),
+            *(len(row[column]) for row in rows),
+        )
+        for column in columns
+    }
+
+    flucsprint("\nSummary of kernel execution:\n")
+
+    flucsprint("  ".join(
+        f"{column:<{widths[column]}}"
+        for column in columns
+    ))
+
+    flucsprint("  ".join(
+        "-" * widths[column]
+        for column in columns
+    ))
+
+    for row in rows:
+        flucsprint("  ".join(
+            f"{row[column]:>{widths[column]}}"
+            if column != "Name"
+            else f"{row[column]:<{widths[column]}}"
+            for column in columns
+        ))
 
 def write_default_input(system_name: str, io_path: pl.Path):
     """
