@@ -237,26 +237,41 @@ def run_flucs_under_nsys(io_path: pl.Path) -> None:
         log_path = io_path / "output.log"
         with open(log_path, "a", encoding="utf-8") as log_file:
             with FlucsLogHandler(log_file, keep_stdout=True):
-                print_nsys_gpu_kernel_summary(gpu_kernel_summary)
+                flucsprint(format_nsys_gpu_kernel_summary(gpu_kernel_summary))
     finally:
         shutil.rmtree(temp_path)
 
 
-def print_nsys_gpu_kernel_summary(filename: pl.Path) -> None:
+def format_nsys_gpu_kernel_summary(filename: pl.Path) -> str:
     """
-    Prints a summary of GPU kernel execution from Nsight Systems CSV output.
+    Formats a summary of GPU kernel execution from Nsight Systems CSV output.
+
+    Parameters
+    ----------
+    filename : pl.Path
+        Path to the Nsight Systems CSV output.
+
+    Returns
+    -------
+    str
+        Formatted GPU kernel execution summary.
+
     """
+    # Lazily import pythons native csv tools
     import csv
 
+    # Columns to display in the summary
     columns = [
         "Time (%)",
         "Total Time (us)",
         "Avg (us)",
         "Max (us)",
-        "StdDev (us)",
+        "Std (us)",
         "Name",
     ]
 
+    # Read in data from csv file and convert times from ns to us
+    ns_to_us = 1e-3
     with open(filename, newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
 
@@ -266,15 +281,16 @@ def print_nsys_gpu_kernel_summary(filename: pl.Path) -> None:
                 {
                     "Time (%)": row["Time (%)"],
                     "Total Time (us)": (
-                        f"{float(row['Total Time (ns)']) / 1000:.3f}"
+                        f"{float(row['Total Time (ns)']) * ns_to_us:.3f}"
                     ),
-                    "Avg (us)": f"{float(row['Avg (ns)']) / 1000:.3f}",
-                    "Max (us)": f"{float(row['Max (ns)']) / 1000:.3f}",
-                    "StdDev (us)": f"{float(row['StdDev (ns)']) / 1000:.3f}",
+                    "Avg (us)": f"{float(row['Avg (ns)']) * ns_to_us:.3f}",
+                    "Max (us)": f"{float(row['Max (ns)']) * ns_to_us:.3f}",
+                    "Std (us)": f"{float(row['StdDev (ns)']) * ns_to_us:.3f}",
                     "Name": row["Name"],
                 }
             )
 
+    # Determine the maximum width of each column
     widths = {
         column: max(
             len(column),
@@ -283,14 +299,16 @@ def print_nsys_gpu_kernel_summary(filename: pl.Path) -> None:
         for column in columns
     }
 
-    flucsprint("GPU kernel execution summary (Nsight Systems)\n")
-
-    flucsprint("  ".join(f"{column:<{widths[column]}}" for column in columns))
-
-    flucsprint("  ".join("-" * widths[column] for column in columns))
+    # Construct summary lines
+    lines = [
+        "GPU kernel execution summary (Nsight Systems)",
+        "",
+        "  ".join(f"{column:<{widths[column]}}" for column in columns),
+        "  ".join("-" * widths[column] for column in columns),
+    ]
 
     for row in rows:
-        flucsprint(
+        lines.append(
             "  ".join(
                 f"{row[column]:>{widths[column]}}"
                 if column != "Name"
@@ -298,6 +316,8 @@ def print_nsys_gpu_kernel_summary(filename: pl.Path) -> None:
                 for column in columns
             )
         )
+
+    return "\n".join(lines)
 
 
 def write_default_input(system_name: str, io_path: pl.Path):
