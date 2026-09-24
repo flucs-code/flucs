@@ -3,11 +3,6 @@ solver = ""  # name of the solver
 system = ""  # name of the system of equations
 precision = "double"  # floating-point precision
 
-# If true, solver will measure its performance for setup.timing_steps time steps, then quit
-# No output files will be written.
-timing = false
-timing_steps = 1000
-
 # If true, an estimate for the remaining wall time is
 # printed every time_estimate_writes * output.write_steps,
 # i.e., every time_estimate_writes writes
@@ -16,6 +11,9 @@ time_estimate_writes = 10
 
 # cuFFT wrapper. Supported values are 'cupy' or 'flucs'
 fft_wrapper = "flucs"
+
+# Additional compiler flags. Typically, there is no need change this.
+compiler_flags = ["--use_fast_math",]
 
 [parameters]
 # Any user-defined parameters go here

@@ -46,8 +46,8 @@ class FlucsSystem(ABC):
     tolerance: float
 
     # Naming convention for complex variables stored in NetCDF files
-    netcdf_real_suffix: ClassVar[str] = "_real"
-    netcdf_imag_suffix: ClassVar[str] = "_imag"
+    _netcdf_real_suffix: ClassVar[str] = "_real"
+    _netcdf_imag_suffix: ClassVar[str] = "_imag"
 
     # Variables to that keep track of time
     current_step: int
@@ -163,9 +163,7 @@ class FlucsSystem(ABC):
         self.tolerance = self.precision_tolerance(self.float)
 
         # Print precision info
-        flucsprint(
-            f"{str(self.input['setup.precision']).capitalize()} precision."
-        )
+        flucsprint(f"Precision: {self.input['setup.precision']}")
 
     def add_output(self, output: FlucsOutput):
         if self.output_heap is None:
@@ -669,7 +667,7 @@ class FlucsSystem(ABC):
         self.input = input
         self.temp_arrays = {}
         self.kernels = KernelCollection(self)
-        self.module_options = ModuleOptions()
+        self.module_options = ModuleOptions(self.input["setup.compiler_flags"])
         self._add_include_dirs()
         self._print_system_info()
         self._set_precision()

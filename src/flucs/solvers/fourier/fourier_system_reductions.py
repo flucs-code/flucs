@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import numpy as np
+
 from flucs import cupy as cp
 from flucs.solvers.fourier.fourier_system import FourierSystem
 from flucs.utilities.cupy import KernelWrapper
@@ -146,7 +148,8 @@ class FourierReductions:
 
             case "kx_cumulative":
                 return {
-                    "kx_abs": self.system.kx[: self.system.half_nx],
+                    # Make sure the Nyquist frequency is positive
+                    "kx_abs": np.abs(self.system.kx[: self.system.half_nx]),
                 }
 
             case "ky_cumulative":
@@ -156,7 +159,8 @@ class FourierReductions:
 
             case "kz_cumulative":
                 return {
-                    "kz_abs": self.system.kz[: self.system.half_nz],
+                    # Make sure the Nyquist frequency is positive
+                    "kz_abs": np.abs(self.system.kz[: self.system.half_nz]),
                 }
 
             case "kperp_cumulative":
@@ -933,13 +937,23 @@ class FourierReductions:
         match dimension:
             case "kx" | "kz":
                 # Fold onto absolute wavenumbers
+                full_size = (
+                    self.system.nx if dimension == "kx" else self.system.nz
+                )
+                paired_size = (full_size - 1) // 2
+
                 def reduction(*args):
                     spectrum = base_reduction(*args)
                     cumulative[0] = spectrum[0]
-                    cumulative[1:] = (
-                        spectrum[1:output_size]
-                        + spectrum[-1 : output_size - 1 : -1]
+                    cumulative[1 : paired_size + 1] = (
+                        spectrum[1 : +paired_size + 1]
+                        + spectrum[-1 : -paired_size - 1 : -1]
                     )
+
+                    # Even grids have one unpaired Nyquist coefficient
+                    if full_size % 2 == 0:
+                        cumulative[-1] = spectrum[paired_size + 1]
+
                     cp.cumsum(cumulative, out=cumulative)
                     return cumulative
 

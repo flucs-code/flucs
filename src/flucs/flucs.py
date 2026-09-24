@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import os
 import pathlib as pl
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -16,7 +18,6 @@ from flucs.utilities.messages import HORIZONTAL_SEPARATOR, flucsprint
 
 try:
     import cupy as cupy
-    from cupy.cuda.memory_hooks import LineProfileHook
 
     cupy.fft.fft(cupy.zeros(1))  # quickly test if CuPy actually works
 except Exception as exc:
@@ -46,6 +47,8 @@ FLUCS_HEADER = rf"""
 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 Version: {importlib.metadata.version("flucs")}
 """
+
+NSYS_ENV_VAR = "FLUCS_UNDER_NSYS"
 
 # Load lists of registered solvers and systems
 solvers = entry_points().select(group="flucs.solvers")
@@ -142,7 +145,9 @@ def parse_cli_arguments(argv: list[str]) -> tuple[list[str], list[str] | None]:
 
 
 def run_flucs(
-    input_path: pl.Path, override: list | None = None
+    input_path: pl.Path,
+    override: list | None = None,
+    timing_steps: int = 0,
 ) -> tuple[FlucsInput, FlucsSolver]:
     """
     Construct FlucsInput then call the appropriate solver.
@@ -169,10 +174,77 @@ def run_flucs(
 
             solver, _ = flucs_input.create_solver_system()
 
-            solver.run()
+            solver.run(timing_steps=timing_steps)
 
     # Return the input and solver for debugging purposes
     return flucs_input, solver
+
+
+def run_flucs_under_nsys(io_path: pl.Path) -> None:
+    """
+    Call run_flucs under NVIDIA Nsight Systems and print a summary of GPU kernel
+    execution to the log file.
+
+    Parameters
+    ----------
+    io_path : pl.Path
+        Path to the i/o directory where the input file is located.
+
+    """
+    # Import formatting function
+    from flucs.utilities.nsys import format_nsys_gpu_kernel_summary
+
+    # Set the correct env variable for NSight Systems
+    # We use this to decide if we are already
+    # running inside the profiler
+    env = os.environ.copy()
+    env[NSYS_ENV_VAR] = "1"
+
+    # Set up temporary directory and file paths for nsys output
+    temp_path = io_path / ".temp_nsys"
+    nsys_report = temp_path / "flucs_profile.nsys-rep"
+    nsys_stats = temp_path / "flucs_stats"
+    gpu_kernel_summary = temp_path / "flucs_stats_cuda_gpu_kern_sum.csv"
+
+    if temp_path.exists():
+        shutil.rmtree(temp_path)
+    temp_path.mkdir()
+
+    # Run and then clean up the temporary directory
+    try:
+        # Run profiling
+        profile_cmd = [
+            "nsys",
+            "profile",
+            "--trace=cuda,nvtx,osrt",
+            f"--output={nsys_report}",
+            *sys.argv[:],
+        ]
+        subprocess.run(profile_cmd, env=env, check=True)
+
+        # Run stats to get the GPU kernel summary
+        stats_cmd = [
+            "nsys",
+            "stats",
+            "--force-export=true",
+            "--force-overwrite=true",
+            "--report",
+            "cuda_gpu_kern_sum",
+            "--format",
+            "csv",
+            "--output",
+            nsys_stats,
+            str(nsys_report),
+        ]
+        subprocess.run(stats_cmd, check=True)
+
+        # Append summary to log file
+        log_path = io_path / "output.log"
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            with FlucsLogHandler(log_file, keep_stdout=True):
+                flucsprint(format_nsys_gpu_kernel_summary(gpu_kernel_summary))
+    finally:
+        shutil.rmtree(temp_path)
 
 
 def write_default_input(system_name: str, io_path: pl.Path):
@@ -294,12 +366,18 @@ def main():
     )
 
     operation_modes.add_argument(  # TODO
-        "--test",
+        "--timing",
         "-t",
-        action="store_true",
+        nargs="?",
+        type=int,
+        metavar="STEPS_TO_TIME",
+        const=1000,
         default=False,
         required=False,
-        help="NOT YET IMPLEMENTED: run setup/timing tests and then exit.",
+        help=(
+            "Runs STEPS_TO_TIME time steps (default of 1000) then exits. "
+            "No output is produced."
+        ),
     )
 
     operation_modes.add_argument(
@@ -348,15 +426,26 @@ def main():
             args.run,
             args.init,
             args.list,
-            args.test,
             args.clean,
             args.reconstruct,
             args.postprocess,
+            args.timing,
         )
     ):
         args.run = True
 
-    # Launch the solver
+    if args.timing:
+        # Run under nsys
+        if os.environ.get(NSYS_ENV_VAR) != "1":
+            run_flucs_under_nsys(io_path)
+            return
+
+        args.run = True
+        timing_steps = int(args.timing)
+    else:
+        timing_steps = 0
+
+    # Run the solver
     if args.run:
         input_path = io_path / "input.toml"
 
@@ -364,19 +453,27 @@ def main():
             raise FileNotFoundError(f"Input file not found in {io_path} ")
 
         if args.memory:
+            # Local imports
+            from cupy.cuda.memory_hooks import LineProfileHook
+
+            from flucs.utilities.cupy import format_memory_report
+
+            # Run with profiler
             hook = LineProfileHook()
             with hook:
-                run_flucs(input_path, args.override)
+                run_flucs(input_path, args.override, timing_steps)
             cupy.cuda.get_current_stream().synchronize()
 
+            # Append to log
             log_path = io_path / "output.log"
             with open(log_path, "a", encoding="utf-8") as log_file:
                 with FlucsLogHandler(log_file, keep_stdout=True):
-                    flucsprint("Memory report from CuPy's LineProfileHook:")
-                    hook.print_report(file=sys.stdout)
+                    # Change verbose=True if you want to see the full
+                    # (and quite messy) output of LineProfileHook
+                    flucsprint(format_memory_report(hook, verbose=False))
             return
 
-        run_flucs(input_path, args.override)
+        run_flucs(input_path, args.override, timing_steps)
         return
 
     # Write a default input file

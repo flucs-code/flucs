@@ -42,51 +42,51 @@ class FourierSolver(FlucsSolver[FourierSystem]):
     def register_kernels(self) -> None:
         self.timestepper.register_kernels()
 
-    def run(self):
-        """Run the main solver loop."""
+    def run(self, timing_steps: int = 0):
+        """
+        Run the main solver loop.
+        """
 
-        # We first time the solver
-        self.state = FlucsSolverState.TIMING
+        # Set solver state
+        self.timing_steps = timing_steps
+
+        if self.timing_steps:
+            self.state = FlucsSolverState.TIMING
+            timing = True
+        else:
+            self.state = FlucsSolverState.RUNNING
+            timing = False
 
         # Get the system ready
         self.system.setup()
         self.timestepper.setup()
 
-        self.system.setup_output()
+        if not timing:
+            self.system.setup_output()
+
         self.system.compile_cupy_module()
         self.system.setup_initial_conditions()
         self.system.check_health()
         self.system.clean_cupy_memory()
         self.system.get_memory_usage()
 
-        # Timing
-        flucsprint(
-            f"\nTiming {self.system.input['setup.timing_steps']:.3e} steps..."
-        )
+        if timing:
+            flucsprint(f"\nTiming {timing_steps:.3e} steps...")
 
+        # Ready and exceute the solver loop
         self.system.ready()
         self.timestepper.ready()
 
-        time_taken = self._solver_loop()
-
-        flucsprint(
-            f"Timed {self.system.input['setup.timing_steps']:.3e} steps, "
-            f"taking  {time_taken:.3e} seconds.\n"
-        )
-
-        if self.system.input["setup.timing"]:
-            flucsprint("Timing completed. Exiting.\n")
-            return
-
-        # Reset system and actually run it
-        self.state = FlucsSolverState.RUNNING
-        self.system.ready()
-        self.timestepper.ready()
-
-        # Start time for estimating duration
         self.system.initial_wallclock_time = datetime.datetime.now()
-
         time_taken = self._solver_loop()
+
+        # Report final results
+        if timing:
+            flucsprint(
+                f"Timed {timing_steps:.3e} steps, "
+                f"taking  {time_taken:.3e} seconds.\n"
+            )
+            return
 
         flucsprint(
             f"Finished at time {float(self.system.current_time):.3e}, "
@@ -102,10 +102,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             return False
 
         if self.state == FlucsSolverState.TIMING:
-            return (
-                self.system.current_step
-                < self.system.input["setup.timing_steps"]
-            )
+            return self.system.current_step < self.timing_steps
 
         return self.system.current_time < self.system.final_time
 

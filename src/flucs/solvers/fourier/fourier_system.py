@@ -207,6 +207,14 @@ class FourierSystem(FlucsSystem):
         Validates inputs including box dimensions, timestepping,
         hyperdissipation, and dealiasing options.
         """
+        # Check that the FFT wrapper is supported
+        fft_wrapper = self.input["setup.fft_wrapper"]
+        if fft_wrapper not in ("flucs", "cupy"):
+            raise InvalidFlucsInputFileError(
+                f"'{fft_wrapper}' is not a valid "
+                "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
+            )
+
         # Check that box dimensions are positive
         dimensions = [
             self.input[f"dimensions.L{dim}"] for dim in ["x", "y", "z"]
@@ -264,6 +272,11 @@ class FourierSystem(FlucsSystem):
                 f"Allowed options: {', '.join(memory_models)}."
             )
 
+        if fft_wrapper == "cupy" and memory_model == "in_place":
+            raise InvalidFlucsInputFileError(
+                "Cannot use cupy fft_wrapper with in_place memory setup."
+            )
+
         if dealiasing_method == "two-thirds":
             self._setup_two_thirds_dealiasing()
         else:
@@ -275,7 +288,7 @@ class FourierSystem(FlucsSystem):
             f"({self.dealiasing_truncation}, {memory_model})"
         )
         message += (
-            " \nEquivalent unpadded grid (nz, nx, ny) = "
+            " \nEquivalent unpadded grid: (nz, nx, ny) = "
             f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
         )
 
@@ -680,22 +693,8 @@ class FourierSystem(FlucsSystem):
         )
 
     def _setup_cufft(self) -> None:
-        # Parse and validate the selected FFT wrapper
+        # Configure the validated FFT wrapper
         fft_wrapper = self.input["setup.fft_wrapper"]
-
-        if fft_wrapper not in ("flucs", "cupy"):
-            raise InvalidFlucsInputFileError(
-                f"'{fft_wrapper}' is not a valid "
-                "cuFFT wrapper. The allowed values are 'flucs' and 'cupy'."
-            )
-
-        if (
-            fft_wrapper == "cupy"
-            and self.input["dealiasing.memory"] == "in_place"
-        ):
-            raise InvalidFlucsInputFileError(
-                "Cannot use cupy fft_wrapper with in_place memory setup."
-            )
 
         self.use_cupy_fft = fft_wrapper == "cupy"
 
@@ -840,7 +839,7 @@ class FourierSystem(FlucsSystem):
             )
 
             if self.input[f"hyperdissipation.{component}"] > 0.0:
-                message = f"Hyperdissipation in {component:<5}"
+                message = f"Hyperdissipation: {component:<5}"
                 modifiers = []
 
                 self.module_options.define_float(
@@ -2371,11 +2370,15 @@ class FourierSystem(FlucsSystem):
             where=np.abs(eigvals) > self.tolerance,
         )
 
+        # Product of dt and the error in the eigvals. Avoids division by dt
+        eigval_errors = np.abs(pade_eigvals - exact_eigvals)
+
         flucsprint(
             "Linear error:          "
-            f"(absolute, relative)         = "
+            f"(absolute, relative, eigval) = "
             f"({np.max(abs_errors):.3e}, "
-            f"{np.max(rel_errors):.3e})"
+            f"{np.max(rel_errors):.3e}, "
+            f"{np.max(eigval_errors):.3e})"
         )
 
         if np.max(rel_errors) > 1e-2:
