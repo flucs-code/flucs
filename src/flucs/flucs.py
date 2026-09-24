@@ -468,6 +468,8 @@ def main():
             log_path = io_path / "output.log"
             with open(log_path, "a", encoding="utf-8") as log_file:
                 with FlucsLogHandler(log_file, keep_stdout=True):
+                    # Change verbose=True if you want to see the full
+                    # (and quite messy) output of LineProfileHook
                     flucsprint(format_memory_report(hook, verbose=False))
             return
 
