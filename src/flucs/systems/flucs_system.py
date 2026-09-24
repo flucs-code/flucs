@@ -667,7 +667,7 @@ class FlucsSystem(ABC):
         self.input = input
         self.temp_arrays = {}
         self.kernels = KernelCollection(self)
-        self.module_options = ModuleOptions()
+        self.module_options = ModuleOptions(self.input["setup.compiler_flags"])
         self._add_include_dirs()
         self._print_system_info()
         self._set_precision()

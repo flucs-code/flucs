@@ -12,6 +12,9 @@ time_estimate_writes = 10
 # cuFFT wrapper. Supported values are 'cupy' or 'flucs'
 fft_wrapper = "flucs"
 
+# Additional compiler flags. Typically, there is no need change this.
+compiler_flags = ["--use_fast_math",]
+
 [parameters]
 # Any user-defined parameters go here
 

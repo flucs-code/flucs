@@ -81,15 +81,14 @@ class ModuleOptions:
     _defs: dict
     options = (
         "--ptxas-options=-O3",
-        "--use_fast_math",
         "-std=c++17",
-        # "-D__NV_NO_VECTOR_DEPRECATION_DIAG",  # Uncomment if required
     )
     name_expressions: list
 
-    def __init__(self) -> None:
+    def __init__(self, extra_compiler_flags: list[str]) -> None:
         self._defs = {}
         self.name_expressions = []
+        self.options += (*extra_compiler_flags, )
 
     def add_compiler_option(self, option: str) -> None:
         """
