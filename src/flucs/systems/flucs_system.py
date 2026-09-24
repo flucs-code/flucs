@@ -46,8 +46,8 @@ class FlucsSystem(ABC):
     tolerance: float
 
     # Naming convention for complex variables stored in NetCDF files
-    netcdf_real_suffix: ClassVar[str] = "_real"
-    netcdf_imag_suffix: ClassVar[str] = "_imag"
+    _netcdf_real_suffix: ClassVar[str] = "_real"
+    _netcdf_imag_suffix: ClassVar[str] = "_imag"
 
     # Variables to that keep track of time
     current_step: int

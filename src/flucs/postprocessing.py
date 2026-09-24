@@ -595,8 +595,8 @@ class FlucsPostProcessing:
         """
 
         # Load data
-        real_name = f"{variable}{FlucsSystem.netcdf_real_suffix}"
-        imag_name = f"{variable}{FlucsSystem.netcdf_imag_suffix}"
+        real_name = f"{variable}{FlucsSystem._netcdf_real_suffix}"
+        imag_name = f"{variable}{FlucsSystem._netcdf_imag_suffix}"
         real, boundary_indices_real, dims_dicts_real = (
             self.load_netcdf_variable(
                 nc_path,

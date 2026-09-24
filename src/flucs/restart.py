@@ -141,15 +141,15 @@ class FlucsRestart:
 
             for name in var_names:
                 # Imaginary part handled simulatneously with real part
-                if name.endswith(self.system.netcdf_imag_suffix):
+                if name.endswith(self.system._netcdf_imag_suffix):
                     continue
 
                 # Complex arrays stored as <base>_real and <base>_imag
-                if name.endswith(self.system.netcdf_real_suffix):
+                if name.endswith(self.system._netcdf_real_suffix):
                     base_name = name.removesuffix(
-                        self.system.netcdf_real_suffix
+                        self.system._netcdf_real_suffix
                     )
-                    imag_name = f"{base_name}{self.system.netcdf_imag_suffix}"
+                    imag_name = f"{base_name}{self.system._netcdf_imag_suffix}"
 
                     v_r = ds.variables[name]
                     if imag_name in ds.variables:
@@ -360,8 +360,8 @@ class FlucsRestart:
                             ds.createDimension(dname, int(dsize))
 
                 if np.iscomplexobj(var_data):
-                    real_name = f"{var_name}{self.system.netcdf_real_suffix}"
-                    imag_name = f"{var_name}{self.system.netcdf_imag_suffix}"
+                    real_name = f"{var_name}{self.system._netcdf_real_suffix}"
+                    imag_name = f"{var_name}{self.system._netcdf_imag_suffix}"
                     v_r = ds.createVariable(
                         real_name,
                         self.system.netcdf_precision,

@@ -487,10 +487,10 @@ class FlucsOutputNC(FlucsOutput):
                     # Create variable
                     if var.is_complex:
                         real_name = (
-                            f"{var.name}{self.system.netcdf_real_suffix}"
+                            f"{var.name}{self.system._netcdf_real_suffix}"
                         )
                         imag_name = (
-                            f"{var.name}{self.system.netcdf_imag_suffix}"
+                            f"{var.name}{self.system._netcdf_imag_suffix}"
                         )
 
                         # Complex variables are stored as two separate netCDF4
@@ -571,10 +571,10 @@ class FlucsOutputNC(FlucsOutput):
                     if len(var.shape) == 0:
                         if var.is_complex:
                             real_name = (
-                                f"{var.name}{self.system.netcdf_real_suffix}"
+                                f"{var.name}{self.system._netcdf_real_suffix}"
                             )
                             imag_name = (
-                                f"{var.name}{self.system.netcdf_imag_suffix}"
+                                f"{var.name}{self.system._netcdf_imag_suffix}"
                             )
                             diagnostic_group[real_name][
                                 first_index:last_index
@@ -589,10 +589,10 @@ class FlucsOutputNC(FlucsOutput):
                     else:
                         if var.is_complex:
                             real_name = (
-                                f"{var.name}{self.system.netcdf_real_suffix}"
+                                f"{var.name}{self.system._netcdf_real_suffix}"
                             )
                             imag_name = (
-                                f"{var.name}{self.system.netcdf_imag_suffix}"
+                                f"{var.name}{self.system._netcdf_imag_suffix}"
                             )
                             for i in range(times_to_write):
                                 diagnostic_group[real_name][
