@@ -149,7 +149,7 @@ class FourierReductions:
             case "kx_cumulative":
                 return {
                     # Make sure the Nyquist frequency is positive
-                    "kx_abs": np.abs(self.system.kx[:self.system.half_nx]),
+                    "kx_abs": np.abs(self.system.kx[: self.system.half_nx]),
                 }
 
             case "ky_cumulative":
@@ -160,7 +160,7 @@ class FourierReductions:
             case "kz_cumulative":
                 return {
                     # Make sure the Nyquist frequency is positive
-                    "kz_abs": np.abs(self.system.kz[:self.system.half_nz]),
+                    "kz_abs": np.abs(self.system.kz[: self.system.half_nz]),
                 }
 
             case "kperp_cumulative":

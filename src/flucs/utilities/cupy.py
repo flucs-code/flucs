@@ -88,7 +88,7 @@ class ModuleOptions:
     def __init__(self, extra_compiler_flags: list[str]) -> None:
         self._defs = {}
         self.name_expressions = []
-        self.options += (*extra_compiler_flags, )
+        self.options += (*extra_compiler_flags,)
 
     def add_compiler_option(self, option: str) -> None:
         """
