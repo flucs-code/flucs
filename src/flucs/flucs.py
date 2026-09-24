@@ -195,6 +195,8 @@ def run_flucs_under_nsys(io_path: pl.Path) -> None:
     from flucs.utilities.nsys import format_nsys_gpu_kernel_summary
 
     # Set the correct env variable for NSight Systems
+    # We use this to decide if we are already
+    # running inside the profiler
     env = os.environ.copy()
     env[NSYS_ENV_VAR] = "1"
 
@@ -434,7 +436,7 @@ def main():
 
     if args.timing:
         # Run under nsys
-        if os.environ.get("FLUCS_UNDER_NSYS") != "1":
+        if os.environ.get(NSYS_ENV_VAR) != "1":
             run_flucs_under_nsys(io_path)
             return
 
