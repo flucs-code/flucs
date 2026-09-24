@@ -2,14 +2,15 @@ import csv
 import pathlib as pl
 
 
-def format_nsys_gpu_kernel_summary(filename: pl.Path) -> str:
+def format_nsys_gpu_kernel_summary(filepath: pl.Path) -> str:
     """
-    Formats a summary of GPU kernel execution from Nsight Systems CSV output.
+    Formats a summary of GPU kernel execution from NVIDIA Nsight Systems 
+    .csv output.
 
     Parameters
     ----------
-    filename : pl.Path
-        Path to the Nsight Systems CSV output.
+    filepath : pl.Path
+        Path to the NVIDIA Nsight Systems .csv output.
 
     Returns
     -------
@@ -29,7 +30,7 @@ def format_nsys_gpu_kernel_summary(filename: pl.Path) -> str:
 
     # Read in data from csv file and convert times from ns to us
     ns_to_us = 1e-3
-    with open(filename, newline="", encoding="utf-8") as file:
+    with open(filepath, newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
 
         rows = []

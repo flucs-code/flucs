@@ -182,10 +182,10 @@ def run_flucs(
 
 def run_flucs_under_nsys(io_path: pl.Path) -> None:
     """
-    Call run_flucs under Nsight Systems and prints a summary of GPU kernel
-    execution to the log file
+    Call run_flucs under NVIDIA Nsight Systems and print a summary of GPU kernel
+    execution to the log file.
 
-    Parameters:
+    Parameters
     ----------
     io_path : pl.Path
         Path to the i/o directory where the input file is located.
