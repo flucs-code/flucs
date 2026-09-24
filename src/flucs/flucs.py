@@ -4,6 +4,7 @@ import argparse
 import importlib.metadata
 import os
 import pathlib as pl
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -178,59 +179,74 @@ def run_flucs(
     # Return the input and solver for debugging purposes
     return flucs_input, solver
 
-def run_under_nsys(io_path: pl.Path):
+
+def run_flucs_under_nsys(io_path: pl.Path) -> None:
+    """
+    Call run_flucs under Nsight Systems and prints a summary of GPU kernel
+    execution to the log file
+
+    Parameters:
+    ----------
+    io_path : pl.Path
+        Path to the i/o directory where the input file is located.
+
+    """
+    # Set the correct env variable for NSight Systems
     env = os.environ.copy()
     env[NSYS_ENV_VAR] = "1"
 
-    nsys_report_file = io_path / "flucs.nsys-rep"
-    nsys_stats_file = io_path / "flucs-stats"
+    # Set up temporary directory and file paths for nsys output
+    temp_path = io_path / ".temp_nsys"
+    nsys_report = temp_path / "flucs_profile.nsys-rep"
+    nsys_stats = temp_path / "flucs_stats"
+    gpu_kernel_summary = temp_path / "flucs_stats_cuda_gpu_kern_sum.csv"
 
-    if nsys_report_file.exists():
-        nsys_report_file.unlink()
+    if temp_path.exists():
+        shutil.rmtree(temp_path)
+    temp_path.mkdir()
 
-    profile_cmd = [
-        "nsys",
-        "profile",
-        "--trace=cuda,nvtx,osrt",
-        f"--output={str(nsys_report_file)}",
-        *sys.argv[:],
-    ]
+    # Run and then clean up the temporary directory
+    try:
+        # Run profiling
+        profile_cmd = [
+            "nsys",
+            "profile",
+            "--trace=cuda,nvtx,osrt",
+            f"--output={nsys_report}",
+            *sys.argv[:],
+        ]
+        subprocess.run(profile_cmd, env=env, check=True)
 
-    subprocess.run(profile_cmd, env=env)
+        # Run stats to get the GPU kernel summary
+        stats_cmd = [
+            "nsys",
+            "stats",
+            "--force-export=true",
+            "--force-overwrite=true",
+            "--report",
+            "cuda_gpu_kern_sum",
+            "--format",
+            "csv",
+            "--output",
+            nsys_stats,
+            str(nsys_report),
+        ]
+        subprocess.run(stats_cmd, check=True)
 
-    stats_cmd = [
-        "nsys",
-        "stats",
-        "--force-export=true",
-        "--report", "cuda_gpu_kern_sum",
-        "--format", "csv",
-        "--output", nsys_stats_file,
-        str(nsys_report_file),
-    ]
+        # Append summary to log file
+        log_path = io_path / "output.log"
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            with FlucsLogHandler(log_file, keep_stdout=True):
+                print_nsys_gpu_kernel_summary(gpu_kernel_summary)
+    finally:
+        shutil.rmtree(temp_path)
 
-    result = subprocess.run(
-        stats_cmd,
-        capture_output=True,
-        text=True,
-    )
 
-    gpu_kern_csv = io_path / "flucs-stats_cuda_gpu_kern_sum.csv"
-    log_path = io_path / "output.log"
-    with open(log_path, "a", encoding="utf-8") as log_file:
-        with FlucsLogHandler(log_file, keep_stdout=True):
-            print_gpu_kern_summary(gpu_kern_csv)
-
-def print_gpu_kern_summary(filename):
+def print_nsys_gpu_kernel_summary(filename: pl.Path) -> None:
+    """
+    Prints a summary of GPU kernel execution from Nsight Systems CSV output.
+    """
     import csv
-
-    input_columns = [
-        "Time (%)",
-        "Total Time (ns)",
-        "Avg (ns)",
-        "Max (ns)",
-        "StdDev (ns)",
-        "Name",
-    ]
 
     columns = [
         "Time (%)",
@@ -241,19 +257,23 @@ def print_gpu_kern_summary(filename):
         "Name",
     ]
 
-    with open(filename, newline="") as f:
-        reader = csv.DictReader(f)
+    with open(filename, newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
 
         rows = []
         for row in reader:
-            rows.append({
-                "Time (%)": row["Time (%)"],
-                "Total Time (us)": f"{float(row['Total Time (ns)']) / 1000:.3f}",
-                "Avg (us)": f"{float(row['Avg (ns)']) / 1000:.3f}",
-                "Max (us)": f"{float(row['Max (ns)']) / 1000:.3f}",
-                "StdDev (us)": f"{float(row['StdDev (ns)']) / 1000:.3f}",
-                "Name": row["Name"],
-            })
+            rows.append(
+                {
+                    "Time (%)": row["Time (%)"],
+                    "Total Time (us)": (
+                        f"{float(row['Total Time (ns)']) / 1000:.3f}"
+                    ),
+                    "Avg (us)": f"{float(row['Avg (ns)']) / 1000:.3f}",
+                    "Max (us)": f"{float(row['Max (ns)']) / 1000:.3f}",
+                    "StdDev (us)": f"{float(row['StdDev (ns)']) / 1000:.3f}",
+                    "Name": row["Name"],
+                }
+            )
 
     widths = {
         column: max(
@@ -263,25 +283,22 @@ def print_gpu_kern_summary(filename):
         for column in columns
     }
 
-    flucsprint("\nSummary of kernel execution:\n")
+    flucsprint("GPU kernel execution summary (Nsight Systems)\n")
 
-    flucsprint("  ".join(
-        f"{column:<{widths[column]}}"
-        for column in columns
-    ))
+    flucsprint("  ".join(f"{column:<{widths[column]}}" for column in columns))
 
-    flucsprint("  ".join(
-        "-" * widths[column]
-        for column in columns
-    ))
+    flucsprint("  ".join("-" * widths[column] for column in columns))
 
     for row in rows:
-        flucsprint("  ".join(
-            f"{row[column]:>{widths[column]}}"
-            if column != "Name"
-            else f"{row[column]:<{widths[column]}}"
-            for column in columns
-        ))
+        flucsprint(
+            "  ".join(
+                f"{row[column]:>{widths[column]}}"
+                if column != "Name"
+                else f"{row[column]:<{widths[column]}}"
+                for column in columns
+            )
+        )
+
 
 def write_default_input(system_name: str, io_path: pl.Path):
     """
@@ -407,10 +424,13 @@ def main():
         nargs="?",
         type=int,
         metavar="STEPS_TO_TIME",
-        const=100,
+        const=1000,
         default=False,
         required=False,
-        help="Runs STEPS_TO_TIME time steps (default is 100) then exits. No output is produced.",
+        help=(
+            "Runs STEPS_TO_TIME time steps (default of 1000) then exits. "
+            "No output is produced."
+        ),
     )
 
     operation_modes.add_argument(
@@ -470,7 +490,7 @@ def main():
     if args.timing:
         # Run under nsys
         if os.environ.get("FLUCS_UNDER_NSYS") != "1":
-            run_under_nsys(io_path)
+            run_flucs_under_nsys(io_path)
             return
 
         args.run = True
