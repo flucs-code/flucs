@@ -102,10 +102,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             return False
 
         if self.state == FlucsSolverState.TIMING:
-            return (
-                self.system.current_step
-                < self.timing_steps
-            )
+            return self.system.current_step < self.timing_steps
 
         return self.system.current_time < self.system.final_time
 

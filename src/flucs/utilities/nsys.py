@@ -4,7 +4,7 @@ import pathlib as pl
 
 def format_nsys_gpu_kernel_summary(filepath: pl.Path) -> str:
     """
-    Formats a summary of GPU kernel execution from NVIDIA Nsight Systems 
+    Formats a summary of GPU kernel execution from NVIDIA Nsight Systems
     .csv output.
 
     Parameters

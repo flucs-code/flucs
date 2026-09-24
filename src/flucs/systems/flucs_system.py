@@ -163,9 +163,7 @@ class FlucsSystem(ABC):
         self.tolerance = self.precision_tolerance(self.float)
 
         # Print precision info
-        flucsprint(
-            f"Precision: {str(self.input['setup.precision'])}"
-        )
+        flucsprint(f"Precision: {self.input['setup.precision']}")
 
     def add_output(self, output: FlucsOutput):
         if self.output_heap is None:
