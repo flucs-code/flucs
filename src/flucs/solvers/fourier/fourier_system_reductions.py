@@ -730,9 +730,6 @@ class FourierReductions:
         if nshells < 1:
             raise ValueError("nshells must be positive.")
 
-        if nshells > self.system.cuda_block_size:
-            raise ValueError("nshells must not exceed system.cuda_block_size.")
-
         if not shell_max > shell_min:
             raise ValueError("shell_max must be larger than shell_min.")
 

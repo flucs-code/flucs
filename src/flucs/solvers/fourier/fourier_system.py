@@ -529,16 +529,10 @@ class FourierSystem(FlucsSystem):
         kperp_max += dkperp  # Adding padding for diagonal
 
         # Number of kperp shells
-        nkperp_from_dkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
-        nkperp = min(nkperp_from_dkperp, self.cuda_block_size)
+        nkperp = int(np.ceil((kperp_max - kperp_min) / dkperp))
 
         # Maximum kperp from bin width
-        bin_width = self.float(
-            dkperp
-            if nkperp_from_dkperp <= self.cuda_block_size
-            else (kperp_max - kperp_min) / nkperp
-        )
-
+        bin_width = self.float(dkperp)
         kperp_max = self.float(kperp_min + nkperp * bin_width)
 
         # kperp grid
@@ -591,16 +585,10 @@ class FourierSystem(FlucsSystem):
         kmod_max += dkmod  # Adding padding for diagonal
 
         # Number of kmod shells
-        nkmod_from_dkmod = int(np.ceil((kmod_max - kmod_min) / dkmod))
-        nkmod = min(nkmod_from_dkmod, self.cuda_block_size)
+        nkmod = int(np.ceil((kmod_max - kmod_min) / dkmod))
 
         # Maximum kmod from bin width
-        bin_width = self.float(
-            dkmod
-            if nkmod_from_dkmod <= self.cuda_block_size
-            else (kmod_max - kmod_min) / nkmod
-        )
-
+        bin_width = self.float(dkmod)
         kmod_max = self.float(kmod_min + nkmod * bin_width)
 
         # kmod grid
@@ -2424,7 +2412,7 @@ class FourierSystem(FlucsSystem):
 
         # Print starting message
         flucsprint(
-            f"Starting at time {float(self.init_time):.3e}, "
+            f"\nStarting at time {float(self.init_time):.3e}, "
             f"dt {float(self.init_dt):.3e}"
         )
 
