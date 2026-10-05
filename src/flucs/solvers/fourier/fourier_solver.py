@@ -97,15 +97,6 @@ class FourierSolver(FlucsSolver[FourierSystem]):
             f"({self.system.current_step} steps).\n"
         )
 
-    def _not_done(self) -> bool:
-        if self.interrupted:
-            return False
-
-        if self.state == FlucsSolverState.TIMING:
-            return self.system.current_step < self.timing_steps
-
-        return self.system.current_time < self.system.final_time
-
     def _solver_loop(self) -> float:
         if self.interrupted:
             return 0.0
