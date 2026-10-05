@@ -288,7 +288,7 @@ class FourierSystem(FlucsSystem):
             f"({self.dealiasing_truncation}, {memory_model})"
         )
         message += (
-            " \nEquivalent unpadded grid: (nz, nx, ny) = "
+            " \nEffective solved grid: (nz, nx, ny) = "
             f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
         )
 
