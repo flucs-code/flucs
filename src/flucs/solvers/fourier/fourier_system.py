@@ -2916,7 +2916,7 @@ class FourierSystem(FlucsSystem):
         # Compute
         self.compute_linear_matrix_kernel(
             self.float(dt),
-            self.float(time),
+            self.time_float(time),
             self.int(step),
             linear_matrix_cupy,
         )
@@ -3051,7 +3051,7 @@ class FourierSystem(FlucsSystem):
         # Compute
         self.compute_propagator_global_kernel(
             self.float(dt),
-            self.float(time),
+            self.time_float(time),
             self.int(step),
             propagator_cupy,
         )
