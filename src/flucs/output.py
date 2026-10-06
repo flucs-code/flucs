@@ -355,9 +355,7 @@ class FlucsOutputNC(FlucsOutput):
             self.group_name = str(self.group_number)
             group = dataset.createGroup(self.group_name)
             group.createDimension("time", None)
-            group.createVariable(
-                "time", "f8", ("time",)
-            )
+            group.createVariable("time", "f8", ("time",))
             group.createVariable("dt", self.system.netcdf_precision, ("time",))
 
             # Set attributes
