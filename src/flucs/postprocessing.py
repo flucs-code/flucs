@@ -77,7 +77,7 @@ class FlucsPostProcessing:
             for script in sorted(
                 shared_scripts_dir.glob("*.py"), key=lambda p: p.name.lower()
             ):
-                # Ignore scripts with a leading underscore to allow for 
+                # Ignore scripts with a leading underscore to allow for
                 # private scripts that are not intended to be run directly.
                 if script.name.startswith("_"):
                     continue
