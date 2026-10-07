@@ -77,6 +77,11 @@ class FlucsPostProcessing:
             for script in sorted(
                 shared_scripts_dir.glob("*.py"), key=lambda p: p.name.lower()
             ):
+                # Ignore scripts with a leading underscore to allow for 
+                # private scripts that are not intended to be run directly.
+                if script.name.startswith("_"):
+                    continue
+
                 # A None type name keeps shared scripts outside the labelled
                 # solver and system groups when the paths are printed.
                 self._script_paths.append(
@@ -105,6 +110,9 @@ class FlucsPostProcessing:
                 for script in sorted(
                     scripts_dir.glob("*.py"), key=lambda p: p.name.lower()
                 ):
+                    if script.name.startswith("_"):
+                        continue
+
                     self._script_paths.append(
                         (len(self._script_paths), type_name, pl.Path(script))
                     )
