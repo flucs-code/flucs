@@ -43,7 +43,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 __device__ void add_explicit_terms(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,
@@ -132,7 +132,7 @@ __device__ void add_explicit_terms(
 // terms to find the fields at the current time step.
 __global__ void finish_step(
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_FLOAT AB0,
     const FLUCS_FLOAT AB1,

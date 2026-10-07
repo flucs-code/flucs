@@ -127,7 +127,7 @@ class FourierSystem(FlucsSystem):
     compute_propagator_global_kernel: KernelWrapper
     compute_solved_grid_mask_kernel: KernelWrapper
     compute_hyperdissipation_components_kmax_kernel: KernelWrapper
-    cuda_block_size: int = 512
+    cuda_block_size: int = 256
 
     # CUDA grids
     half_cuda_grid_size: int
@@ -288,7 +288,7 @@ class FourierSystem(FlucsSystem):
             f"({self.dealiasing_truncation}, {memory_model})"
         )
         message += (
-            " \nEquivalent unpadded grid: (nz, nx, ny) = "
+            " \nEffective solved grid: (nz, nx, ny) = "
             f"({self.nz_unpadded}, {self.nx_unpadded}, {self.ny_unpadded})"
         )
 
@@ -2916,7 +2916,7 @@ class FourierSystem(FlucsSystem):
         # Compute
         self.compute_linear_matrix_kernel(
             self.float(dt),
-            self.float(time),
+            self.time_float(time),
             self.int(step),
             linear_matrix_cupy,
         )
@@ -3051,7 +3051,7 @@ class FourierSystem(FlucsSystem):
         # Compute
         self.compute_propagator_global_kernel(
             self.float(dt),
-            self.float(time),
+            self.time_float(time),
             self.int(step),
             propagator_cupy,
         )

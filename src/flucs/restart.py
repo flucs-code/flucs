@@ -123,12 +123,12 @@ class FlucsRestart:
         with Dataset(self.initial_path, "r") as ds:
             # Set system's time variables to continue from the restart file
             system.init_time = (
-                self.system.float(ds.variables["current_time"][...])
+                self.system.time_float(ds.variables["current_time"][...])
                 if not system.input["restart.reset_time"]
-                else self.system.float(0.0)
+                else self.system.time_float(0.0)
             )
             system.init_dt = self.system.float(ds.variables["current_dt"][...])
-            system.final_time = system.init_time + self.system.float(
+            system.final_time = system.init_time + self.system.time_float(
                 system.input["time.tfinal"]
             )
 
@@ -332,9 +332,9 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable("current_time", self.system.netcdf_precision, ())[
-                ...
-            ] = self.system.float(self.system.current_time)
+            ds.createVariable("current_time", "f8", ())[...] = (
+                self.system.time_float(self.system.current_time)
+            )
 
             ds.createVariable("current_dt", self.system.netcdf_precision, ())[
                 ...

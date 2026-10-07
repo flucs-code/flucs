@@ -40,30 +40,31 @@ class FlucsSystem(ABC):
 
     # Float and complex types
     float: type
+    time_float: type
     complex: type
     int: type
     netcdf_precision: str
-    tolerance: float
+    tolerance: np.float32 | np.float64
 
     # Naming convention for complex variables stored in NetCDF files
     _netcdf_real_suffix: ClassVar[str] = "_real"
     _netcdf_imag_suffix: ClassVar[str] = "_imag"
 
     # Variables to that keep track of time
-    current_step: int
-    current_dt: float
-    current_time: float
-    final_time: float
+    current_step: np.int64
+    current_dt: np.float32 | np.float64
+    current_time: np.float64
+    final_time: np.float64
 
-    init_time: float
-    init_dt: float
+    init_time: np.float64
+    init_dt: np.float32 | np.float64
 
     # Variables to estimate wall time until completion
     initial_wallclock_time: datetime.datetime
     # self.current_time of the last wall-time estimate
-    time_to_finish_last_time: float
+    time_to_finish_last_time: np.float64
     # self.current_step of the last wall-time estimate
-    time_to_finish_last_step: int
+    time_to_finish_last_step: np.int64
 
     # Restart manager
     restart_manager: FlucsRestart
@@ -83,7 +84,7 @@ class FlucsSystem(ABC):
 
     # A priority queue of outputs
     output_heap: list[FlucsOutput] | None = None
-    steps_until_next_write: int
+    steps_until_next_write: np.int64
 
     # A dict of supported diagnostics
     diags: dict[str, type[FlucsDiagnostic]]
@@ -159,6 +160,10 @@ class FlucsSystem(ABC):
         # We always use 64-bit integers
         self.int = np.int64
 
+        # Accumumated time variables (current_time, init_time, etc)
+        # are always stored as double
+        self.time_float = np.float64
+
         # Get float error tolerance
         self.tolerance = self.precision_tolerance(self.float)
 
@@ -227,9 +232,9 @@ class FlucsSystem(ABC):
 
         """
 
-        self.init_time = self.float(0.0)
+        self.init_time = self.time_float(0.0)
         self.init_dt = self.float(self.input["time.dt_max"])
-        self.final_time = self.float(self.input["time.tfinal"])
+        self.final_time = self.time_float(self.input["time.tfinal"])
 
         self.restart_manager = FlucsRestart(self)
 
@@ -286,6 +291,10 @@ class FlucsSystem(ABC):
 
         # No initial_wallclock_time means no estimate
         if not hasattr(self, "initial_wallclock_time"):
+            return
+
+        # If we are done, don't print anything
+        if not self.solver._not_done():
             return
 
         # Check whether it's time to print

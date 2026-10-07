@@ -72,7 +72,7 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
 __device__ void get_explicit_terms(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
     const FLUCS_COMPLEX previous_stage_global[NUMBER_OF_FIELDS][HALFSIZE],
@@ -106,7 +106,7 @@ __device__ void get_explicit_terms(
 template<int stage>
 __global__ void finish_stage(
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
