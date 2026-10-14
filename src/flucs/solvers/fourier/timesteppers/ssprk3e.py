@@ -5,7 +5,9 @@ from flucs.utilities.cupy import KernelWrapper
 from flucs.utilities.messages import flucsprint
 
 
-class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
+class FourierSSPRK3ETimestepper(FlucsTimestepper[FourierSystem]):
+    """Isherwood--Grant--Gottlieb eSSPRK+(3,3) timestepper."""
+
     is_nonlinear: bool
 
     precompute_iteration_matrices_kernel: KernelWrapper
@@ -47,12 +49,14 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
             self.stage_fields.append(self.stage_fields[0])
 
     def precompute_iteration_matrices(self):
+        """Precompute the linear propagators for the current timestep."""
+
         self.precompute_iteration_matrices_kernel(
             self.system.float(self.system.current_dt)
         )
 
     def setup_cuda_definitions(self):
-        self.system.module_options.define_flag("SSPRK33PLUS")
+        self.system.module_options.define_flag("SSPRK3E")
 
         self.system.module_options.define_flag(
             "LINEAR_PADE_DEGREE",
@@ -64,6 +68,8 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
             self.system.module_options.define_flag("PRECOMPUTE_LINEAR_MATRIX")
 
     def register_kernels(self) -> None:
+        """Register the three stage kernels and optional precompute kernel."""
+
         if self.system.input["timestepping.precompute_linear_matrix"]:
             self.precompute_iteration_matrices_kernel = KernelWrapper(
                 system=self.system,
@@ -98,7 +104,7 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
         current_fields = system.get_fields()
         previous_fields = system.get_fields(1)
 
-        # Stage 1
+        # Stage 1: evaluate at t_n and advance to t_n + 2*dt/3
         if self.is_nonlinear:
             system.cfl_rate[0] = 0
             system.compute_nonlinear_terms(
@@ -113,6 +119,7 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
             if system._update_dt():
                 self.precompute_iteration_matrices()
 
+        # Prepare any explicit forcing once for the complete timestep
         system.prepare_forcing()
 
         self.finish_stage1_kernel(
@@ -126,7 +133,7 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
             current_fields,
         )
 
-        # Stage 2
+        # Stage 2: evaluate and form a new state at t_n + 2*dt/3
         if self.is_nonlinear:
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
@@ -147,7 +154,7 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
             current_fields,
         )
 
-        # Stage 3
+        # Stage 3: evaluate at t_n + 2*dt/3 and finish at t_n + dt
         if self.is_nonlinear:
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
@@ -175,4 +182,4 @@ class FourierSSPRK33PlusTimestepper(FlucsTimestepper[FourierSystem]):
 
     def __str__(self):
         dt_method = self.system.input["time.dt_method"]
-        return f"Isherwood-Grant-Gottlieb (2018) eSSPRK+(3,3) ({dt_method})"
+        return f"Isherwood-Grant-Gottlieb eSSPRK+(3,3) ({dt_method})"

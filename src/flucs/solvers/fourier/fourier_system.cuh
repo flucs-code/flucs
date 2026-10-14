@@ -398,6 +398,6 @@ __global__ void compute_propagator_global(
 #include "flucs/solvers/fourier/timesteppers/ssprk3.cuh"
 #endif
 
-#ifdef SSPRK33PLUS
-#include "flucs/solvers/fourier/timesteppers/ssprk33plus.cuh"
+#ifdef SSPRK3E
+#include "flucs/solvers/fourier/timesteppers/ssprk3e.cuh"
 #endif

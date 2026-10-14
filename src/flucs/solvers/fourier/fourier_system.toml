@@ -75,7 +75,7 @@ memory = "standard"
 check_errors = false
 
 [timestepping]
-# Currently supported are ab3, rk4, ssprk3, and ssprk33plus.
+# Currently supported are ab3, rk4, ssprk3, and ssprk3e.
 method = "ab3"
 
 # Degree N of the [N,N] Pade approximant for the linear propagator

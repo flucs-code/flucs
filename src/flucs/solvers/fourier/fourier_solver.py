@@ -20,7 +20,7 @@ from flucs.utilities.messages import (
 from .timesteppers.ab3 import FourierAB3Timestepper
 from .timesteppers.rk4 import FourierRK4Timestepper
 from .timesteppers.ssprk3 import FourierSSPRK3Timestepper
-from .timesteppers.ssprk33plus import FourierSSPRK33PlusTimestepper
+from .timesteppers.ssprk3e import FourierSSPRK3ETimestepper
 
 
 class FourierSolver(FlucsSolver[FourierSystem]):
@@ -35,7 +35,7 @@ class FourierSolver(FlucsSolver[FourierSystem]):
         "ab3": FourierAB3Timestepper,
         "rk4": FourierRK4Timestepper,
         "ssprk3": FourierSSPRK3Timestepper,
-        "ssprk33plus": FourierSSPRK33PlusTimestepper,
+        "ssprk3e": FourierSSPRK3ETimestepper,
     }
 
     def setup_cuda_definitions(self) -> None:
