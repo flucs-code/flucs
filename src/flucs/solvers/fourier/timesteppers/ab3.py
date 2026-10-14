@@ -114,7 +114,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
             system.cfl_rate[0] = 0
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
-                system.float(system.current_time),
+                system.time_float(system.current_time),
                 system.int(system.current_step),
                 previous_fields,
                 True,
@@ -130,7 +130,7 @@ class FourierAB3Timestepper(FlucsTimestepper[FourierSystem]):
 
         self.finish_step_kernel(
             system.float(system.current_dt),
-            system.float(system.current_time),
+            system.time_float(system.current_time),
             system.int(system.current_step),
             self.ab3_coefficients[0],
             self.ab3_coefficients[1],

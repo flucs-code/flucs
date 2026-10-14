@@ -69,8 +69,8 @@ class FlucsOutput(ABC):
     diagnostics: list[FlucsDiagnostic]
 
     # Cache of times and dts at which data was saved
-    time_cache: list[float]
-    dt_cache: list[float]
+    time_cache: list[np.float64]
+    dt_cache: list[np.float32 | np.float64]
 
     def __new__(cls, name: str, system: FlucsSystem):
         output_type = system.input[f"output.{name}.type"]
@@ -356,7 +356,7 @@ class FlucsOutputNC(FlucsOutput):
             group = dataset.createGroup(self.group_name)
             group.createDimension("time", None)
             group.createVariable(
-                "time", self.system.netcdf_precision, ("time",)
+                "time", "f8", ("time",)
             )
             group.createVariable("dt", self.system.netcdf_precision, ("time",))
 

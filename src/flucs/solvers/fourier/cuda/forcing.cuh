@@ -221,7 +221,7 @@ __global__ void update_ornstein_uhlenbeck_forcing(
 __device__ void add_forcing_explicit(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]

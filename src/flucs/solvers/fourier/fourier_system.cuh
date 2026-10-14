@@ -51,7 +51,7 @@ extern "C" {
 // Must be implemented by the user.
 __device__ void get_linear_matrix(const size_t index,
                                   const FLUCS_FLOAT dt,
-                                  const FLUCS_FLOAT current_time,
+                                  const double current_time,
                                   const long long current_step,
                                   FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 
@@ -60,7 +60,7 @@ __device__ void get_linear_matrix(const size_t index,
 __device__ void add_nonlinear_terms(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX dft_bits_global[NUMBER_OF_DFT_BITS][HALFSIZE],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
@@ -74,7 +74,7 @@ __device__ void add_nonlinear_terms(
 __device__ void add_forcing_explicit(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_forcing[NUMBER_OF_FIELDS],
     FLUCS_COMPLEX explicit_terms[NUMBER_OF_FIELDS]);
@@ -84,7 +84,7 @@ __device__ void add_forcing_explicit(
 __device__ void add_forcing_linear(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]);
 #endif
@@ -98,7 +98,7 @@ __device__ __forceinline__
 void get_linear_matrix_wrapped(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_FLOAT scale,
     FLUCS_COMPLEX matrix[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
@@ -124,7 +124,7 @@ void get_linear_matrix_wrapped(
 // (NUMBER_OF_FIELDS, NUMBER_OF_FIELDS, index).
 __global__ void compute_linear_matrix(
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     FLUCS_COMPLEX linear_matrix_global[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE])
 {
@@ -188,7 +188,7 @@ void add_hyperdissipation(
 __device__ void complete_timestep_stage(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     FLUCS_COMPLEX fields[NUMBER_OF_FIELDS]
 );
@@ -196,7 +196,7 @@ __device__ void complete_timestep_stage(
 __device__ __forceinline__ void complete_timestep_stage(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     FLUCS_COMPLEX fields[NUMBER_OF_FIELDS]
 ) {}
@@ -209,7 +209,7 @@ __device__ __forceinline__
 void complete_finish_step(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
@@ -219,7 +219,7 @@ __device__ __forceinline__
 void complete_finish_step(
     const size_t index,
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_COMPLEX previous_fields_global[NUMBER_OF_FIELDS][HALFSIZE],
     FLUCS_COMPLEX current_fields_global[NUMBER_OF_FIELDS][HALFSIZE]
@@ -304,7 +304,7 @@ template<bool include_hyperdissipation = true>
 __device__ __forceinline__ void compute_propagator(
     const size_t index,
     const FLUCS_FLOAT propagator_dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     const FLUCS_FLOAT adaptive_rate,
     FLUCS_COMPLEX propagator[NUMBER_OF_FIELDS][NUMBER_OF_FIELDS]
@@ -342,7 +342,7 @@ __global__ void compute_solved_grid_mask(
 // padded modes zero.
 __global__ void compute_propagator_global(
     const FLUCS_FLOAT dt,
-    const FLUCS_FLOAT current_time,
+    const double current_time,
     const long long current_step,
     FLUCS_COMPLEX propagator_global
         [NUMBER_OF_FIELDS][NUMBER_OF_FIELDS][HALFSIZE]
