@@ -293,6 +293,10 @@ class FlucsSystem(ABC):
         if not hasattr(self, "initial_wallclock_time"):
             return
 
+        # If we are done, don't print anything
+        if not self.solver._not_done():
+            return
+
         # Check whether it's time to print
         write_steps = self.input["output.write_steps"]
         time_estimate_writes = self.input["setup.time_estimate_writes"]

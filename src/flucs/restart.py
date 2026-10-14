@@ -332,9 +332,9 @@ class FlucsRestart:
             input_file_var[...] = str(self.system.input)
 
             # Scalar values
-            ds.createVariable("current_time", "f8", ())[
-                ...
-            ] = self.system.time_float(self.system.current_time)
+            ds.createVariable("current_time", "f8", ())[...] = (
+                self.system.time_float(self.system.current_time)
+            )
 
             ds.createVariable("current_dt", self.system.netcdf_precision, ())[
                 ...

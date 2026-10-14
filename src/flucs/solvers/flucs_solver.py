@@ -92,6 +92,15 @@ class FlucsSolver(Generic[T_System], ABC):
         signal.signal(signal.SIGUSR1, signal_handler)
         signal.signal(signal.SIGUSR2, signal_handler)
 
+    def _not_done(self) -> bool:
+        if self.interrupted:
+            return False
+
+        if self.state == FlucsSolverState.TIMING:
+            return self.system.current_step < self.timing_steps
+
+        return self.system.current_time < self.system.final_time
+
 
 class FlucsTimestepper(Generic[T_System], ABC):
     solver: FlucsSolver[T_System]
