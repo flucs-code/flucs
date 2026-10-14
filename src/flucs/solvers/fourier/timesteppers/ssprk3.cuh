@@ -34,7 +34,6 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // propagator_half_precomp_global[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
             propagator_half_precomp_global[i][j][index] = propagator[i][j];
         }
     }
@@ -45,7 +44,6 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // propagator_full_precomp[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
             propagator_full_precomp_global[i][j][index] = propagator[i][j];
         }
     }
@@ -58,7 +56,6 @@ __global__ void precompute_iteration_matrices(const FLUCS_FLOAT dt){
     for (int i = 0; i < NUMBER_OF_FIELDS; i++){
         #pragma unroll
         for (int j = 0; j < NUMBER_OF_FIELDS; j++){
-            // propagator_minus_half_precomp[index + HALFSIZE*(j + NUMBER_OF_FIELDS*i)] = propagator[i][j];
             propagator_minus_half_precomp_global[i][j][index] = propagator[i][j];
         }
     }
