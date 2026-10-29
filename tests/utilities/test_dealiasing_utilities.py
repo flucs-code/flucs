@@ -14,6 +14,27 @@ from flucs.utilities import dealiasing
 ################################################################################
 
 # ------------------------------------------------------------------------------
+# Smooth numbers
+# ------------------------------------------------------------------------------
+
+@pytest.mark.cpu
+@pytest.mark.parametrize(
+    ("n", "primes", "expected"),
+    [
+        pytest.param(0, None, 1, id="lower-boundary"),
+        pytest.param(9, None, 9, id="already-smooth"),
+        pytest.param(10, None, 12, id="next-smooth"),
+        pytest.param(13, None, 16, id="exclude-other-primes"),
+        pytest.param(121, [2, 3, 5], 125, id="custom-primes"),
+    ],
+)
+def test_next_smooth_number(n, primes, expected):
+    """
+    Find the smallest permitted smooth number at or above the input.
+    """
+    assert dealiasing.next_smooth_number(n, primes) == expected
+
+# ------------------------------------------------------------------------------
 # Padded multiplication
 # ------------------------------------------------------------------------------
 
