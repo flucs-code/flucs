@@ -150,12 +150,18 @@ def dealiased_multiplication_rfft(*args, **kwargs):
         # Transform each padded field
         # and multiply it into the real-space product
         product *= cp_np.fft.irfftn(
-            padded_array, s=(padded_nz, padded_nx, padded_ny), norm="forward"
+            padded_array,
+            s=(padded_nz, padded_nx, padded_ny),
+            axes=(0, 1, 2),
+            norm="forward",
         )
 
     # Transform the product back to the padded Fourier grid
     product_rfft_padded = cp_np.fft.rfftn(
-        product, norm="forward", s=(padded_nz, padded_nx, padded_ny)
+        product,
+        s=(padded_nz, padded_nx, padded_ny),
+        axes=(0, 1, 2),
+        norm="forward",
     )
 
     # Crop the same four Fourier-space corners back to the original grid
