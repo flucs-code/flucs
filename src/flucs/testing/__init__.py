@@ -21,8 +21,8 @@ def create_test_system(source_input, io_path, *, override=None):
         Source input file.
     io_path : pathlib.Path or str
         Isolated input/output directory. Files are not removed after exit.
-    override : list, optional
-        Usual --override argument to FlucsInput.
+    override : dict, optional
+        Dotted parameter names mapped to their replacement values.
 
     Yields
     ------
@@ -33,6 +33,12 @@ def create_test_system(source_input, io_path, *, override=None):
     system : FlucsSystem
         Constructed system, linked to the solver.
     """
+
+    # Convert the dictionary to the override format accepted by FlucsInput.
+    override_args = []
+    if override is not None:
+        for parameter, value in override.items():
+            override_args.extend([parameter, value])
 
     # Copy the input without replacing an existing case.
     io_path = pl.Path(io_path)
@@ -57,7 +63,7 @@ def create_test_system(source_input, io_path, *, override=None):
     # Attempt to construct the solver and system, then cleanup
     system = None
     try:
-        flucs_input = FlucsInput(input_path, override)
+        flucs_input = FlucsInput(input_path, override_args)
         solver, system = flucs_input.create_solver_system()
         yield flucs_input, solver, system
     finally:

@@ -1,0 +1,15 @@
+[setup]
+solver = "FourierSolver"
+system = "TestFourierSystem"
+check_linear_matrix = false
+
+[dimensions]
+nz = 12
+nx = 12
+ny = 12
+
+[dealiasing]
+check_errors = true
+
+[forcing]
+method = ""
