@@ -45,6 +45,10 @@ docs = [
 [tool.ruff]
 line-length = 80
 
+[tool.pytest.ini_options]
+addopts = "--strict-markers -m 'not slow'"
+testpaths = ["tests"]
+
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"

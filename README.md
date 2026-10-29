@@ -94,6 +94,8 @@ $ pip install -e .[cuda13] --group dev
 
 The `dev` group will be installed automatically when installing with `uv sync`.
 
+### Formatting
+
 The project is formatted and linted using [Ruff](https://docs.astral.sh/ruff/). 
 It is recommended that developers make use of these tools, as any pull-requests 
 failing these checks will be blocked from merging.
@@ -113,3 +115,38 @@ $ ruff check <path to file> [--fix]
 The `--fix` flag is optional, and will automatically correct many issues. Note that 
 both the `format` and `check` commands will also apply recursively if run on a directory 
 (such as `flucs/src`). 
+
+### Testing
+
+Tests use the `cpu`, `gpu`, and `slow` markers. A plain `pytest` runs all
+tests except slow ones. GPU tests are skipped if a CUDA device is
+unavailable (checked once per session before GPU tests
+execute).
+
+```console
+$ pytest
+$ pytest -m cpu
+$ pytest -m "gpu and not slow"
+$ pytest -m slow
+$ pytest -m ""
+```
+
+An explicit `-m` replaces the default `not slow` selection. For example,
+`-m gpu` includes slow GPU tests, and `-m ""` selects all tests.
+
+System and solver repositories can load the same support in `tests/conftest.py`:
+
+```python
+pytest_plugins = ["flucs.testing.pytest_plugin"]
+```
+
+To use the same defaults, add this to that repository's `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+addopts = "--strict-markers -m 'not slow'"
+testpaths = ["tests"]
+```
+
+Tests should be marked explicitly, for example with `@pytest.mark.gpu`. Pytest is only required when running
+tests, not when importing the construction helper or running FLUCS.
