@@ -268,17 +268,6 @@ __global__ void finish_stage(
         compute_propagator(index, dt, current_time, current_step, adaptive_rate, propagator_full);
     }
 
-    // // Half propagator needed if stage < 4
-    // if constexpr (stage < 4) {
-    //     compute_propagator(index, (FLUCS_FLOAT)(dt/2.0), current_time, current_step, propagator_half);
-    // }
-    //
-    // // Full propagator needed if stage == 1 or 3
-    // if constexpr (stage == 1 || stage == 3) {
-    //     compute_propagator(index, dt, current_time, current_step, propagator_full);
-    // }
-
-
 #endif // PRECOMPUTE_LINEAR_MATRIX
 
     // Stage 1

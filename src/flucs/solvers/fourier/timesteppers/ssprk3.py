@@ -1,3 +1,12 @@
+"""
+WARNING:
+
+This timestepper uses integrating factors with backward-in-time propagators
+which break the SSP property and may be numerically unstable.
+For a 3rd-order RK scheme, ssprk3e is the preferred by default.
+
+"""
+
 from flucs import cupy as cp
 from flucs.solvers import FlucsSolver, FlucsTimestepper
 from flucs.solvers.fourier.fourier_system import FourierSystem
