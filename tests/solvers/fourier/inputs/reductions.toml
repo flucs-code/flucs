@@ -1,0 +1,22 @@
+[setup]
+solver = "FourierSolver"
+system = "TestFourierSystem"
+linear = true
+check_linear_matrix = false
+
+[dimensions]
+nz = 13
+nx = 14
+ny = 19
+Lz = 6.283185307179586
+Lx = 12.566370614359172
+Ly = 18.84955592153876
+
+[dealiasing]
+method = "two-thirds"
+
+[forcing]
+method = ""
+
+[restart]
+write_restart_file = false
