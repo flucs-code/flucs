@@ -76,6 +76,10 @@ check_errors = false
 
 [timestepping]
 # Currently supported are ab3, rk4, ssprk3, and ssprk3e.
+#
+# WARNING: ssprk3 uses integrating factors with backward-in-time propagators
+# which break the SSP property and may be numerically unstable.
+# For a 3rd-order RK scheme, ssprk3e is the preferred by default.
 method = "ab3"
 
 # Degree N of the [N,N] Pade approximant for the linear propagator
