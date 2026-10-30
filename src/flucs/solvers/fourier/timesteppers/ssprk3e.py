@@ -138,9 +138,8 @@ class FourierSSPRK3ETimestepper(FlucsTimestepper[FourierSystem]):
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
                 system.time_float(
-                    system.current_time + system.time_float(
-                        2 / 3 * system.current_dt
-                    )
+                    system.current_time
+                    + system.time_float(2 / 3 * system.current_dt)
                 ),
                 system.int(system.current_step),
                 self.stage_fields[1],
@@ -163,9 +162,8 @@ class FourierSSPRK3ETimestepper(FlucsTimestepper[FourierSystem]):
             system.compute_nonlinear_terms(
                 system.float(system.current_dt),
                 system.time_float(
-                    system.current_time + system.time_float(
-                        2 / 3 * system.current_dt
-                    )
+                    system.current_time
+                    + system.time_float(2 / 3 * system.current_dt)
                 ),
                 system.int(system.current_step),
                 self.stage_fields[0],
