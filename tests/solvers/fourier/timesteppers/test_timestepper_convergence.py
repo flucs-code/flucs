@@ -157,7 +157,7 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
 
 @pytest.mark.parametrize(
     ("method", "expected_order"),
-    [("rk4", 4), ("ssprk3", 3), ("ab3", 3)],
+    [("rk4", 4), ("ssprk3", 3), ("ssprk3e", 3), ("ab3", 3)],
 )
 def test_timestepper_convergence(
     baseline_fourier_state,
