@@ -160,8 +160,8 @@ class FlucsSystem(ABC):
         # We always use 64-bit integers
         self.int = np.int64
 
-        # Accumumated time variables (current_time, init_time, etc)
-        # are always stored as double
+        # Accumulated time variables (current_time, init_time, etc.)
+        # are always stored as double.
         self.time_float = np.float64
 
         # Get float error tolerance
