@@ -1,0 +1,44 @@
+[setup]
+solver = "FourierSolver"
+system = "TestFourierSystem"
+precision = "single"
+check_linear_matrix = false
+
+[dimensions]
+nz = 32
+nx = 32
+ny = 32
+
+[dealiasing]
+method = "two-thirds"
+
+[time]
+tfinal = 100.0
+dt_max = 0.02
+max_cfl = 0.2
+dt_method = "continuous"
+
+[timestepping]
+method = "ssprk3"
+
+[parameters]
+advection = [0.3, 0.5, -0.1]
+rotation = [0.2, 0.1, 0.2]
+
+[init]
+method = "deterministic"
+amplitude = 0.01
+
+[forcing]
+method = "negative_damping"
+rate = 0.05
+range_kmod = [0.5, 2.5]
+
+[hyperdissipation]
+kmod = 1.0
+kmod_power = 3
+kmod_adaptive = true
+kmod_normalised = true
+
+[restart]
+write_restart_file = false
