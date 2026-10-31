@@ -11,6 +11,48 @@ import pytest
 from flucs.testing import create_test_system
 
 ################################################################################
+# Helpers
+################################################################################
+
+
+def record_timesteps(system, monkeypatch):
+    """
+    Record timesteps selected by the production CFL controller.
+    """
+    timesteps = []
+    update_dt = system._update_dt
+
+    def record_current_dt():
+        dt_changed = update_dt()
+        timesteps.append(float(system.current_dt))
+        return dt_changed
+
+    monkeypatch.setattr(system, "_update_dt", record_current_dt)
+    return timesteps
+
+
+def set_reference_timesteps(solver, timesteps, monkeypatch):
+    """
+    Set the timesteps used by the reference run.
+    """
+    system = solver.system
+
+    def set_current_dt():
+        # The solver increments current_step before selecting dt.
+        system.current_dt = system.float(timesteps[system.current_step - 1])
+        return True
+
+    # Setup binds this controller for the continuous reference run.
+    monkeypatch.setattr(
+        system, "_compute_current_dt_continuous", set_current_dt
+    )
+    # Stop by step count rather than a rounded sum of the timesteps.
+    monkeypatch.setattr(
+        solver, "_not_done", lambda: system.current_step < len(timesteps)
+    )
+
+
+################################################################################
 # Tests
 ################################################################################
 
@@ -153,7 +195,7 @@ def test_linear_evolution(
         kmod_squared = kz**2 + kperp_squared
         damping_rate = (
             nu_z * kz**4
-            + nu_x * (kx / kx_max)**2
+            + nu_x * (kx / kx_max) ** 2
             + nu_y * ky**6
             + nu_perp * kperp_squared**2
             + nu_mod * kmod_squared / kmod_max_squared
@@ -216,6 +258,7 @@ def test_linear_evolution(
 def test_nonlinear_evolution(
     test_fourier_system,
     tmp_path,
+    monkeypatch,
     precision,
     precompute,
 ):
@@ -223,32 +266,34 @@ def test_nonlinear_evolution(
     Evolve TestFourierSystem nonlinearly with forcing and damping
     """
     source_input = pl.Path(__file__).parents[2] / "support/fourier/runtime.toml"
-    dt = 1 / 128
+    dt_max = 1 / 128
     final_time = 0.5
+    hyperdissipation = 1.0
 
-    # Set a nonlinear run with fixed, binary-exact timesteps.
+    # Set a nonlinear run with CFL-limited timesteps and adaptive dissipation.
     override = {
         # Setup
         "setup.precision": precision,
         "setup.linear": False,
         # Time
-        "time.dt_max": dt,
+        "time.dt_max": dt_max,
         "time.tfinal": final_time,
+        "time.max_cfl": 0.04,
+        "time.dt_mult_steps": 4,
+        "time.dt_method": "discrete" if precompute else "continuous",
         # Timestepping
         "timestepping.method": "ssprk3e",
         "timestepping.precompute_linear_matrix": precompute,
-        # Time
-        "time.dt_method": "discrete" if precompute else "continuous",
         # Init
         "init.amplitude": 0.25,
         # Forcing
         "forcing.method": "negative_damping",
         "forcing.rate": 0.1,
         # Hyperdissipation
-        "hyperdissipation.kmod": 0.05,
-        "hyperdissipation.kmod_power": 1,
-        "hyperdissipation.kmod_normalised": False,
-        "hyperdissipation.kmod_adaptive": False,
+        "hyperdissipation.kmod": hyperdissipation,
+        "hyperdissipation.kmod_power": 3,
+        "hyperdissipation.kmod_normalised": True,
+        "hyperdissipation.kmod_adaptive": True,
         # Output
         "output.write_steps": 11,
         "output.time.save_steps": 3,
@@ -283,26 +328,33 @@ def test_nonlinear_evolution(
         tmp_path / "solution",
         override=override,
     ) as (_, solver, system):
-        # Run solver fields
+        
+        # Record the production controller's timesteps without changing them.
+        timesteps = record_timesteps(system, monkeypatch)
         solver.run()
         actual = system.get_fields().get()
+        actual_time = float(system.current_time)
         roundoff_tolerance = 64 * np.finfo(system.float).eps
 
-        assert system.current_time == final_time
-        assert system.current_dt == dt
+        # Check that the timestep has actually changed
+        assert actual_time >= final_time
+        assert np.unique(timesteps).size > 1
 
-    # Refine dt in double precision to limit accumulated roundoff.
-    # Disable diagnostics that could alter the evolving fields.
-    reference_dt = dt / 4
+    # Subdivide every recorded interval into four double-precision steps.
+    refinement = 4
+    reference_timesteps = np.repeat(
+        np.asarray(timesteps) / refinement, refinement
+    )
     reference_override = override | {
         # Setup
         "setup.precision": "double",
         # Time
-        "time.dt_max": reference_dt,
+        "time.dt_max": float(reference_timesteps[0]),
+        "time.dt_method": "continuous",
         # Timestepping
         "timestepping.precompute_linear_matrix": False,
-        # Time
-        "time.dt_method": "continuous",
+        # Hyperdissipation
+        "hyperdissipation.kmod": hyperdissipation / refinement, # keep value
         # Output
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
@@ -317,11 +369,15 @@ def test_nonlinear_evolution(
         tmp_path / "reference",
         override=reference_override,
     ) as (_, solver, system):
+        
+        # Set the timesteps for the reference run.
+        set_reference_timesteps(solver, reference_timesteps, monkeypatch)
         solver.run()
         reference = system.get_fields().get()
 
-        assert system.current_time == final_time
-        assert system.current_dt == reference_dt
+        # Both runs cover the same intervals, with different summation rounding.
+        time_tolerance = 64 * np.finfo(system.time_float).eps * actual_time
+        assert abs(float(system.current_time) - actual_time) <= time_tolerance
 
     # Allow third-order timestep error and precision-dependent roundoff.
     error = np.linalg.norm(actual - reference) / np.linalg.norm(reference)
