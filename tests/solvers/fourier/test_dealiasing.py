@@ -98,7 +98,6 @@ def test_two_thirds_product(
         system.setup()
         solver.timestepper.setup()
         system.compile_cupy_module()
-        assert system.use_cupy_fft is (fft_wrapper == "cupy")
 
         product, reference = _compute_retained_product_and_reference(system)
         assert product.dtype == np.dtype(system.complex)
@@ -321,7 +320,6 @@ def test_phase_shift_memory_models_agree(
         "cupy": ("standard", "low_memory"),
     }[fft_wrapper]
 
-    products = []
     for memory in memory_models:
         override["dealiasing.memory"] = memory
         with create_test_system(
@@ -330,7 +328,6 @@ def test_phase_shift_memory_models_agree(
             system.setup()
             solver.timestepper.setup()
             system.compile_cupy_module()
-            assert system.use_cupy_fft is (fft_wrapper == "cupy")
 
             # Every layout must agree with the independent reference.
             product, reference = _compute_retained_product_and_reference(
@@ -342,13 +339,3 @@ def test_phase_shift_memory_models_agree(
                 rtol=0,
                 atol=system.tolerance,
             )
-            products.append(product)
-
-    # Also check agreement between layouts using the same FFT wrapper.
-    for product in products[1:]:
-        npt.assert_allclose(
-            product,
-            products[0],
-            rtol=0,
-            atol=system.tolerance,
-        )

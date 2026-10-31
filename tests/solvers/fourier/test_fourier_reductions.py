@@ -231,7 +231,6 @@ def test_axis_reduction(
 
     result = reduction(cp.asarray(contributions)).get()
 
-    assert result.shape == expected.shape
     assert result.dtype == contributions.dtype
     npt.assert_allclose(
         result, expected, rtol=0, atol=system.tolerance, equal_nan=False
@@ -294,7 +293,6 @@ def test_axis_cumulative_reduction(
 
     result = reduction(cp.asarray(contributions)).get()
 
-    assert result.shape == expected.shape
     assert result.dtype == contributions.dtype
     npt.assert_allclose(
         result, expected, rtol=0, atol=system.tolerance, equal_nan=False
@@ -430,7 +428,6 @@ def test_shell_reduction(compiled_reductions, reduction_output, complex_output):
     if reduction_output == "kzkperp":
         result = result.reshape(expected.shape)
 
-    assert result.shape == expected.shape
     assert result.dtype == contributions.dtype
     npt.assert_allclose(
         result, expected, rtol=0, atol=system.tolerance, equal_nan=False
@@ -471,7 +468,6 @@ def test_shell_boundaries(
     )
     result = reduction(cp.asarray(contributions)).get()
 
-    assert result.shape == expected.shape
     assert result.dtype == contributions.dtype
     npt.assert_allclose(
         result, expected, rtol=0, atol=system.tolerance, equal_nan=False

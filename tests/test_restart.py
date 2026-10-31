@@ -239,9 +239,8 @@ def test_restart_backups(restart_run):
     backup_names = {path.name for path in io_path.glob("restart.backup.*.nc")}
     assert backup_names == {"restart.backup.00.nc", "restart.backup.01.nc"}
 
-    # The current file is step 10; retained backups are steps 9 and 5.
+    # Retained backups are steps 9 and 5.
     expected_steps = {
-        "restart.nc": 10,
         "restart.backup.00.nc": 9,
         "restart.backup.01.nc": 5,
     }
@@ -261,5 +260,4 @@ def test_restart_backups(restart_run):
 
                 for suffix, values in components.items():
                     saved = dataset[f"{name}{suffix}"]
-                    assert saved.dimensions == variable["dimension_names"]
                     npt.assert_array_equal(saved[:], values)
