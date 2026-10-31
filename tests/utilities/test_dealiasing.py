@@ -17,6 +17,7 @@ from flucs.utilities import dealiasing
 # Smooth numbers
 # ------------------------------------------------------------------------------
 
+
 @pytest.mark.cpu
 @pytest.mark.parametrize(
     ("n", "primes", "expected"),
@@ -34,9 +35,11 @@ def test_next_smooth_number(n, primes, expected):
     """
     assert dealiasing.next_smooth_number(n, primes) == expected
 
+
 # ------------------------------------------------------------------------------
 # Padded multiplication
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "backend",
@@ -56,16 +59,14 @@ def test_padded_multiplication(monkeypatch, backend, precision, direction):
     # Here c denotes the selected z, x, or y coordinate.
     complex_type = np.complex64 if precision == "single" else np.complex128
     coordinates = 2 * np.pi * np.arange(12) / 12
-    z, x, y = np.meshgrid(
-        coordinates, coordinates, coordinates, indexing="ij"
-    )
+    z, x, y = np.meshgrid(coordinates, coordinates, coordinates, indexing="ij")
 
     coordinate = {"z": z, "x": x, "y": y}[direction]
     field_real = 1 + np.cos(4 * coordinate)
 
-    field_fourier = np.fft.rfftn(
-        field_real, norm="forward"
-    ).astype(complex_type)
+    field_fourier = np.fft.rfftn(field_real, norm="forward").astype(
+        complex_type
+    )
 
     # f^2 = 3/2 + 2*cos(4c) + cos(8c)/2.
     # Cropping removes mode 8; without padding it aliases onto mode -4.

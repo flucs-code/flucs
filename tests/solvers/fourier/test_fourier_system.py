@@ -18,6 +18,7 @@ from flucs.utilities.dealiasing import dealiased_multiplication_rfft
 # Helper functions
 ################################################################################
 
+
 def _compute_retained_product_and_reference(system):
     """
     Compare a production product with an independently padded calculation.
@@ -60,6 +61,7 @@ def _compute_retained_product_and_reference(system):
     # Only retained coefficients belong to the evolved solution.
     return product[solved_modes], reference[solved_modes]
 
+
 ################################################################################
 # Tests
 ################################################################################
@@ -67,6 +69,7 @@ def _compute_retained_product_and_reference(system):
 # ------------------------------------------------------------------------------
 # Dealiasing: two-thirds
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -167,9 +170,11 @@ def test_two_thirds_boundary(
         else:
             assert error > system.tolerance
 
+
 # ------------------------------------------------------------------------------
 # Dealiasing: phase-shift spherical truncation
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -226,9 +231,11 @@ def test_spherical_phase_shift_boundary(
         else:
             assert error > system.tolerance
 
+
 # ------------------------------------------------------------------------------
 # Dealiasing: phase-shift polyhedral truncation
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -285,9 +292,11 @@ def test_polyhedral_phase_shift_boundary(
         else:
             assert error > system.tolerance
 
+
 # ------------------------------------------------------------------------------
 # Dealiasing: phase-shift FFT wrappers and memory models
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -339,9 +348,7 @@ def test_phase_shift_memory_models_agree(
             system.compile_cupy_module()
 
             # Every layout must agree with the independent reference.
-            product, reference = _compute_retained_product_and_reference(
-                system
-            )
+            product, reference = _compute_retained_product_and_reference(system)
             npt.assert_allclose(
                 product,
                 reference,
@@ -354,6 +361,7 @@ def test_phase_shift_memory_models_agree(
 # Restart preparation
 # ------------------------------------------------------------------------------
 
+
 @pytest.mark.cpu
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize(
@@ -364,14 +372,16 @@ def test_phase_shift_memory_models_agree(
     ],
 )
 def test_restart_resolution(
-    test_fourier_system, tmp_path, precision, restart_resolution, resolution,
+    test_fourier_system,
+    tmp_path,
+    precision,
+    restart_resolution,
+    resolution,
 ):
     """
     Preserve common Fourier modes and zero new modes when resizing a restart.
     """
-    source_input = (
-        pl.Path(__file__).parents[2] / "support/fourier/runtime.toml"
-    )
+    source_input = pl.Path(__file__).parents[2] / "support/fourier/runtime.toml"
     restart_nz, restart_nx, restart_ny = restart_resolution
     nz, nx, ny = resolution
 
@@ -386,7 +396,9 @@ def test_restart_resolution(
     }
 
     with create_test_system(source_input, tmp_path, override=override) as (
-        flucs_input, _, system,
+        flucs_input,
+        _,
+        system,
     ):
         # Prescribe signed Fourier modes common to both resolutions.
         # Negative indices select negative kz/kx; ky is stored nonnegative.
@@ -399,16 +411,16 @@ def test_restart_resolution(
             (-9, -12, 3): 3 - 2j,
             (0, 0, 15): 4,
         }
-        
+
         field_amplitudes = np.arange(1, system.number_of_fields + 1)
-        
-        restart_shape = (restart_nz, restart_nx, restart_ny//2 + 1)
+
+        restart_shape = (restart_nz, restart_nx, restart_ny // 2 + 1)
         restart_fields = np.zeros(
             (system.number_of_fields, *restart_shape),
             dtype=system.complex,
         )
         expected = np.zeros(
-            (system.number_of_fields, nz, nx, ny//2 + 1),
+            (system.number_of_fields, nz, nx, ny // 2 + 1),
             dtype=system.complex,
         )
 
@@ -431,7 +443,9 @@ def test_restart_resolution(
         # Supply restart data with the original resolution and unchanged box.
         restart_input = toml.loads(str(flucs_input))
         restart_input["dimensions"].update(
-            nz=restart_nz, nx=restart_nx, ny=restart_ny,
+            nz=restart_nz,
+            nx=restart_nx,
+            ny=restart_ny,
         )
         system.restart_manager = FlucsRestart(system)
         system.restart_manager.data = {

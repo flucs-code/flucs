@@ -17,25 +17,32 @@ import flucs.flucs as flucs_cli
 # Operating modes
 # ------------------------------------------------------------------------------
 
+
 @pytest.mark.cpu
 @pytest.mark.parametrize(
     ("first_mode", "second_mode"),
-    combinations(
-        [
-            ("--run",),
-            ("--init", "TestFourierSystem"),
-            ("--list",),
-            ("--timing", "1"),
-            ("--clean",),
-            ("--reconstruct", "restart.nc"),
-            ("--postprocess",),
-        ],
-        2,
+    list(
+        combinations(
+            [
+                ("--run",),
+                ("--init", "TestFourierSystem"),
+                ("--list",),
+                ("--timing", "1"),
+                ("--clean",),
+                ("--reconstruct", "restart.nc"),
+                ("--postprocess",),
+            ],
+            2,
+        ),
     ),
     ids=lambda mode: mode[0].removeprefix("--"),
 )
 def test_conflicting_operating_modes(
-    tmp_path, monkeypatch, capsys, first_mode, second_mode,
+    tmp_path,
+    monkeypatch,
+    capsys,
+    first_mode,
+    second_mode,
 ):
     """
     Reject conflicting modes before execution or modification of run files.
@@ -52,11 +59,13 @@ def test_conflicting_operating_modes(
     # Prevent a broken exclusivity check from starting a solver or profiler.
     for run_function in ("run_flucs", "run_flucs_under_nsys"):
         monkeypatch.setattr(
-            flucs_cli, run_function,
+            flucs_cli,
+            run_function,
             lambda *_: pytest.fail("Solver execution must not begin"),
         )
     monkeypatch.setattr(
-        sys, "argv",
+        sys,
+        "argv",
         ["flucs", "--io_path", str(tmp_path), *first_mode, *second_mode],
     )
 
@@ -68,7 +77,5 @@ def test_conflicting_operating_modes(
     assert "not allowed with argument" in capsys.readouterr().err
 
     # Preserve existing contents and do not create additional files.
-    saved_files = {
-        path.name: path.read_bytes() for path in tmp_path.iterdir()
-    }
+    saved_files = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
     assert saved_files == original_files

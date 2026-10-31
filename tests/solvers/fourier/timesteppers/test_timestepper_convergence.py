@@ -18,6 +18,7 @@ INPUT_PATH = pl.Path(__file__).parent / "inputs" / "convergence.toml"
 # Helper functions
 ################################################################################
 
+
 def _setup_system(solver, system):
     """
     Allocate and compile without diagnostics or a solver run.
@@ -92,9 +93,11 @@ def _run_solution(system, initial_fields, dt, *, startup_system=None):
 
     return system.get_fields().get()
 
+
 ################################################################################
 # Fixtures
 ################################################################################
+
 
 @pytest.fixture(scope="module")
 def baseline_fourier_state(test_fourier_system, tmp_path_factory):
@@ -103,7 +106,6 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
     """
     io_path = tmp_path_factory.mktemp("convergence_baseline")
     with create_test_system(INPUT_PATH, io_path) as (_, solver, system):
-
         # Get baseline fields
         _setup_system(solver, system)
         _reset_system(system, system.fields_initial, system.init_dt)
@@ -140,6 +142,7 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
 # ------------------------------------------------------------------------------
 # Timestepper convergence
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow

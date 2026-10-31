@@ -17,6 +17,7 @@ from flucs.testing import create_test_system
 # Helpers and fixtures
 ################################################################################
 
+
 @pytest.fixture(scope="module", params=("single", "double"))
 def restart_run(request, test_fourier_system, tmp_path_factory):
     """
@@ -30,7 +31,6 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
     # Setup input file
     override = {
         "setup.precision": request.param,
-
         # Set ten fixed steps with deterministic forcing.
         "time.dt_max": dt,
         "time.tfinal": 10 * dt,
@@ -38,12 +38,10 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
         "forcing.method": "negative_damping",
         "hyperdissipation.kmod": 0.1,
         "hyperdissipation.kmod_adaptive": False,
-
         # Disable diagnostics; their saved data is checked in test_output.py.
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
         "output.1d.save_steps": -1,
-
         # Write at steps 1, 5, 9, and the final forced write at step 10.
         "restart.write_restart_file": True,
         "restart.write_steps": 4,
@@ -51,7 +49,9 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
     }
 
     with create_test_system(source_input, io_path, override=override) as (
-        _, solver, system,
+        _,
+        solver,
+        system,
     ):
         checkpoints = {}
         get_restart_data = system.get_restart_data
@@ -81,6 +81,7 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
         assert list(checkpoints) == [1, 5, 9, 10]
         yield system, checkpoints
 
+
 ################################################################################
 # Tests
 ################################################################################
@@ -88,6 +89,7 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
 # ------------------------------------------------------------------------------
 # Restart data and timing
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -129,7 +131,9 @@ def test_restart_data_and_time(restart_run, tmp_path):
         "time.tfinal": 0.5,
     }
     with create_test_system(
-        system.input.input_path, tmp_path, override=override,
+        system.input.input_path,
+        tmp_path,
+        override=override,
     ) as (_, _, loaded_system):
         restart = FlucsRestart(loaded_system)
 
@@ -168,7 +172,9 @@ def test_restart_reset_time(restart_run, tmp_path):
 
     # Load the same file with reset_time enabled.
     with create_test_system(
-        system.input.input_path, tmp_path, override=override,
+        system.input.input_path,
+        tmp_path,
+        override=override,
     ) as (_, _, loaded_system):
         restart = FlucsRestart(loaded_system)
 
@@ -180,9 +186,11 @@ def test_restart_reset_time(restart_run, tmp_path):
         for name, variable in expected["data"].items():
             npt.assert_array_equal(restart.data[name]["data"], variable["data"])
 
+
 # ------------------------------------------------------------------------------
 # Initial state
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -207,7 +215,9 @@ def test_restart_initial_state(restart_run, tmp_path):
             override[f"output.{name}.save_steps"] = -1
 
     with create_test_system(
-        system.input.input_path, tmp_path, override=override,
+        system.input.input_path,
+        tmp_path,
+        override=override,
     ) as (_, solver, restarted_system):
         # Run normal setup and initialisation without taking a timestep.
         solver.run()
@@ -223,14 +233,16 @@ def test_restart_initial_state(restart_run, tmp_path):
         for name, variable in expected["data"].items():
             restored = restart_data[name]
             actual = cp.asnumpy(restored["data"])
-            
+
             assert restored["dimension_names"] == variable["dimension_names"]
             assert actual.dtype == variable["data"].dtype
             npt.assert_array_equal(actual, variable["data"])
 
+
 # ------------------------------------------------------------------------------
 # Backups
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow

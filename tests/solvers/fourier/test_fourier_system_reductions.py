@@ -18,6 +18,7 @@ INPUT_PATH = pl.Path(__file__).parent / "inputs" / "reductions.toml"
 # Fixtures
 ################################################################################
 
+
 @pytest.fixture(scope="module", params=("single", "double"))
 def compiled_reductions(request, test_fourier_system, tmp_path_factory):
     """
@@ -56,8 +57,12 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
 
         # One-dimensional reductions
         for reduction_output in (
-            "kz", "kx", "ky",
-            "kz_cumulative", "kx_cumulative", "ky_cumulative",
+            "kz",
+            "kx",
+            "ky",
+            "kz_cumulative",
+            "kx_cumulative",
+            "ky_cumulative",
         ):
             real_reductions[reduction_output] = reductions.get_reduction(
                 reduction_output=reduction_output,
@@ -89,8 +94,11 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
 
         # Shell reductions
         for reduction_output in (
-            "kperp", "kmod", "kzkperp",
-            "kperp_cumulative", "kmod_cumulative",
+            "kperp",
+            "kmod",
+            "kzkperp",
+            "kperp_cumulative",
+            "kmod_cumulative",
         ):
             real_reductions[reduction_output] = reductions.get_reduction(
                 reduction_output=reduction_output,
@@ -109,11 +117,15 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
         for reduction_output in ("kperp", "kmod"):
             if reduction_output == "kperp":
                 shell_options = {
-                    "nkperp": 2, "kperp_min": 0.5, "kperp_max": 2.5,
+                    "nkperp": 2,
+                    "kperp_min": 0.5,
+                    "kperp_max": 2.5,
                 }
             else:
                 shell_options = {
-                    "nkmod": 2, "kmod_min": 0.5, "kmod_max": 2.5,
+                    "nkmod": 2,
+                    "kmod_min": 0.5,
+                    "kmod_max": 2.5,
                 }
             real_reductions[f"{reduction_output}_bounded"] = (
                 reductions.get_reduction(
@@ -139,6 +151,7 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
 
         yield system, real_reductions, complex_reductions
 
+
 ################################################################################
 # Tests
 ################################################################################
@@ -146,6 +159,7 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
 # ------------------------------------------------------------------------------
 # Scalar reductions
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.parametrize(
@@ -180,18 +194,18 @@ def test_scalar_reduction(compiled_reductions, complex_output):
         result[0], expected, rtol=0, atol=system.tolerance, equal_nan=False
     )
 
+
 # ------------------------------------------------------------------------------
 # One-dimensional reductions
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.parametrize("reduction_output", ("kz", "kx", "ky"))
 @pytest.mark.parametrize(
     "complex_output", (False, True), ids=("real", "complex")
 )
-def test_axis_reduction(
-    compiled_reductions, reduction_output, complex_output
-):
+def test_axis_reduction(compiled_reductions, reduction_output, complex_output):
     """
     Retain the requested axis and sum the other two with half-grid weighting.
     """
@@ -271,22 +285,19 @@ def test_axis_cumulative_reduction(
     contributions[system.nz // 2, system.nx // 2, 2] = edge_mode
 
     if reduction_output == "kz_cumulative":
-        expected = np.full(
-            system.half_nz, zero_mode, dtype=contributions.dtype
-        )
+        expected = np.full(system.half_nz, zero_mode, dtype=contributions.dtype)
         expected[1:] += positive_mode
         expected[2:] += 2 * negative_mode
-        expected[system.nz // 2:] += 2 * edge_mode
+        expected[system.nz // 2 :] += 2 * edge_mode
     elif reduction_output == "kx_cumulative":
-        expected = np.full(
-            system.half_nx, zero_mode, dtype=contributions.dtype
-        )
+        expected = np.full(system.half_nx, zero_mode, dtype=contributions.dtype)
         expected[2:] += positive_mode
         expected[3:] += 2 * negative_mode
-        expected[system.nx // 2:] += 2 * edge_mode
+        expected[system.nx // 2 :] += 2 * edge_mode
     else:
         expected = np.full(
-            system.half_ny, zero_mode + positive_mode,
+            system.half_ny,
+            zero_mode + positive_mode,
             dtype=contributions.dtype,
         )
         expected[1:] += 2 * negative_mode
@@ -303,6 +314,7 @@ def test_axis_cumulative_reduction(
 # ------------------------------------------------------------------------------
 # Two-dimensional reductions
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.parametrize("reduction_output", ("kzkx", "kzky", "kxky"))
@@ -333,9 +345,7 @@ def test_axis_pair_reduction(
     contributions[-1, -2, 1] = negative_mode
 
     if reduction_output == "kzkx":
-        expected = np.zeros(
-            (system.nz, system.nx), dtype=contributions.dtype
-        )
+        expected = np.zeros((system.nz, system.nx), dtype=contributions.dtype)
         expected[0, 0] = zero_mode
         expected[1, 0] = z_mode
         expected[0, 1] = 2 * xy_mode
@@ -363,9 +373,11 @@ def test_axis_pair_reduction(
         result, expected, rtol=0, atol=system.tolerance, equal_nan=False
     )
 
+
 # ------------------------------------------------------------------------------
 # Shell reductions
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.parametrize(
@@ -394,7 +406,7 @@ def test_shell_reduction(compiled_reductions, reduction_output, complex_output):
 
     # The input boxes give (kz, kx, ky) spacings (1, 1/2, 1/3).
     contributions[0, 0, 0] = zero_mode
-    contributions[1, 1, 0] = oblique_mode       # kperp=1/2, |k|=sqrt(5)/2
+    contributions[1, 1, 0] = oblique_mode  # kperp=1/2, |k|=sqrt(5)/2
     contributions[2, 0, 3] = positive_ky_mode  # kperp=1,   |k|=sqrt(5)
     contributions[-1, -2, 0] = negative_z_mode  # kperp=1,  |k|=sqrt(2)
 
@@ -461,10 +473,10 @@ def test_shell_boundaries(
         reduction = real_reductions[f"{reduction_output}_bounded"]
 
     # For kz=ky=0, both radii are |kx| = ix/2.
-    contributions[0, 0, 0] = below_range    # radius 0
-    contributions[0, 1, 0] = lower_edge     # radius 0.5
+    contributions[0, 0, 0] = below_range  # radius 0
+    contributions[0, 1, 0] = lower_edge  # radius 0.5
     contributions[0, 3, 0] = internal_edge  # radius 1.5
-    contributions[0, 5, 0] = upper_edge     # radius 2.5
+    contributions[0, 5, 0] = upper_edge  # radius 2.5
 
     # The registered bins are [0.5, 1.5) and [1.5, 2.5).
     expected = np.asarray(

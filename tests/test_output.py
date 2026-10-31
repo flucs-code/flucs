@@ -20,6 +20,7 @@ from flucs.testing import create_test_system
 # Helpers and fixtures
 ################################################################################
 
+
 def record_output_writes(output_class, monkeypatch, write_counts):
     """
     Record cached sample counts without replacing the production writer.
@@ -61,7 +62,6 @@ def output_overrides(precision):
     dt = 1 / 128  # Binary-exact timing in both precisions.
     return {
         "setup.precision": precision,
-
         # Set nine fixed steps, deterministic forcing, and fixed dissipation.
         "time.dt_max": dt,
         "time.tfinal": 9 * dt,
@@ -69,7 +69,6 @@ def output_overrides(precision):
         "forcing.method": "negative_damping",
         "hyperdissipation.kmod": 0.1,
         "hyperdissipation.kmod_adaptive": False,
-
         # Save every 2 or 3 steps; write at steps 4, 8, and 9.
         "output.write_steps": 4,
         "output.time.save_steps": 2,
@@ -82,7 +81,6 @@ def output_overrides(precision):
                 "options": {"spectra": ["kz", "kperp"]},
             },
         ],
-
         # Save Fourier and real-space slices.
         "output.3d.save_steps": 3,
         "output.3d.diags": [
@@ -98,10 +96,10 @@ def output_overrides(precision):
                 "options": {"locations": ["0:2, 0:3, 0:4, 0:5"]},
             },
         ],
-
         # Save a restart for the output history test.
         "restart.write_restart_file": True,
     }
+
 
 @pytest.fixture
 def output_samples(monkeypatch):
@@ -156,6 +154,7 @@ def output_samples(monkeypatch):
     record_output_writes(FlucsOutputNC, monkeypatch, write_counts)
     return samples, write_counts
 
+
 @pytest.fixture(params=("single", "double"))
 def output_solver(request, test_fourier_system, tmp_path):
     """
@@ -165,7 +164,9 @@ def output_solver(request, test_fourier_system, tmp_path):
     override = output_overrides(request.param)
 
     with create_test_system(source_input, tmp_path, override=override) as (
-        _, solver, _,
+        _,
+        solver,
+        _,
     ):
         yield solver
 
@@ -188,7 +189,9 @@ def cached_netcdf_output(test_fourier_system, tmp_path):
     }
 
     with create_test_system(source_input, tmp_path, override=override) as (
-        _, solver, system,
+        _,
+        solver,
+        system,
     ):
         # Create the output schema without running diagnostics or the solver.
         solver.state = FlucsSolverState.RUNNING
@@ -207,6 +210,7 @@ def cached_netcdf_output(test_fourier_system, tmp_path):
 
         yield output, variable
 
+
 ################################################################################
 # Tests
 ################################################################################
@@ -214,6 +218,7 @@ def cached_netcdf_output(test_fourier_system, tmp_path):
 # ------------------------------------------------------------------------------
 # Saved data
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -259,7 +264,7 @@ def test_saved_output_integrity(output_solver, output_samples):
         npt.assert_array_equal(recorded["step"], expected_steps[save_steps])
         npt.assert_array_equal(recorded["time"], expected_times)
         npt.assert_array_equal(recorded["dt"], dt)
-        
+
         assert write_counts[output] == expected_write_counts[save_steps]
 
     # Check text headers and columns.
@@ -267,7 +272,10 @@ def test_saved_output_integrity(output_solver, output_samples):
         recorded = samples[output]
         expected_names = ["time", "step", "dt", "cfl"]
         expected_columns = [
-            recorded["time"], recorded["step"], recorded["dt"], recorded["cfl"],
+            recorded["time"],
+            recorded["step"],
+            recorded["dt"],
+            recorded["cfl"],
         ]
         for diagnostic in output.diagnostics:
             for variable in diagnostic.vars.values():
@@ -309,10 +317,12 @@ def test_saved_output_integrity(output_solver, output_samples):
                     for name, coordinates in variable.dimensions.items():
                         saved_coordinates = diagnostic_group[name][:]
                         expected_coordinates = np.asarray(
-                            coordinates, dtype=output_dtype,
+                            coordinates,
+                            dtype=output_dtype,
                         )
                         npt.assert_array_equal(
-                            saved_coordinates, expected_coordinates,
+                            saved_coordinates,
+                            expected_coordinates,
                         )
 
                     # Split complex values into real and imaginary components.
@@ -339,6 +349,7 @@ def test_saved_output_integrity(output_solver, output_samples):
 # ------------------------------------------------------------------------------
 # Output history
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.gpu
 @pytest.mark.slow
@@ -374,7 +385,9 @@ def test_output_history(output_solver, tmp_path):
     )
     source_input = system.input.input_path
     with create_test_system(
-        source_input, continued_path, override=continued_override,
+        source_input,
+        continued_path,
+        override=continued_override,
     ) as (_, continued_solver, continued_system):
         continued_solver.run()
 
@@ -409,12 +422,16 @@ def test_output_history(output_solver, tmp_path):
         assert second_group["time"][-1] == final_time
 
         # Compare concatenated times and the run boundary.
-        expected_times = np.concatenate([
-            first_group["time"], second_group["time"],
-        ])
+        expected_times = np.concatenate(
+            [
+                first_group["time"],
+                second_group["time"],
+            ]
+        )
         expected_boundaries = [len(first_group["time"])]
         times, boundaries, _ = postprocessing.load_netcdf_variable(
-            output.filepath, "time",
+            output.filepath,
+            "time",
         )
         npt.assert_array_equal(times, expected_times)
         assert boundaries == expected_boundaries
@@ -434,7 +451,8 @@ def test_output_history(output_solver, tmp_path):
                     )
                     values, boundaries, dimensions = (
                         postprocessing.load_netcdf_variable_complex(
-                            output.filepath, variable_path,
+                            output.filepath,
+                            variable_path,
                         )
                     )
                 else:
@@ -442,7 +460,8 @@ def test_output_history(output_solver, tmp_path):
                     second_values = second_group[variable_path]
                     values, boundaries, dimensions = (
                         postprocessing.load_netcdf_variable(
-                            output.filepath, variable_path,
+                            output.filepath,
+                            variable_path,
                         )
                     )
 
@@ -457,7 +476,8 @@ def test_output_history(output_solver, tmp_path):
                     for name, coordinates in variable.dimensions.items():
                         dimension_name = name.split("/")[-1]
                         expected_coordinates = np.asarray(
-                            coordinates, dtype=system.float,
+                            coordinates,
+                            dtype=system.float,
                         )
                         npt.assert_array_equal(
                             group_dimensions[dimension_name],
@@ -468,6 +488,7 @@ def test_output_history(output_solver, tmp_path):
 # ------------------------------------------------------------------------------
 # NetCDF opening
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.cpu
 def test_netcdf_open_recovers(cached_netcdf_output, monkeypatch):
@@ -507,10 +528,12 @@ def test_netcdf_open_recovers(cached_netcdf_output, monkeypatch):
         npt.assert_array_equal(group["time"][:], expected_times)
         npt.assert_array_equal(group["dt"][:], expected_dts)
         npt.assert_array_equal(
-            group[f"{variable_path}_real"][:], expected_values.real,
+            group[f"{variable_path}_real"][:],
+            expected_values.real,
         )
         npt.assert_array_equal(
-            group[f"{variable_path}_imag"][:], expected_values.imag,
+            group[f"{variable_path}_imag"][:],
+            expected_values.imag,
         )
 
     # An empty cache must not open the file or repeat the write.

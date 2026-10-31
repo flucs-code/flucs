@@ -10,6 +10,7 @@ from flucs.input import FlucsInput
 # Helpers and fixtures
 ################################################################################
 
+
 @pytest.fixture
 def input_path(tmp_path):
     """
@@ -29,6 +30,7 @@ def input_path(tmp_path):
     )
     return input_path
 
+
 ################################################################################
 # Tests
 ################################################################################
@@ -36,6 +38,7 @@ def input_path(tmp_path):
 # ------------------------------------------------------------------------------
 # Input freezing
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.cpu
 def test_input_is_read_only(test_fourier_system, input_path):
@@ -50,9 +53,11 @@ def test_input_is_read_only(test_fourier_system, input_path):
 
     assert flucs_input["time.dt_max"] == original_dt
 
+
 # ------------------------------------------------------------------------------
 # Configuration precedence
 # ------------------------------------------------------------------------------
+
 
 @pytest.mark.cpu
 def test_input_precedence(test_fourier_system, input_path):
