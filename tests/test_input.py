@@ -6,8 +6,6 @@ import pytest
 
 from flucs.input import FlucsInput
 
-pytestmark = pytest.mark.cpu
-
 ################################################################################
 # Helpers and fixtures
 ################################################################################
@@ -39,6 +37,7 @@ def input_path(tmp_path):
 # Input freezing
 # ------------------------------------------------------------------------------
 
+@pytest.mark.cpu
 def test_input_is_read_only(test_fourier_system, input_path):
     """
     Reject assignment after initialization without changing the input.
@@ -55,6 +54,7 @@ def test_input_is_read_only(test_fourier_system, input_path):
 # Configuration precedence
 # ------------------------------------------------------------------------------
 
+@pytest.mark.cpu
 def test_input_precedence(test_fourier_system, input_path):
     """
     File values replace defaults, and explicit overrides take precedence.

@@ -12,8 +12,6 @@ from flucs import cupy as cp
 from flucs.solvers import FlucsSolverState
 from flucs.testing import create_test_system
 
-pytestmark = [pytest.mark.gpu, pytest.mark.slow]
-
 INPUT_PATH = pl.Path(__file__).parent / "inputs" / "convergence.toml"
 
 ################################################################################
@@ -143,6 +141,8 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
 # Timestepper convergence
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("method", "expected_order"),
     [("rk4", 4), ("ssprk3", 3), ("ssprk3e", 3), ("ab3", 3)],

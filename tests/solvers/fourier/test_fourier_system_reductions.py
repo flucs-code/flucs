@@ -12,8 +12,6 @@ from flucs import cupy as cp
 from flucs.solvers.fourier.fourier_system_reductions import FourierReductions
 from flucs.testing import create_test_system
 
-pytestmark = [pytest.mark.gpu]
-
 INPUT_PATH = pl.Path(__file__).parent / "inputs" / "reductions.toml"
 
 ################################################################################
@@ -149,6 +147,7 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
 # Scalar reductions
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "complex_output", (False, True), ids=("real", "complex")
 )
@@ -185,6 +184,7 @@ def test_scalar_reduction(compiled_reductions, complex_output):
 # One-dimensional reductions
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("reduction_output", ("kz", "kx", "ky"))
 @pytest.mark.parametrize(
     "complex_output", (False, True), ids=("real", "complex")
@@ -237,6 +237,7 @@ def test_axis_reduction(
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "reduction_output", ("kz_cumulative", "kx_cumulative", "ky_cumulative")
 )
@@ -303,6 +304,7 @@ def test_axis_cumulative_reduction(
 # Two-dimensional reductions
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("reduction_output", ("kzkx", "kzky", "kxky"))
 @pytest.mark.parametrize(
     "complex_output", (False, True), ids=("real", "complex")
@@ -365,6 +367,7 @@ def test_axis_pair_reduction(
 # Shell reductions
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "reduction_output",
     ("kperp", "kmod", "kzkperp", "kperp_cumulative", "kmod_cumulative"),
@@ -434,6 +437,7 @@ def test_shell_reduction(compiled_reductions, reduction_output, complex_output):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("reduction_output", ("kperp", "kmod"))
 @pytest.mark.parametrize(
     "complex_output", (False, True), ids=("real", "complex")

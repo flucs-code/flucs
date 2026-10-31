@@ -13,8 +13,6 @@ from flucs import cupy as cp
 from flucs.restart import FlucsRestart
 from flucs.testing import create_test_system
 
-pytestmark = [pytest.mark.gpu, pytest.mark.slow]
-
 ################################################################################
 # Helpers and fixtures
 ################################################################################
@@ -91,6 +89,8 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
 # Restart data and timing
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 def test_restart_data_and_time(restart_run, tmp_path):
     """
     Restore restart data and saved timing, including the resolved input.
@@ -148,6 +148,8 @@ def test_restart_data_and_time(restart_run, tmp_path):
             npt.assert_array_equal(loaded["data"], variable["data"])
 
 
+@pytest.mark.gpu
+@pytest.mark.slow
 def test_restart_reset_time(restart_run, tmp_path):
     """
     Reset the starting time without changing the saved dt or restart data.
@@ -182,6 +184,8 @@ def test_restart_reset_time(restart_run, tmp_path):
 # Initial state
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 def test_restart_initial_state(restart_run, tmp_path):
     """
     Initialise the active system from restart data without advancing it.
@@ -228,6 +232,8 @@ def test_restart_initial_state(restart_run, tmp_path):
 # Backups
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 def test_restart_backups(restart_run):
     """
     Retain the two preceding checkpoints, newest first, after backup rotation.

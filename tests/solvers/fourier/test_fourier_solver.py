@@ -10,8 +10,6 @@ import pytest
 
 from flucs.testing import create_test_system
 
-pytestmark = [pytest.mark.gpu, pytest.mark.slow]
-
 ################################################################################
 # Tests
 ################################################################################
@@ -20,6 +18,8 @@ pytestmark = [pytest.mark.gpu, pytest.mark.slow]
 # Linear
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize("method", ("rk4", "ssprk3", "ssprk3e", "ab3"))
 @pytest.mark.parametrize(
@@ -152,6 +152,8 @@ def test_linear_evolution(
 # Nonlinear
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize(
     "precompute", (False, True), ids=("not-precomputed", "precomputed"),
