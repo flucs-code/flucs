@@ -21,10 +21,13 @@ pytestmark = [pytest.mark.gpu, pytest.mark.slow]
 # ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("precision", ("single", "double"))
+@pytest.mark.parametrize("method", ("rk4", "ssprk3", "ssprk3e", "ab3"))
 @pytest.mark.parametrize(
     "precompute", (False, True), ids=("not-precomputed", "precomputed"),
 )
-def test_linear_evolution(test_fourier_system, tmp_path, precision, precompute):
+def test_linear_evolution(
+    test_fourier_system, tmp_path, precision, method, precompute,
+):
     """
     Evolve TestFourierSystem linearly with damping
     """
@@ -51,7 +54,7 @@ def test_linear_evolution(test_fourier_system, tmp_path, precision, precompute):
         "time.dt_max": dt,
         "time.tfinal": final_time,
 
-        "timestepping.method": "rk4",
+        "timestepping.method": method,
         "timestepping.linear_pade_degree": 4,
         "timestepping.precompute_linear_matrix": precompute,
 
@@ -143,3 +146,109 @@ def test_linear_evolution(test_fourier_system, tmp_path, precision, precompute):
         npt.assert_allclose(
             actual, expected, rtol=0, atol=tolerance, equal_nan=False,
         )
+
+
+# ------------------------------------------------------------------------------
+# Nonlinear
+# ------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("precision", ("single", "double"))
+def test_nonlinear_evolution(test_fourier_system, tmp_path, precision):
+    """
+    Evolve TestFourierSystem nonlinearly with forcing and damping
+    """
+    source_input = (
+        pl.Path(__file__).parents[2] / "support/fourier/runtime.toml"
+    )
+    dt = 1 / 128
+    final_time = 0.5
+
+    # Set a nonlinear run with fixed, binary-exact timesteps.
+    override = {
+        "setup.precision": precision,
+        "setup.linear": False,
+
+        "time.dt_max": dt,
+        "time.tfinal": final_time,
+        "timestepping.method": "ssprk3e",
+
+        "init.amplitude": 0.25,
+        "forcing.method": "negative_damping",
+        "forcing.rate": 0.1,
+
+        # Use the same physical dissipation at both timesteps.
+        "hyperdissipation.kmod": 0.05,
+        "hyperdissipation.kmod_power": 1,
+        "hyperdissipation.kmod_normalised": False,
+        "hyperdissipation.kmod_adaptive": False,
+
+        # Save at different intervals, including a final partial write.
+        "output.write_steps": 11,
+        "output.time.save_steps": 3,
+        "output.time.diags": ["free_energy"],
+        "output.0d.save_steps": 5,
+        "output.1d.save_steps": 5,
+
+        # Save Fourier and real-space slices.
+        "output.3d.save_steps": 5,
+        "output.3d.diags": [
+            {
+                "name": "fourier_data",
+                "options": {"locations": ["0:2, 0:3, 0:4, 0:5"]},
+            },
+        ],
+        "output.realspace.save_steps": 5,
+        "output.realspace.diags": [
+            {
+                "name": "realspace_data",
+                "options": {
+                    "locations": ["0:2, 0:3, 0:4, 0:5"],
+                    "exclude_forcing_range": True,
+                },
+            },
+        ],
+
+        "restart.write_restart_file": True,
+        "restart.write_steps": 17,
+    }
+
+    # Evolve through the normal solver loop with diagnostics and output.
+    with create_test_system(
+        source_input, tmp_path / "solution", override=override,
+    ) as (_, solver, system):
+
+        # Run solver fields
+        solver.run()
+        actual = system.get_fields().get()
+        roundoff_tolerance = 64 * np.finfo(system.float).eps
+
+        assert system.current_time == final_time
+        assert system.current_dt == dt
+
+    # Refine dt in double precision to limit accumulated roundoff.
+    # Disable diagnostics that could alter the evolving fields.
+    reference_dt = dt / 4
+    reference_override = override | {
+        "setup.precision": "double",
+        "time.dt_max": reference_dt,
+        "output.time.save_steps": -1,
+        "output.0d.save_steps": -1,
+        "output.1d.save_steps": -1,
+        "output.3d.save_steps": -1,
+        "output.realspace.save_steps": -1,
+        "restart.write_restart_file": False,
+    }
+    with create_test_system(
+        source_input, tmp_path / "reference", override=reference_override,
+    ) as (_, solver, system):
+        solver.run()
+        reference = system.get_fields().get()
+
+        assert system.current_time == final_time
+        assert system.current_dt == reference_dt
+
+    # Allow third-order timestep error and precision-dependent roundoff.
+    error = np.linalg.norm(actual - reference) / np.linalg.norm(reference)
+    tolerance = max(1e-7, roundoff_tolerance)
+    
+    assert error < tolerance
