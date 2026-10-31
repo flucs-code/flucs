@@ -1,5 +1,5 @@
 """
-Numerical checks of the production Fourier dealiasing operations.
+Numerical checks of FourierSystem.
 """
 
 import pathlib as pl
@@ -66,7 +66,7 @@ def _compute_retained_product_and_reference(system):
 ################################################################################
 
 # ------------------------------------------------------------------------------
-# Two-thirds
+# Dealiasing: two-thirds
 # ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("precision", ("single", "double"))
@@ -165,7 +165,7 @@ def test_two_thirds_boundary(
             assert error > system.tolerance
 
 # ------------------------------------------------------------------------------
-# Phase-shift: spherical truncation
+# Dealiasing: phase-shift spherical truncation
 # ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("precision", ("single", "double"))
@@ -222,7 +222,7 @@ def test_spherical_phase_shift_boundary(
             assert error > system.tolerance
 
 # ------------------------------------------------------------------------------
-# Phase-shift: polyhedral truncation
+# Dealiasing: phase-shift polyhedral truncation
 # ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("precision", ("single", "double"))
@@ -279,7 +279,7 @@ def test_polyhedral_phase_shift_boundary(
             assert error > system.tolerance
 
 # ------------------------------------------------------------------------------
-# Phase-shift: FFT wrappers and memory models
+# Dealiasing: phase-shift FFT wrappers and memory models
 # ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("precision", ("single", "double"))
