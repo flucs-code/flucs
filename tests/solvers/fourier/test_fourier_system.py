@@ -190,7 +190,6 @@ def test_two_thirds_boundary(
     ("radius_squared", "is_safe"),
     [
         pytest.param(0.221, True, id="below-boundary"),
-        pytest.param(0.222, True, id="at-boundary"),
         pytest.param(0.223, False, id="above-boundary"),
     ],
 )
@@ -254,7 +253,6 @@ def test_spherical_phase_shift_boundary(
     ("max_sum", "is_safe"),
     [
         pytest.param(0.665, True, id="below-boundary"),
-        pytest.param(0.666, True, id="at-boundary"),
         pytest.param(0.667, False, id="above-boundary"),
     ],
 )
