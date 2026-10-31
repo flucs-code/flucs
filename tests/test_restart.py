@@ -179,6 +179,52 @@ def test_restart_reset_time(restart_run, tmp_path):
             npt.assert_array_equal(restart.data[name]["data"], variable["data"])
 
 # ------------------------------------------------------------------------------
+# Initial state
+# ------------------------------------------------------------------------------
+
+def test_restart_initial_state(restart_run, tmp_path):
+    """
+    Initialise the active system from restart data without advancing it.
+    """
+    system, checkpoints = restart_run
+    expected = checkpoints[10]
+    restart_path = system.input.io_path / "restart.nc"
+
+    override = {
+        "setup.precision": system.input["setup.precision"],
+        "restart.restart_from": str(restart_path),
+        "restart.write_restart_file": False,
+        "time.tfinal": 0.0,
+    }
+
+    # Disable diagnostics in the copied input.
+    for name, options in system.input["output"].items():
+        if isinstance(options, dict):
+            override[f"output.{name}.save_steps"] = -1
+
+    with create_test_system(
+        system.input.input_path, tmp_path, override=override,
+    ) as (_, solver, restarted_system):
+        # Run normal setup and initialisation without taking a timestep.
+        solver.run()
+
+        assert restarted_system.current_step == 0
+        assert restarted_system.current_time == expected["time"]
+        assert restarted_system.current_dt == expected["dt"]
+
+        # Read the active state through the system's restart interface.
+        restart_data = restarted_system.get_restart_data()
+        assert set(restart_data) == set(expected["data"])
+
+        for name, variable in expected["data"].items():
+            restored = restart_data[name]
+            actual = cp.asnumpy(restored["data"])
+            
+            assert restored["dimension_names"] == variable["dimension_names"]
+            assert actual.dtype == variable["data"].dtype
+            npt.assert_array_equal(actual, variable["data"])
+
+# ------------------------------------------------------------------------------
 # Backups
 # ------------------------------------------------------------------------------
 
