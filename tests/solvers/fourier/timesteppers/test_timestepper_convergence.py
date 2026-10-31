@@ -167,9 +167,13 @@ def test_timestepper_convergence(
     timestep_sizes = 2.0 ** -np.arange(7, 11)
     reference_dt = 2.0**-12
     override = {
+        # Setup
         "setup.precision": "double",
+        # Timestepping
         "timestepping.method": method,
+        # Time
         "time.tfinal": 0.5,
+        # Hyperdissipation
         "hyperdissipation.kmod": frozen_hyperdissipation,
         "hyperdissipation.kmod_adaptive": False,
     }

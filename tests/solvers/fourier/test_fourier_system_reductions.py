@@ -25,7 +25,10 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
     Compile registered real and complex reductions once per precision.
     """
     io_path = tmp_path_factory.mktemp(f"reductions_{request.param}")
-    override = {"setup.precision": request.param}
+    override = {
+        # Setup
+        "setup.precision": request.param,
+    }
 
     with create_test_system(INPUT_PATH, io_path, override=override) as (
         _,

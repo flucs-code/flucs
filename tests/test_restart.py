@@ -30,19 +30,23 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
 
     # Setup input file
     override = {
+        # Setup
         "setup.precision": request.param,
-        # Set ten fixed steps with deterministic forcing.
+        # Time
         "time.dt_max": dt,
         "time.tfinal": 10 * dt,
+        # Timestepping
         "timestepping.method": "ssprk3e",
+        # Forcing
         "forcing.method": "negative_damping",
+        # Hyperdissipation
         "hyperdissipation.kmod": 0.1,
         "hyperdissipation.kmod_adaptive": False,
-        # Disable diagnostics; their saved data is checked in test_output.py.
+        # Output
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
         "output.1d.save_steps": -1,
-        # Write at steps 1, 5, 9, and the final forced write at step 10.
+        # Restart
         "restart.write_restart_file": True,
         "restart.write_steps": 4,
         "restart.backup_count": 2,
@@ -124,9 +128,12 @@ def test_restart_data_and_time(restart_run, tmp_path):
 
     # Load with a different dt_max and an additional half unit of run time.
     override = {
+        # Setup
         "setup.precision": system.input["setup.precision"],
+        # Restart
         "restart.restart_from": str(restart_path),
         "restart.write_restart_file": False,
+        # Time
         "time.dt_max": 0.125,
         "time.tfinal": 0.5,
     }
@@ -162,10 +169,13 @@ def test_restart_reset_time(restart_run, tmp_path):
     expected = checkpoints[10]
     restart_path = system.input.io_path / "restart.nc"
     override = {
+        # Setup
         "setup.precision": system.input["setup.precision"],
+        # Restart
         "restart.restart_from": str(restart_path),
         "restart.reset_time": True,
         "restart.write_restart_file": False,
+        # Time
         "time.dt_max": 0.125,
         "time.tfinal": 0.5,
     }
@@ -203,9 +213,12 @@ def test_restart_initial_state(restart_run, tmp_path):
     restart_path = system.input.io_path / "restart.nc"
 
     override = {
+        # Setup
         "setup.precision": system.input["setup.precision"],
+        # Restart
         "restart.restart_from": str(restart_path),
         "restart.write_restart_file": False,
+        # Time
         "time.tfinal": 0.0,
     }
 

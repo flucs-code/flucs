@@ -228,20 +228,28 @@ def test_nonlinear_evolution(
 
     # Set a nonlinear run with fixed, binary-exact timesteps.
     override = {
+        # Setup
         "setup.precision": precision,
         "setup.linear": False,
+        # Time
         "time.dt_max": dt,
         "time.tfinal": final_time,
+        # Timestepping
         "timestepping.method": "ssprk3e",
         "timestepping.precompute_linear_matrix": precompute,
+        # Time
         "time.dt_method": "discrete" if precompute else "continuous",
+        # Init
         "init.amplitude": 0.25,
+        # Forcing
         "forcing.method": "negative_damping",
         "forcing.rate": 0.1,
+        # Hyperdissipation
         "hyperdissipation.kmod": 0.05,
         "hyperdissipation.kmod_power": 1,
         "hyperdissipation.kmod_normalised": False,
         "hyperdissipation.kmod_adaptive": False,
+        # Output
         "output.write_steps": 11,
         "output.time.save_steps": 3,
         "output.time.diags": ["free_energy"],
@@ -264,6 +272,7 @@ def test_nonlinear_evolution(
                 },
             },
         ],
+        # Restart
         "restart.write_restart_file": True,
         "restart.write_steps": 17,
     }
@@ -286,15 +295,21 @@ def test_nonlinear_evolution(
     # Disable diagnostics that could alter the evolving fields.
     reference_dt = dt / 4
     reference_override = override | {
+        # Setup
         "setup.precision": "double",
+        # Time
         "time.dt_max": reference_dt,
+        # Timestepping
         "timestepping.precompute_linear_matrix": False,
+        # Time
         "time.dt_method": "continuous",
+        # Output
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
         "output.1d.save_steps": -1,
         "output.3d.save_steps": -1,
         "output.realspace.save_steps": -1,
+        # Restart
         "restart.write_restart_file": False,
     }
     with create_test_system(

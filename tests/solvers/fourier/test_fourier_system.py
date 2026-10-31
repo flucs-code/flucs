@@ -88,7 +88,9 @@ def test_two_thirds_product(
     # Configure test
     source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
+        # Dealiasing
         "dealiasing.method": "two-thirds",
+        # Setup
         "setup.precision": precision,
         "setup.fft_wrapper": fft_wrapper,
     }
@@ -139,12 +141,16 @@ def test_two_thirds_boundary(
     # Retained sizes 21, 23, and 25 correspond to kmax = 10, 11, and 12.
     source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
+        # Dealiasing
         "dealiasing.method": "two-thirds",
+        # Setup
         "setup.precision": precision,
         "setup.fft_wrapper": "flucs",
+        # Dimensions
         "dimensions.nz": 36,
         "dimensions.nx": 36,
         "dimensions.ny": 36,
+        # Dealiasing
         "dealiasing.nz_unpadded": n_unpadded,
         "dealiasing.nx_unpadded": n_unpadded,
         "dealiasing.ny_unpadded": n_unpadded,
@@ -201,11 +207,14 @@ def test_spherical_phase_shift_boundary(
     # The quadratic cutoff is radius_squared < 2/9; 0.223 exceeds it.
     source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
+        # Dealiasing
         "dealiasing.method": "phase-shift",
         "dealiasing.truncation": "spherical",
         "dealiasing.radius_squared": radius_squared,
+        # Setup
         "setup.precision": precision,
         "setup.fft_wrapper": "flucs",
+        # Dimensions
         "dimensions.nz": 36,
         "dimensions.nx": 36,
         "dimensions.ny": 36,
@@ -262,11 +271,14 @@ def test_polyhedral_phase_shift_boundary(
     # The quadratic cutoff is max_sum < 2/3; 0.667 exceeds it.
     source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
+        # Dealiasing
         "dealiasing.method": "phase-shift",
         "dealiasing.truncation": "polyhedral",
         "dealiasing.max_sum": max_sum,
+        # Setup
         "setup.precision": precision,
         "setup.fft_wrapper": "flucs",
+        # Dimensions
         "dimensions.nz": 36,
         "dimensions.nx": 36,
         "dimensions.ny": 36,
@@ -317,18 +329,28 @@ def test_phase_shift_memory_models_agree(
     # Keep each truncation just inside its safe theoretical cutoff.
     source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     cutoff = (
-        {"dealiasing.radius_squared": 0.222}
+        {
+            # Dealiasing
+            "dealiasing.radius_squared": 0.222,
+        }
         if truncation == "spherical"
-        else {"dealiasing.max_sum": 0.666}
+        else {
+            # Dealiasing
+            "dealiasing.max_sum": 0.666,
+        }
     )
     override = {
+        # Dealiasing
         "dealiasing.method": "phase-shift",
         "dealiasing.truncation": truncation,
+        # Setup
         "setup.precision": precision,
         "setup.fft_wrapper": fft_wrapper,
+        # Dimensions
         "dimensions.nz": 30,
         "dimensions.nx": 30,
         "dimensions.ny": 30,
+        # Dealiasing
         **cutoff,
     }
 
@@ -387,11 +409,15 @@ def test_restart_resolution(
 
     # Setup input file
     override = {
+        # Setup
         "setup.precision": precision,
+        # Dimensions
         "dimensions.nz": nz,
         "dimensions.nx": nx,
         "dimensions.ny": ny,
+        # Forcing
         "forcing.method": "",
+        # Restart
         "restart.write_restart_file": False,
     }
 

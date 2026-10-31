@@ -61,15 +61,19 @@ def output_overrides(precision):
     """
     dt = 1 / 128  # Binary-exact timing in both precisions.
     return {
+        # Setup
         "setup.precision": precision,
-        # Set nine fixed steps, deterministic forcing, and fixed dissipation.
+        # Time
         "time.dt_max": dt,
         "time.tfinal": 9 * dt,
+        # Timestepping
         "timestepping.method": "ssprk3e",
+        # Forcing
         "forcing.method": "negative_damping",
+        # Hyperdissipation
         "hyperdissipation.kmod": 0.1,
         "hyperdissipation.kmod_adaptive": False,
-        # Save every 2 or 3 steps; write at steps 4, 8, and 9.
+        # Output
         "output.write_steps": 4,
         "output.time.save_steps": 2,
         "output.time.diags": ["free_energy"],
@@ -81,7 +85,6 @@ def output_overrides(precision):
                 "options": {"spectra": ["kz", "kperp"]},
             },
         ],
-        # Save Fourier and real-space slices.
         "output.3d.save_steps": 3,
         "output.3d.diags": [
             {
@@ -96,7 +99,7 @@ def output_overrides(precision):
                 "options": {"locations": ["0:2, 0:3, 0:4, 0:5"]},
             },
         ],
-        # Save a restart for the output history test.
+        # Restart
         "restart.write_restart_file": True,
     }
 
@@ -178,7 +181,9 @@ def cached_netcdf_output(test_fourier_system, tmp_path):
     """
     source_input = pl.Path(__file__).parent / "support/fourier/runtime.toml"
     override = {
+        # Setup
         "setup.precision": "double",
+        # Output
         "output.3d.save_steps": 1,
         "output.3d.diags": [
             {
