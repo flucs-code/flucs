@@ -112,6 +112,7 @@ def test_two_thirds_product(
             reference,
             rtol=0,
             atol=system.tolerance,
+            equal_nan=False,
         )
 
 
@@ -376,6 +377,7 @@ def test_phase_shift_memory_models_agree(
                 reference,
                 rtol=0,
                 atol=system.tolerance,
+                equal_nan=False,
             )
 
 
