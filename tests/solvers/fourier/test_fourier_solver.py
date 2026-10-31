@@ -36,7 +36,7 @@ def test_linear_evolution(
     precompute,
 ):
     """
-    Evolve TestFourierSystem linearly with damping
+    Evolve TestFourierSystem linearly with mixed hyperdissipation
     """
     source_input = pl.Path(__file__).parents[2] / "support/fourier/runtime.toml"
     dt = 1 / 16
@@ -45,38 +45,69 @@ def test_linear_evolution(
     # Parameters
     advection = np.array([0.5, -0.25, 0.125])
     rotation = np.array([0.25, 0.5, -0.125])
-    nu = 0.125
+
+    # Hyperdissipation values
+    nu_z = 1 / 16
+    nu_x = 2.0
+    nu_y = 0.5
+    nu_perp = 0.25
+    nu_mod = 4.0
 
     # Different dimensions
     Lz, Lx, Ly = 2 * np.pi, 4 * np.pi, 6 * np.pi
 
     # Set a linear run with fixed, binary-exact timesteps.
     override = {
+        # Setup
         "setup.precision": precision,
         "setup.linear": True,
         "setup.check_linear_matrix": False,
+        # Time
         "time.dt_max": dt,
         "time.tfinal": final_time,
+        "time.dt_method": "discrete" if precompute else "continuous",
+        # Timestepping
         "timestepping.method": method,
         "timestepping.linear_pade_degree": 4,
         "timestepping.precompute_linear_matrix": precompute,
-        "time.dt_method": "discrete" if precompute else "continuous",
+        # Dimensions
         "dimensions.Lz": Lz,
         "dimensions.Lx": Lx,
         "dimensions.Ly": Ly,
+        # Parameters
         "parameters.advection": advection.tolist(),
         "parameters.rotation": rotation.tolist(),
+        # Init
         "init.method": "deterministic",
         "init.amplitude": 1.0,
+        # Forcing
         "forcing.method": "",
-        # Use ordinary diffusion: nu*|k|^2, independent of dt and resolution.
-        "hyperdissipation.kmod": nu,
+        # Hyperdissipation
+        "hyperdissipation.kz": nu_z,
+        "hyperdissipation.kz_power": 2,
+        "hyperdissipation.kz_normalised": False,
+        "hyperdissipation.kz_adaptive": False,
+        "hyperdissipation.kx": nu_x,
+        "hyperdissipation.kx_power": 1,
+        "hyperdissipation.kx_normalised": True,
+        "hyperdissipation.kx_adaptive": False,
+        "hyperdissipation.ky": nu_y,
+        "hyperdissipation.ky_power": 3,
+        "hyperdissipation.ky_normalised": False,
+        "hyperdissipation.ky_adaptive": False,
+        "hyperdissipation.kperp": nu_perp,
+        "hyperdissipation.kperp_power": 2,
+        "hyperdissipation.kperp_normalised": False,
+        "hyperdissipation.kperp_adaptive": False,
+        "hyperdissipation.kmod": nu_mod,
         "hyperdissipation.kmod_power": 1,
-        "hyperdissipation.kmod_normalised": False,
+        "hyperdissipation.kmod_normalised": True,
         "hyperdissipation.kmod_adaptive": False,
+        # Output
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
         "output.1d.save_steps": -1,
+        # Restart
         "restart.write_restart_file": False,
     }
 
@@ -110,7 +141,23 @@ def test_linear_evolution(
         advection_frequency = (
             advection[0] * kz + advection[1] * kx + advection[2] * ky
         )
-        damping_rate = nu * (kz**2 + kx**2 + ky**2)
+
+        # Two-thirds truncation retains integer modes with 3*abs(m) < n.
+        kz_max = 2 * np.pi * ((nz - 1) // 3) / Lz
+        kx_max = 2 * np.pi * ((nx - 1) // 3) / Lx
+        ky_max = 2 * np.pi * ((ny - 1) // 3) / Ly
+        kmod_max_squared = kz_max**2 + kx_max**2 + ky_max**2
+
+        # Sum the prescribed directional, perpendicular and isotropic damping.
+        kperp_squared = kx**2 + ky**2
+        kmod_squared = kz**2 + kperp_squared
+        damping_rate = (
+            nu_z * kz**4
+            + nu_x * (kx / kx_max)**2
+            + nu_y * ky**6
+            + nu_perp * kperp_squared**2
+            + nu_mod * kmod_squared / kmod_max_squared
+        )
 
         # Rotate through -|Omega|*t using Rodrigues' formula.
         rotation_frequency = np.linalg.norm(rotation)
@@ -125,12 +172,12 @@ def test_linear_evolution(
         cross_fields = np.cross(rotation_axis, initial_fields, axis=0)
 
         rotated_fields = (
-            +np.cos(angle) * initial_fields
+            np.cos(angle) * initial_fields
             - np.sin(angle) * cross_fields
             + (1 - np.cos(angle)) * parallel_fields
         )
 
-        # Apply the exact advective phase and diffusive decay.
+        # Apply the exact advective phase and hyperdissipative decay.
         expected = rotated_fields * np.exp(
             -(damping_rate + 1j * advection_frequency) * final_time
         )
@@ -191,18 +238,15 @@ def test_nonlinear_evolution(
         "init.amplitude": 0.25,
         "forcing.method": "negative_damping",
         "forcing.rate": 0.1,
-        # Use the same physical dissipation at both timesteps.
         "hyperdissipation.kmod": 0.05,
         "hyperdissipation.kmod_power": 1,
         "hyperdissipation.kmod_normalised": False,
         "hyperdissipation.kmod_adaptive": False,
-        # Save at different intervals, including a final partial write.
         "output.write_steps": 11,
         "output.time.save_steps": 3,
         "output.time.diags": ["free_energy"],
         "output.0d.save_steps": 5,
         "output.1d.save_steps": 5,
-        # Save Fourier and real-space slices.
         "output.3d.save_steps": 5,
         "output.3d.diags": [
             {
