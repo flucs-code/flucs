@@ -7,13 +7,12 @@ import pathlib as pl
 import numpy as np
 import numpy.testing as npt
 import pytest
+import toml
 
 from flucs import cupy as cp
+from flucs.restart import FlucsRestart
 from flucs.testing import create_test_system
 from flucs.utilities.dealiasing import dealiased_multiplication_rfft
-
-# These are all slow tests
-pytestmark = [pytest.mark.gpu, pytest.mark.slow]
 
 ################################################################################
 # Helper functions
@@ -69,6 +68,8 @@ def _compute_retained_product_and_reference(system):
 # Dealiasing: two-thirds
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
 def test_two_thirds_product(
@@ -109,6 +110,8 @@ def test_two_thirds_product(
         )
 
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize(
     ("n_unpadded", "is_safe"),
@@ -168,6 +171,8 @@ def test_two_thirds_boundary(
 # Dealiasing: phase-shift spherical truncation
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize(
     ("radius_squared", "is_safe"),
@@ -225,6 +230,8 @@ def test_spherical_phase_shift_boundary(
 # Dealiasing: phase-shift polyhedral truncation
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize(
     ("max_sum", "is_safe"),
@@ -282,6 +289,8 @@ def test_polyhedral_phase_shift_boundary(
 # Dealiasing: phase-shift FFT wrappers and memory models
 # ------------------------------------------------------------------------------
 
+@pytest.mark.gpu
+@pytest.mark.slow
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize("truncation", ("spherical", "polyhedral"))
 @pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
@@ -339,3 +348,105 @@ def test_phase_shift_memory_models_agree(
                 rtol=0,
                 atol=system.tolerance,
             )
+
+
+# ------------------------------------------------------------------------------
+# Restart preparation
+# ------------------------------------------------------------------------------
+
+@pytest.mark.cpu
+@pytest.mark.parametrize("precision", ("single", "double"))
+@pytest.mark.parametrize(
+    ("restart_resolution", "resolution"),
+    [
+        pytest.param((18, 24, 30), (32, 40, 48), id="increase-resolution"),
+        pytest.param((32, 40, 48), (18, 24, 30), id="decrease-resolution"),
+    ],
+)
+def test_restart_resolution(
+    test_fourier_system, tmp_path, precision, restart_resolution, resolution,
+):
+    """
+    Preserve common Fourier modes and zero new modes when resizing a restart.
+    """
+    source_input = (
+        pl.Path(__file__).parents[2] / "support/fourier/runtime.toml"
+    )
+    restart_nz, restart_nx, restart_ny = restart_resolution
+    nz, nx, ny = resolution
+
+    # Setup input file
+    override = {
+        "setup.precision": precision,
+        "dimensions.nz": nz,
+        "dimensions.nx": nx,
+        "dimensions.ny": ny,
+        "forcing.method": "",
+        "restart.write_restart_file": False,
+    }
+
+    with create_test_system(source_input, tmp_path, override=override) as (
+        flucs_input, _, system,
+    ):
+        # Prescribe signed Fourier modes common to both resolutions.
+        # Negative indices select negative kz/kx; ky is stored nonnegative.
+        retained_modes = {
+            (0, 0, 0): 1,
+            (1, 2, 0): 1 + 2j,
+            (-1, -2, 0): 1 - 2j,
+            (8, -11, 14): 2 + 3j,
+            (-8, 11, 1): -1 + 4j,
+            (-9, -12, 3): 3 - 2j,
+            (0, 0, 15): 4,
+        }
+        
+        field_amplitudes = np.arange(1, system.number_of_fields + 1)
+        
+        restart_shape = (restart_nz, restart_nx, restart_ny//2 + 1)
+        restart_fields = np.zeros(
+            (system.number_of_fields, *restart_shape),
+            dtype=system.complex,
+        )
+        expected = np.zeros(
+            (system.number_of_fields, nz, nx, ny//2 + 1),
+            dtype=system.complex,
+        )
+
+        for (kz, kx, ky), coefficient in retained_modes.items():
+            restart_fields[:, kz, kx, ky] = field_amplitudes * coefficient
+            expected[:, kz, kx, ky] = field_amplitudes * coefficient
+
+        # The larger restart also contains modes excluded by the smaller grid.
+        if restart_resolution == (32, 40, 48):
+            discarded_modes = {
+                (9, 0, 1): 5 + 6j,
+                (-10, 0, 1): 7 - 2j,
+                (0, 12, 1): -3 + 8j,
+                (0, -13, 1): 9 + 4j,
+                (0, 0, 16): 2 - 7j,
+            }
+            for (kz, kx, ky), coefficient in discarded_modes.items():
+                restart_fields[:, kz, kx, ky] = field_amplitudes * coefficient
+
+        # Supply restart data with the original resolution and unchanged box.
+        restart_input = toml.loads(str(flucs_input))
+        restart_input["dimensions"].update(
+            nz=restart_nz, nx=restart_nx, ny=restart_ny,
+        )
+        system.restart_manager = FlucsRestart(system)
+        system.restart_manager.data = {
+            "fields": {
+                "data": restart_fields,
+                "dimension_names": ("number_of_fields", "nz", "nx", "half_ny"),
+            },
+            "input_file": {
+                "data": np.asarray(toml.dumps(restart_input)),
+                "dimension_names": (),
+            },
+        }
+
+        # Remap through the production path without compiling or evolving.
+        actual = system.prepare_restart_data()
+
+        assert actual.dtype == np.dtype(system.complex)
+        npt.assert_array_equal(actual, expected)
