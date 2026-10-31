@@ -1,11 +1,12 @@
 """
-Nonlinear timestep convergence using a common developed Fourier state.
+Timestepper coefficients and nonlinear convergence.
 """
 
 import pathlib as pl
 from contextlib import ExitStack
 
 import numpy as np
+import numpy.testing as npt
 import pytest
 
 from flucs import cupy as cp
@@ -140,7 +141,81 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
 ################################################################################
 
 # ------------------------------------------------------------------------------
-# Timestepper convergence
+# AB3 coefficients
+# ------------------------------------------------------------------------------
+
+
+@pytest.mark.cpu
+@pytest.mark.parametrize("precision", ("single", "double"))
+def test_ab3_coefficients(test_fourier_system, tmp_path, precision):
+    """
+    Integrate quadratic polynomials exactly with changing AB3 timesteps.
+    """
+    source_input = pl.Path(__file__).parents[3] / "support/fourier/runtime.toml"
+    override = {
+        # Setup
+        "setup.precision": precision,
+        # Timestepping
+        "timestepping.method": "ab3",
+        "timestepping.precompute_linear_matrix": False,
+        # Forcing
+        "forcing.method": "",
+    }
+
+    with create_test_system(source_input, tmp_path, override=override) as (
+        _,
+        solver,
+        system,
+    ):
+        timestepper = solver.timestepper
+
+        # Increase and decrease dt, crossing the three-slot history twice.
+        timesteps = np.array(
+            [1 / 8, 3 / 16, 1 / 4, 1 / 8, 3 / 16, 1 / 4, 1 / 8, 1 / 8],
+            dtype=system.float,
+        )
+
+        # Supply two completed intervals without allocating CUDA history.
+        timestepper.dt_array = np.array(
+            [0, timesteps[0], timesteps[1]], dtype=system.float
+        )
+        timestepper.ab3_coefficients = np.zeros(3, dtype=system.float)
+
+        for step in range(3, len(timesteps) + 1):
+            system.current_step = system.int(step)
+            system.current_dt = timesteps[step - 1]
+            timestepper._update_ab3_coefficients()
+
+            # Sample times relative to the current state at t=0.
+            dt = float(timesteps[step - 1])
+            previous_dt = float(timesteps[step - 2])
+            earlier_dt = float(timesteps[step - 3])
+            sample_times = np.array(
+                [0, -previous_dt, -previous_dt - earlier_dt]
+            )
+
+            # AB3 must integrate 1, t and t**2 exactly over [0, dt].
+            coefficients = timestepper.ab3_coefficients
+            actual = dt * np.array(
+                [
+                    np.sum(coefficients),
+                    np.dot(coefficients, sample_times),
+                    np.dot(coefficients, sample_times**2),
+                ]
+            )
+            expected = np.array([dt, dt**2 / 2, dt**3 / 3])
+
+            npt.assert_allclose(
+                actual,
+                expected,
+                rtol=32 * np.finfo(system.float).eps,
+                atol=0,
+                equal_nan=False,
+            )
+
+
+# ------------------------------------------------------------------------------
+# Convergence
 # ------------------------------------------------------------------------------
 
 
