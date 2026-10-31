@@ -1,6 +1,0 @@
-[setup]
-solver = "FourierSolver"
-system = "TestFourierSystem"
-
-[time]
-dt_max = 0.125
