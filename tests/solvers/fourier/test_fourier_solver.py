@@ -153,7 +153,12 @@ def test_linear_evolution(
 # ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("precision", ("single", "double"))
-def test_nonlinear_evolution(test_fourier_system, tmp_path, precision):
+@pytest.mark.parametrize(
+    "precompute", (False, True), ids=("not-precomputed", "precomputed"),
+)
+def test_nonlinear_evolution(
+    test_fourier_system, tmp_path, precision, precompute,
+):
     """
     Evolve TestFourierSystem nonlinearly with forcing and damping
     """
@@ -171,6 +176,8 @@ def test_nonlinear_evolution(test_fourier_system, tmp_path, precision):
         "time.dt_max": dt,
         "time.tfinal": final_time,
         "timestepping.method": "ssprk3e",
+        "timestepping.precompute_linear_matrix": precompute,
+        "time.dt_method": "discrete" if precompute else "continuous",
 
         "init.amplitude": 0.25,
         "forcing.method": "negative_damping",
@@ -231,6 +238,8 @@ def test_nonlinear_evolution(test_fourier_system, tmp_path, precision):
     reference_override = override | {
         "setup.precision": "double",
         "time.dt_max": reference_dt,
+        "timestepping.precompute_linear_matrix": False,
+        "time.dt_method": "continuous",
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
         "output.1d.save_steps": -1,
@@ -250,5 +259,5 @@ def test_nonlinear_evolution(test_fourier_system, tmp_path, precision):
     # Allow third-order timestep error and precision-dependent roundoff.
     error = np.linalg.norm(actual - reference) / np.linalg.norm(reference)
     tolerance = max(1e-7, roundoff_tolerance)
-    
+
     assert error < tolerance
