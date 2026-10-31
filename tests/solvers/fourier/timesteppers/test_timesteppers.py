@@ -147,9 +147,21 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
 
 @pytest.mark.cpu
 @pytest.mark.parametrize("precision", ("single", "double"))
-def test_ab3_coefficients(test_fourier_system, tmp_path, precision):
+@pytest.mark.parametrize(
+    "timesteps",
+    [
+        pytest.param([1 / 8] * 8, id="uniform"),
+        pytest.param(
+            [1 / 8, 3 / 16, 1 / 4, 1 / 8, 3 / 16, 1 / 4, 1 / 8, 1 / 8],
+            id="varying",
+        ),
+    ],
+)
+def test_ab3_coefficients(
+    test_fourier_system, tmp_path, precision, timesteps
+):
     """
-    Integrate quadratic polynomials exactly with changing AB3 timesteps.
+    Integrate quadratic polynomials with uniform or varying AB3 timesteps.
     """
     source_input = pl.Path(__file__).parents[3] / "support/fourier/runtime.toml"
     override = {
@@ -169,11 +181,8 @@ def test_ab3_coefficients(test_fourier_system, tmp_path, precision):
     ):
         timestepper = solver.timestepper
 
-        # Increase and decrease dt, crossing the three-slot history twice.
-        timesteps = np.array(
-            [1 / 8, 3 / 16, 1 / 4, 1 / 8, 3 / 16, 1 / 4, 1 / 8, 1 / 8],
-            dtype=system.float,
-        )
+        # Use the selected precision for the timestep history.
+        timesteps = np.asarray(timesteps, dtype=system.float)
 
         # Supply two completed intervals without allocating CUDA history.
         timestepper.dt_array = np.array(
