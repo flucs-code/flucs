@@ -328,7 +328,6 @@ def test_nonlinear_evolution(
         tmp_path / "solution",
         override=override,
     ) as (_, solver, system):
-        
         # Record the production controller's timesteps without changing them.
         timesteps = record_timesteps(system, monkeypatch)
         solver.run()
@@ -354,7 +353,7 @@ def test_nonlinear_evolution(
         # Timestepping
         "timestepping.precompute_linear_matrix": False,
         # Hyperdissipation
-        "hyperdissipation.kmod": hyperdissipation / refinement, # keep value
+        "hyperdissipation.kmod": hyperdissipation / refinement,  # keep value
         # Output
         "output.time.save_steps": -1,
         "output.0d.save_steps": -1,
@@ -369,7 +368,6 @@ def test_nonlinear_evolution(
         tmp_path / "reference",
         override=reference_override,
     ) as (_, solver, system):
-        
         # Set the timesteps for the reference run.
         set_reference_timesteps(solver, reference_timesteps, monkeypatch)
         solver.run()

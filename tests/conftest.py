@@ -2,6 +2,8 @@
 Shared pytest support and optional test-system lookup.
 """
 
+import pathlib as pl
+
 import pytest
 
 import flucs
@@ -11,7 +13,6 @@ from .support.fourier import TestFourierSystem
 pytest_plugins = ["flucs.testing.pytest_plugin"]
 
 FLUCS_HELP = """
-
 FLUCS test suite
 ===============
 
@@ -20,83 +21,20 @@ the other two. By default, pytest runs all tests not marked as slow, with gpu
 test skipped if a CUDA device is unavailable. The slow tests are currently a
 subset of the gpu tests.
 
-Categories
-----------
-
-Tests are grouped by production module within src/flucs.
-Each name represents all of its parameterized cases.
-
-cpu
-    flucs.py
-        - test_conflicting_operating_modes
-
-    input.py
-        - test_input_is_read_only
-        - test_input_precedence
-
-    output.py
-        - test_netcdf_open_dataset_retries
-        - test_netcdf_open_failure_preserves_cache
-
-    solvers/fourier/fourier_system.py
-        - test_prepare_restart_data_resolution
-
-    solvers/fourier/timesteppers/
-        - test_update_ab3_coefficients
-
-    utilities/dealiasing.py
-        - test_next_smooth_number
-        - test_dealiased_multiplication_rfft (NumPy)
-
-gpu
-    output.py
-        - test_output_write_cached_samples (slow)
-        - test_output_restart_history (slow)
-
-    restart.py
-        - test_restart_data_and_time (slow)
-        - test_restart_reset_time (slow)
-        - test_restart_initial_state (slow)
-        - test_restart_backup_rotation (slow)
-
-    solvers/fourier/fourier_solver.py
-        - test_linear_evolution (slow)
-        - test_nonlinear_evolution (slow)
-
-    solvers/fourier/fourier_system.py
-        - test_two_thirds_product (slow)
-        - test_two_thirds_boundary (slow)
-        - test_spherical_phase_shift_boundary (slow)
-        - test_polyhedral_phase_shift_boundary (slow)
-        - test_phase_shift_memory_models (slow)
-
-    solvers/fourier/fourier_system_reductions.py
-        - test_scalar_reduction
-        - test_axis_reduction
-        - test_axis_cumulative_reduction
-        - test_axis_pair_reduction
-        - test_shell_reduction
-        - test_shell_reduction_boundaries
-
-    solvers/fourier/timesteppers/
-        - test_timestepper_convergence (slow)
-
-    utilities/dealiasing.py
-        - test_dealiased_multiplication_rfft (CuPy)
+{categories}
 
 Selection
 ---------
 
 pytest                         Default: exclude slow tests
-pytest -m cpu                  CPU tests only
-pytest -m "gpu and not slow"    Fast GPU tests only
-pytest -m gpu                  All GPU tests, including slow
+pytest -m cpu                  All CPU tests
+pytest -m "gpu and not slow"   Fast GPU tests only
+pytest -m gpu                  All GPU tests
 pytest -m slow                 Slow tests only
-pytest -m "cpu or gpu"          Entire suite
+pytest -m ""                   Entire suite
 
-An explicit -m expression replaces the default "not slow"
-expression. Therefore, -m gpu includes slow GPU tests.
-
+An explicit -m expression replaces the default "not slow" expression. Therefore,
+-m gpu includes slow GPU tests.
 """
 
 
@@ -120,11 +58,60 @@ def pytest_addoption(parser):
 @pytest.hookimpl(tryfirst=True)
 def pytest_cmdline_main(config):
     """
-    Print the guide without collecting or running tests.
+    Collect the full inventory for help, including slow tests.
     """
     if config.getoption("flucs_help"):
-        print(FLUCS_HELP.strip())
-        return pytest.ExitCode.OK
+        config.option.markexpr = ""
+        config.option.keyword = ""
+
+
+def pytest_collection_finish(session):
+    """
+    Print test names and markers grouped by category and file.
+    """
+    if not session.config.getoption("flucs_help") or session.testsfailed:
+        return
+
+    # Collapse parameterized cases, retaining their CPU/GPU and slow marks.
+    categories = {"cpu": {}, "gpu": {}}
+    tests_path = pl.Path(__file__).parent
+    for item in session.items:
+        path = item.path.relative_to(tests_path)
+        name = item.originalname or item.name
+        is_slow = item.get_closest_marker("slow") is not None
+        for category, files in categories.items():
+            if item.get_closest_marker(category) is not None:
+                tests = files.setdefault(path, {})
+                tests.setdefault(name, set()).add(is_slow)
+
+    # List core files first, then subdirectories; preserve function order.
+    indent = 3 * " "
+    lines = []
+    for category, files in categories.items():
+        lines.append(f"{category}:")
+        for path in sorted(
+            files, key=lambda path: (len(path.parts) > 1, path.as_posix())
+        ):
+            lines.append(f"\n{indent}{path.as_posix()}:")
+            for name, slow_marks in files[path].items():
+                suffix = ""
+                if slow_marks == {True}:
+                    suffix = " (slow)"
+                elif True in slow_marks:
+                    suffix = " (some cases slow)"
+                lines.append(f"{2 * indent}- {name}{suffix}")
+        lines.append("")
+
+    print(FLUCS_HELP.format(categories="\n".join(lines).rstrip()), end="")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtestloop(session):
+    """
+    Stop after help collection without running fixtures or tests.
+    """
+    if session.config.getoption("flucs_help") and not session.testsfailed:
+        return True
 
 
 ################################################################################

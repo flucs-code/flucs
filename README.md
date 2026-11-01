@@ -112,29 +112,22 @@ To lint the a specific file:
 $ ruff check <path to file> [--fix]
 ```
 
-The `--fix` flag is optional, and will automatically correct many issues. Note that 
-both the `format` and `check` commands will also apply recursively if run on a directory 
-(such as `flucs/src`). 
+The `--fix` flag is optional, and will automatically correct many issues. Note 
+that  both the `format` and `check` commands will also apply recursively if run 
+on a directory (such as `flucs/src`). 
 
 ### Testing
 
-Tests use the `cpu`, `gpu`, and `slow` markers. A plain `pytest` runs all
-tests except slow ones. GPU tests are skipped if a CUDA device is
-unavailable (checked once per session before GPU tests
-execute).
+From the repository directory, run `pytest` for the default suite. For more 
+information about test coverage, markers, and commands to select other tests, 
+use:
 
 ```console
-$ pytest
-$ pytest -m cpu
-$ pytest -m "gpu and not slow"
-$ pytest -m slow
-$ pytest -m ""
+$ pytest --flucs-help
 ```
 
-An explicit `-m` replaces the default `not slow` selection. For example,
-`-m gpu` includes slow GPU tests, and `-m ""` selects all tests.
-
-System and solver repositories can load the same support in `tests/conftest.py`:
+System and solver repositories can reuse the markers and CUDA availability
+checks by adding this to their `tests/conftest.py`:
 
 ```python
 pytest_plugins = ["flucs.testing.pytest_plugin"]
@@ -148,5 +141,6 @@ addopts = "--strict-markers -m 'not slow'"
 testpaths = ["tests"]
 ```
 
-Tests should be marked explicitly, for example with `@pytest.mark.gpu`. Pytest is only required when running
-tests, not when importing the construction helper or running FLUCS.
+Tests should be marked explicitly, for example with `@pytest.mark.gpu`.
+The `--flucs-help` coverage guide is local to this repository, not part of
+the shared plugin.
