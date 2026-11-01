@@ -314,7 +314,7 @@ def test_polyhedral_phase_shift_boundary(
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize("truncation", ("spherical", "polyhedral"))
 @pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
-def test_phase_shift_memory_models_agree(
+def test_phase_shift_memory_models(
     test_fourier_system,
     tmp_path,
     precision,
@@ -393,7 +393,7 @@ def test_phase_shift_memory_models_agree(
         pytest.param((32, 40, 48), (18, 24, 30), id="decrease-resolution"),
     ],
 )
-def test_restart_resolution(
+def test_prepare_restart_data_resolution(
     test_fourier_system,
     tmp_path,
     precision,

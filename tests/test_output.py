@@ -227,7 +227,7 @@ def cached_netcdf_output(test_fourier_system, tmp_path):
 
 @pytest.mark.gpu
 @pytest.mark.slow
-def test_saved_output_integrity(output_solver, output_samples):
+def test_output_write_cached_samples(output_solver, output_samples):
     """
     Preserve sampled values through repeated writes and the final forced write.
     """
@@ -358,7 +358,7 @@ def test_saved_output_integrity(output_solver, output_samples):
 
 @pytest.mark.gpu
 @pytest.mark.slow
-def test_output_history(output_solver, tmp_path):
+def test_output_restart_history(output_solver, tmp_path):
     """
     Preserve earlier output and read both runs across a restarted continuation.
     """
@@ -496,7 +496,7 @@ def test_output_history(output_solver, tmp_path):
 
 
 @pytest.mark.cpu
-def test_netcdf_open_recovers(cached_netcdf_output, monkeypatch):
+def test_netcdf_open_dataset_retries(cached_netcdf_output, monkeypatch):
     """
     Retry temporary opening failures and write cached samples once.
     """

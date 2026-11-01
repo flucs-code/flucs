@@ -457,7 +457,7 @@ def test_shell_reduction(compiled_reductions, reduction_output, complex_output):
 @pytest.mark.parametrize(
     "complex_output", (False, True), ids=("real", "complex")
 )
-def test_shell_boundaries(
+def test_shell_reduction_boundaries(
     compiled_reductions, reduction_output, complex_output
 ):
     """

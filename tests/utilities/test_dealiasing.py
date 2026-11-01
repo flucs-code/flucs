@@ -50,7 +50,9 @@ def test_next_smooth_number(n, primes, expected):
 )
 @pytest.mark.parametrize("precision", ("single", "double"))
 @pytest.mark.parametrize("direction", ("z", "x", "y"))
-def test_padded_multiplication(monkeypatch, backend, precision, direction):
+def test_dealiased_multiplication_rfft(
+    monkeypatch, backend, precision, direction
+):
     """
     Squaring 1 + cos(4c) retains its low modes without aliasing cos(8x).
     """

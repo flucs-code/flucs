@@ -259,7 +259,7 @@ def test_restart_initial_state(restart_run, tmp_path):
 
 @pytest.mark.gpu
 @pytest.mark.slow
-def test_restart_backups(restart_run):
+def test_restart_backup_rotation(restart_run):
     """
     Retain the two preceding checkpoints, newest first, after backup rotation.
     """

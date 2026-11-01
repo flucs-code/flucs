@@ -157,7 +157,7 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
         ),
     ],
 )
-def test_ab3_coefficients(
+def test_update_ab3_coefficients(
     test_fourier_system, tmp_path, precision, timesteps
 ):
     """
