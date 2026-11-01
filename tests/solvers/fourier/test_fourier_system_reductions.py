@@ -2,8 +2,6 @@
 Fourier reductions of explicitly prescribed mode contributions.
 """
 
-import pathlib as pl
-
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -11,8 +9,6 @@ import pytest
 from flucs import cupy as cp
 from flucs.solvers.fourier.fourier_system_reductions import FourierReductions
 from flucs.testing import create_test_system
-
-INPUT_PATH = pl.Path(__file__).parent / "inputs" / "reductions.toml"
 
 ################################################################################
 # Fixtures
@@ -25,12 +21,40 @@ def compiled_reductions(request, test_fourier_system, tmp_path_factory):
     Compile registered real and complex reductions once per precision.
     """
     io_path = tmp_path_factory.mktemp(f"reductions_{request.param}")
+    input_path = io_path / "reductions.toml"
+    input_path.write_text(
+        """\
+        [setup]
+        solver = "FourierSolver"
+        system = "TestFourierSystem"
+        linear = true
+        check_linear_matrix = false
+
+        [dimensions]
+        nz = 13
+        nx = 14
+        ny = 19
+        Lz = 6.283185307179586
+        Lx = 12.566370614359172
+        Ly = 18.84955592153876
+
+        [dealiasing]
+        method = "two-thirds"
+
+        [forcing]
+        method = ""
+
+        [restart]
+        write_restart_file = false
+        """,
+        encoding="utf-8",
+    )
     override = {
         # Setup
         "setup.precision": request.param,
     }
 
-    with create_test_system(INPUT_PATH, io_path, override=override) as (
+    with create_test_system(input_path, io_path, override=override) as (
         _,
         solver,
         system,

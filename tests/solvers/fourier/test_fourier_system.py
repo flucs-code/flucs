@@ -63,6 +63,40 @@ def _compute_retained_product_and_reference(system):
 
 
 ################################################################################
+# Fixtures
+################################################################################
+
+
+@pytest.fixture(scope="module")
+def dealiasing_input(tmp_path_factory):
+    """
+    Write the common input for dealiased products.
+    """
+    input_path = tmp_path_factory.mktemp("dealiasing_input") / "dealiasing.toml"
+    input_path.write_text(
+        """\
+        [setup]
+        solver = "FourierSolver"
+        system = "TestFourierSystem"
+        check_linear_matrix = false
+
+        [dimensions]
+        nz = 12
+        nx = 12
+        ny = 12
+
+        [dealiasing]
+        check_errors = true
+
+        [forcing]
+        method = ""
+        """,
+        encoding="utf-8",
+    )
+    return input_path
+
+
+################################################################################
 # Tests
 ################################################################################
 
@@ -77,6 +111,7 @@ def _compute_retained_product_and_reference(system):
 @pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
 def test_two_thirds_product(
     test_fourier_system,
+    dealiasing_input,
     tmp_path,
     precision,
     fft_wrapper,
@@ -86,7 +121,6 @@ def test_two_thirds_product(
     """
 
     # Configure test
-    source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
         # Dealiasing
         "dealiasing.method": "two-thirds",
@@ -95,7 +129,7 @@ def test_two_thirds_product(
         "setup.fft_wrapper": fft_wrapper,
     }
 
-    with create_test_system(source_input, tmp_path, override=override) as (
+    with create_test_system(dealiasing_input, tmp_path, override=override) as (
         _,
         solver,
         system,
@@ -129,6 +163,7 @@ def test_two_thirds_product(
 )
 def test_two_thirds_boundary(
     test_fourier_system,
+    dealiasing_input,
     tmp_path,
     precision,
     n_unpadded,
@@ -140,7 +175,6 @@ def test_two_thirds_boundary(
 
     # For this 36-point grid, quadratic products require kmax < 12.
     # Retained sizes 21, 23, and 25 correspond to kmax = 10, 11, and 12.
-    source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
         # Dealiasing
         "dealiasing.method": "two-thirds",
@@ -157,7 +191,7 @@ def test_two_thirds_boundary(
         "dealiasing.ny_unpadded": n_unpadded,
     }
 
-    with create_test_system(source_input, tmp_path, override=override) as (
+    with create_test_system(dealiasing_input, tmp_path, override=override) as (
         _,
         solver,
         system,
@@ -195,6 +229,7 @@ def test_two_thirds_boundary(
 )
 def test_spherical_phase_shift_boundary(
     test_fourier_system,
+    dealiasing_input,
     tmp_path,
     precision,
     radius_squared,
@@ -205,7 +240,6 @@ def test_spherical_phase_shift_boundary(
     """
 
     # The quadratic cutoff is radius_squared < 2/9; 0.223 exceeds it.
-    source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
         # Dealiasing
         "dealiasing.method": "phase-shift",
@@ -220,7 +254,7 @@ def test_spherical_phase_shift_boundary(
         "dimensions.ny": 36,
     }
 
-    with create_test_system(source_input, tmp_path, override=override) as (
+    with create_test_system(dealiasing_input, tmp_path, override=override) as (
         _,
         solver,
         system,
@@ -258,6 +292,7 @@ def test_spherical_phase_shift_boundary(
 )
 def test_polyhedral_phase_shift_boundary(
     test_fourier_system,
+    dealiasing_input,
     tmp_path,
     precision,
     max_sum,
@@ -268,7 +303,6 @@ def test_polyhedral_phase_shift_boundary(
     """
 
     # The quadratic cutoff is max_sum < 2/3; 0.667 exceeds it.
-    source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     override = {
         # Dealiasing
         "dealiasing.method": "phase-shift",
@@ -283,7 +317,7 @@ def test_polyhedral_phase_shift_boundary(
         "dimensions.ny": 36,
     }
 
-    with create_test_system(source_input, tmp_path, override=override) as (
+    with create_test_system(dealiasing_input, tmp_path, override=override) as (
         _,
         solver,
         system,
@@ -316,6 +350,7 @@ def test_polyhedral_phase_shift_boundary(
 @pytest.mark.parametrize("fft_wrapper", ("flucs", "cupy"))
 def test_phase_shift_memory_models(
     test_fourier_system,
+    dealiasing_input,
     tmp_path,
     precision,
     truncation,
@@ -326,7 +361,6 @@ def test_phase_shift_memory_models(
     """
 
     # Keep each truncation just inside its safe theoretical cutoff.
-    source_input = pl.Path(__file__).parent / "inputs" / "dealiasing.toml"
     cutoff = (
         {
             # Dealiasing
@@ -362,7 +396,7 @@ def test_phase_shift_memory_models(
     for memory in memory_models:
         override["dealiasing.memory"] = memory
         with create_test_system(
-            source_input, tmp_path / memory, override=override
+            dealiasing_input, tmp_path / memory, override=override
         ) as (_, solver, system):
             system.setup()
             solver.timestepper.setup()

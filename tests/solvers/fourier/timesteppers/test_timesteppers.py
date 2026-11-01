@@ -13,7 +13,7 @@ from flucs import cupy as cp
 from flucs.solvers import FlucsSolverState
 from flucs.testing import create_test_system
 
-INPUT_PATH = pl.Path(__file__).parent / "inputs" / "convergence.toml"
+INPUT_PATH = pl.Path(__file__).parents[3] / "support/fourier/runtime.toml"
 
 ################################################################################
 # Helper functions
@@ -106,7 +106,18 @@ def baseline_fourier_state(test_fourier_system, tmp_path_factory):
     Evolve the original single-precision SSPRK3 baseline once.
     """
     io_path = tmp_path_factory.mktemp("convergence_baseline")
-    with create_test_system(INPUT_PATH, io_path) as (_, solver, system):
+    override = {
+        # Setup
+        "setup.check_linear_matrix": False,
+        # Dimensions
+        "dimensions.nx": 32,
+        "dimensions.ny": 32,
+    }
+    with create_test_system(INPUT_PATH, io_path, override=override) as (
+        _,
+        solver,
+        system,
+    ):
         # Get baseline fields
         _setup_system(solver, system)
         _reset_system(system, system.fields_initial, system.init_dt)
@@ -253,6 +264,10 @@ def test_timestepper_convergence(
     override = {
         # Setup
         "setup.precision": "double",
+        "setup.check_linear_matrix": False,
+        # Dimensions
+        "dimensions.nx": 32,
+        "dimensions.ny": 32,
         # Timestepping
         "timestepping.method": method,
         # Time

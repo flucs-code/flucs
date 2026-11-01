@@ -4,7 +4,7 @@ system = "TestFourierSystem"
 precision = "single"
 
 [time]
-tfinal = 50.0
+tfinal = 100.0
 dt_max = 0.02
 max_cfl = 0.2
 dt_method = "continuous"
@@ -29,10 +29,8 @@ method = "deterministic"
 amplitude = 0.01
 
 [forcing]
-method = "ornstein_uhlenbeck"
-amplitude = [0.1, 0.1, 0.1]
-corr_time = 1.0
-rand_seed = 1
+method = "negative_damping"
+rate = 0.05
 range_kmod = [0.5, 2.5]
 
 [hyperdissipation]
@@ -58,6 +56,6 @@ diags = [
 ]
 
 [restart]
-write_restart_file = true
+write_restart_file = false
 write_steps = 500
 restart_if_exists = false

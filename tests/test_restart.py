@@ -39,6 +39,7 @@ def restart_run(request, test_fourier_system, tmp_path_factory):
         "timestepping.method": "ssprk3e",
         # Forcing
         "forcing.method": "negative_damping",
+        "forcing.rate": 0.02,
         # Hyperdissipation
         "hyperdissipation.kmod": 0.1,
         "hyperdissipation.kmod_adaptive": False,
