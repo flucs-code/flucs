@@ -13,7 +13,7 @@ from .support.fourier import TestFourierSystem
 pytest_plugins = ["flucs.testing.pytest_plugin"]
 
 FLUCS_HELP = """
-FLUCS test suite
+flucs test suite
 ===============
 
 Tests are marked as cpu, gpu, or slow, the latter of which can be in addition to

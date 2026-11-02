@@ -36,7 +36,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
 
-      - name: Install FLUCS and testing dependencies
+      - name: Install flucs and testing dependencies
         run: uv sync --no-dev --group test
 
       - name: Run CPU tests
