@@ -2073,7 +2073,7 @@ class FourierSystem(FlucsSystem):
                 solved_fields = np.random.random(
                     (self.number_of_fields, number_of_solved_modes)
                 ).astype(dtype=self.complex)
-                solved_fields = np.exp(1j * np.pi * solved_fields)
+                solved_fields = np.exp(2j * np.pi * solved_fields)
                 # this randomizes phases
 
                 # Decide what amplitudes to use
