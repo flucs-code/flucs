@@ -342,7 +342,7 @@ def format_memory_report(hook, verbose: bool = False) -> str:
         if allocated <= 0:
             continue
 
-        # Find the nearest FLUCS function responsible for the allocation
+        # Find the nearest flucs function responsible for the allocation
         owner = frame
         while owner.stackframe is not None:
             stackframe = owner.stackframe

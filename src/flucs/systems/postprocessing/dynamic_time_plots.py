@@ -322,7 +322,7 @@ def dynamic_time_plots(
         squeeze=False,
         layout="constrained",
     )
-    figure.canvas.manager.set_window_title("FLUCS dynamic time plots")
+    figure.canvas.manager.set_window_title("flucs dynamic time plots")
 
     axs_dict = dict(zip(variables, axs_array[:, 0], strict=True))
 

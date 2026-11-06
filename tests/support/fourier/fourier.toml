@@ -1,0 +1,19 @@
+[dimensions]
+Lx = 6.283185307179586
+Ly = 6.283185307179586
+Lz = 6.283185307179586
+
+[parameters]
+# Uniform-advection velocity
+advection = [0.3, 0.2, -0.1]
+
+# Rotation vector
+rotation = [0.2, 0.1, 0.2]
+
+[init]
+# Smooth, deterministic three-dimensional development initial condition.
+method = "deterministic"
+
+[forcing]
+method = "negative_damping"
+rate = 0.02

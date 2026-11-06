@@ -3,7 +3,7 @@ HORIZONTAL_SEPARATOR = 64 * "*"
 
 def flucsprint(*parts, source=None, message_type=None):
     """
-    Standard print function for FLUCS.
+    Standard print function for flucs.
     """
 
     # Determine source name for prefix
