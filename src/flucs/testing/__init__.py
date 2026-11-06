@@ -1,5 +1,5 @@
 """
-Helpers for constructing isolated FLUCS test systems.
+Helpers for constructing isolated flucs test systems.
 """
 
 import pathlib as pl

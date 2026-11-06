@@ -1,5 +1,5 @@
 """
-Safety checks for mutually exclusive FLUCS operating modes.
+Safety checks for mutually exclusive flucs operating modes.
 """
 
 import sys

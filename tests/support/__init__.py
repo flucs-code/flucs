@@ -1,3 +1,3 @@
 """
-Support systems for FLUCS tests.
+Support systems for flucs tests.
 """

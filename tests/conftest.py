@@ -47,11 +47,11 @@ def pytest_addoption(parser):
     """
     Add the local test-suite guide to pytest's help options.
     """
-    group = parser.getgroup("flucs", "FLUCS testing")
+    group = parser.getgroup("flucs", "flucs testing")
     group.addoption(
         "--flucs-help",
         action="store_true",
-        help="Show FLUCS test coverage and selection commands, then exit.",
+        help="Show flucs test coverage and selection commands, then exit.",
     )
 
 

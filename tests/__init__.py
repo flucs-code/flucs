@@ -1,3 +1,3 @@
 """
-FLUCS tests and support systems.
+flucs tests and support systems.
 """
