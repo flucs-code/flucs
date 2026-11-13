@@ -460,7 +460,7 @@ class FlucsPlanNd:
             return
 
         # Associate this execution with the caller's current stream. This is
-        # also what serialises plans sharing one workspace in normal FLUCS use.
+        # also what serialises plans sharing one workspace in normal flucs use.
         nvcufft.set_stream(self.handle, int(cp.cuda.get_current_stream().ptr))
 
         # nvmath's low-level bindings operate on raw device pointers. Select

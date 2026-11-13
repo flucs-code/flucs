@@ -292,7 +292,7 @@ def main():
 
     """
 
-    parser = argparse.ArgumentParser(description="FLUCS = fluid cuda solver.")
+    parser = argparse.ArgumentParser(description="flucs = fluid cuda solver.")
 
     parser.add_argument(
         "--io_path",
